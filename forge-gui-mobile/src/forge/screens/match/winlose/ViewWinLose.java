@@ -14,6 +14,7 @@ import forge.assets.FSkinFont;
 import forge.game.GameLogEntry;
 import forge.game.GameLogEntryType;
 import forge.game.GameView;
+import forge.game.GameLogSaver;
 import forge.gui.FThreads;
 import forge.gui.interfaces.IWinLoseView;
 import forge.gui.util.SGuiChoose;
