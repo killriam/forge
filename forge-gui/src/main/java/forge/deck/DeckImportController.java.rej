@@ -1,0 +1,41 @@
+diff a/forge-gui/src/main/java/forge/deck/DeckImportController.java b/forge-gui/src/main/java/forge/deck/DeckImportController.java	(rejected hunks)
+@@ -739,4 +739,39 @@ public class DeckImportController {
+     private String getGameFormatLabel() {
+         return String.format("\"%s\"", this.getCurrentGameFormatName());
+     }
++
++    /**
++     * Creates a Deck from a list of tokens.
++     * This is a static utility method for external callers.
++     *
++     * @param tokens the list of deck recognizer tokens
++     * @param includeBnRInDeck whether to include banned and restricted cards
++     * @return the created Deck, or null if tokens are empty
++     */
++    public static Deck createDeckOutof(List<DeckRecognizer.Token> tokens, boolean includeBnRInDeck) {
++        if (tokens == null || tokens.isEmpty()) {
++            return null;
++        }
++
++        final Deck resultDeck = new Deck();
++        for (final DeckRecognizer.Token t : tokens) {
++            final DeckRecognizer.TokenType type = t.getType();
++            // only Deck Name, legal card and limited card tokens will be analysed!
++            if (!t.isTokenForDeck() ||
++                    (type == DeckRecognizer.TokenType.LIMITED_CARD && !includeBnRInDeck))
++                continue;  // SKIP token
++
++            if (type == DeckRecognizer.TokenType.DECK_NAME) {
++                resultDeck.setName(t.getText());
++                continue;
++            }
++
++            final DeckSection deckSection = t.getTokenSection();
++            final PaperCard crd = t.getCard();
++            if (crd != null && deckSection != null) {
++                resultDeck.getOrCreate(deckSection).add(crd, t.getQuantity());
++            }
++        }
++        return resultDeck;
++    }
+ }

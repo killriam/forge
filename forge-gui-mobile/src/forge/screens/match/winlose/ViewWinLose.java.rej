@@ -1,0 +1,14 @@
+diff a/forge-gui-mobile/src/forge/screens/match/winlose/ViewWinLose.java b/forge-gui-mobile/src/forge/screens/match/winlose/ViewWinLose.java	(rejected hunks)
+@@ -119,6 +119,12 @@ public class ViewWinLose extends FOverlay implements IWinLoseView<FButton> {
+             control = new ControlWinLose(this, game0);
+         }
+ 
++        // Auto-save game log to file
++        String savedLogPath = GameLogSaver.saveGameLogAndGetPath(game0);
++        if (savedLogPath != null) {
++            System.out.println("Game log saved to: " + savedLogPath);
++        }
++
+         showGameOutcomeSummary();
+         showPlayerScores();
+         control.showRewards();

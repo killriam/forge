@@ -115,6 +115,17 @@ public class SimulateMatch {
             return;
         }
 
+        // Extended deck testing mode
+        if (params.containsKey("xd")) {
+            try {
+                simulationSeries(params, rules, nGames, type);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            System.out.flush();
+            return;
+        }
+
         List<RegisteredPlayer> pp = new ArrayList<>();
         StringBuilder sb = new StringBuilder();
 

@@ -1,0 +1,53 @@
+diff a/forge-game/src/main/java/forge/game/GameSnapshot.java b/forge-game/src/main/java/forge/game/GameSnapshot.java	(rejected hunks)
+@@ -13,6 +13,7 @@ import forge.game.spellability.SpellAbility;
+ import forge.game.spellability.SpellAbilityStackInstance;
+ import forge.game.trigger.TriggerType;
+ import forge.game.zone.PlayerZoneBattlefield;
++import forge.game.zone.Zone;
+ import forge.game.zone.ZoneType;
+ 
+ import java.util.HashMap;
+@@ -289,7 +290,28 @@ public class GameSnapshot {
+             toGame.setDayTime(fromGame.getDayTime());
+         }
+ 
+-        for(Card fromCard : fromGame.getCardsInGame()) {
++        // Sort cards by zone position to ensure proper restoration order
++        // This prevents IndexOutOfBoundsException when restoring cards at high positions
++        List<Card> sortedCards = Lists.newArrayList(fromGame.getCardsInGame());
++        sortedCards.sort((c1, c2) -> {
++            ZoneType z1 = c1.getZone().getZoneType();
++            ZoneType z2 = c2.getZone().getZoneType();
++
++            // Sort by zone type first for consistency
++            if (z1 != z2) {
++                return z1.compareTo(z2);
++            }
++
++            // For ordered zones, sort by position within the zone
++            if (ZoneType.ORDERED_ZONES.contains(z1)) {
++                int pos1 = c1.getZone().getCards().indexOf(c1);
++                int pos2 = c2.getZone().getCards().indexOf(c2);
++                return Integer.compare(pos1, pos2);
++            }
++            return 0;
++        });
++
++        for(Card fromCard : sortedCards) {
+             Card newCard = toGame.findById(fromCard.getId());
+             Player toPlayer = findBy(toGame, fromCard.getController());
+             ZoneType fromType = fromCard.getZone().getZoneType();
+@@ -298,6 +320,13 @@ public class GameSnapshot {
+                 // If the card is in an ordered zone, we need to find its position in the zone
+                 // and set it in the new game.
+                 zonePosition = fromCard.getZone().getCards().indexOf(fromCard);
++
++                // Clamp zone position to valid range to prevent IndexOutOfBoundsException
++                Zone targetZone = fromType.equals(ZoneType.Stack)
++                    ? toGame.getStackZone()
++                    : toPlayer.getZone(fromType);
++                int targetZoneSize = targetZone.size();
++                zonePosition = Math.min(zonePosition, targetZoneSize);
+             }
+ 
+             if (newCard == null) {

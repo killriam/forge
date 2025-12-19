@@ -1,8 +1,6 @@
 package forge.game;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Simple test to verify GameLogSaver functionality.
@@ -40,4 +38,3 @@ public class GameLogSaverTest {
         System.out.println("\nExpected filename format: gamelog_<GameType>_YYYY-MM-DD_HH-mm-ss.txt");
     }
 }
-
