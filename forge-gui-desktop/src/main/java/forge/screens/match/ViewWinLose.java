@@ -13,6 +13,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
+import forge.game.GameLogSaver;
 import org.apache.commons.lang3.StringUtils;
 
 import forge.game.GameLogEntry;
@@ -192,6 +193,12 @@ public class ViewWinLose implements IWinLoseView<FButton> {
     }
 
     public final void show() {
+        // Auto-save game log to file
+        String savedLogPath = GameLogSaver.saveGameLogAndGetPath(game);
+        if (savedLogPath != null) {
+            System.out.println("Game log saved to: " + savedLogPath);
+        }
+
         SwingUtilities.invokeLater(() -> {
             scrLog.getViewport().setViewPosition(new Point(0, 0));
             // populateCustomPanel may have changed which buttons are

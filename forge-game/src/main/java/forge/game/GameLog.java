@@ -44,6 +44,7 @@ public class GameLog extends Observable implements Serializable {
      * 3 - Poison Counters
      * 4 - Mana abilities
      * 6 - All Phase information
+     * 7 - Analysis (includes zone changes and board state deltas)
      */
 
     public GameLog() {

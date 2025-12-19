@@ -2,7 +2,10 @@ package forge.game;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.google.common.collect.Iterables;
 import com.google.common.eventbus.Subscribe;
@@ -15,6 +18,7 @@ import forge.game.event.GameEventCardDamaged.DamageType;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.TargetChoices;
+import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import forge.util.*;
 import forge.util.maps.MapOfLists;
@@ -22,6 +26,11 @@ import forge.util.maps.MapOfLists;
 public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     private final Localizer localizer = Localizer.getInstance();
     private final GameLog log;
+
+    // Board state tracking for ANALYSIS level
+    private final Map<Player, Map<ZoneType, Integer>> turnStartBoardState = new HashMap<>();
+    private final List<String> turnZoneChanges = new ArrayList<>();
+
     public GameLogFormatter(GameLog gameLog) {
         log = gameLog;
     }
@@ -71,6 +80,13 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     @Override
     public GameLogEntry visit(GameEventSpellResolved ev) {
         String messageForLog = ev.hasFizzled() ? localizer.getMessage("lblLogCardAbilityFizzles", ev.spell().getHostCard().toString()) : ev.spell().getStackDescription();
+
+        // For ANALYSIS level, also log that the spell is resolving
+        if (ev.spell().isSpell() && !ev.hasFizzled()) {
+            String analysisMsg = String.format("Resolving: %s", ev.spell().getHostCard().getName());
+            log.add(GameLogEntryType.ANALYSIS, analysisMsg);
+        }
+
         return new GameLogEntry(GameLogEntryType.STACK_RESOLVE, messageForLog);
     }
 
@@ -168,7 +184,20 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     @Override
     public GameLogEntry visit(GameEventTurnPhase ev) {
         Player p = ev.playerTurn();
-        return new GameLogEntry(GameLogEntryType.PHASE, ev.phaseDesc() + Lang.getInstance().getPossessedObject(p.getName(), ev.phase().nameForUi));
+        String phaseMessage = ev.phaseDesc() + Lang.getInstance().getPossessedObject(p.getName(), ev.phase().nameForUi);
+
+        // After untap phase, log land count and available mana
+        if (ev.phase() == forge.game.phase.PhaseType.UNTAP && !ev.phaseDesc().equals("Repeat")) {
+            int landCount = countLands(p);
+            int availableMana = calculateAvailableMana(p);
+
+            String resourceMessage = String.format("%s has %d land%s and %d available mana after untap.",
+                p.getName(), landCount, landCount == 1 ? "" : "s", availableMana);
+
+            log.add(GameLogEntryType.PHASE, resourceMessage);
+        }
+
+        return new GameLogEntry(GameLogEntryType.PHASE, phaseMessage);
     }
 
     @Override
@@ -198,6 +227,13 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
 
     @Override
     public GameLogEntry visit(GameEventTurnBegan event) {
+        // Capture board state at turn start for delta calculation
+        Player turnPlayer = event.turnOwner();
+        if (turnPlayer != null && turnPlayer.getGame() != null) {
+            captureBoardState(turnPlayer.getGame());
+            turnZoneChanges.clear(); // Clear zone changes from previous turn
+        }
+
         String message = localizer.getMessage("lblLogTurnNOwnerByPlayer", String.valueOf(event.turnNumber()), event.turnOwner().toString());
         return new GameLogEntry(GameLogEntryType.TURN, message);
     }
@@ -314,6 +350,149 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     @Override
     public GameLogEntry visit(GameEventDoorChanged ev) {
         return new GameLogEntry(GameLogEntryType.STACK_RESOLVE, ev.toString());
+    }
+
+    @Override
+    public GameLogEntry visit(GameEventCardChangeZone ev) {
+        Card card = ev.card();
+        Zone from = ev.from();
+        Zone to = ev.to();
+
+        if (card == null || from == null || to == null) {
+            return null;
+        }
+
+        ZoneType fromZone = from.getZoneType();
+        ZoneType toZone = to.getZoneType();
+
+        // Build detailed zone change message for ANALYSIS level
+        String cardName = card.getName();
+        String ownerName = card.getOwner() != null ? card.getOwner().getName() : "Unknown";
+        String message = String.format("%s: %s moved from %s to %s",
+            ownerName, cardName, fromZone.toString(), toZone.toString());
+
+        // Track zone changes for turn summary
+        turnZoneChanges.add(message);
+
+        return new GameLogEntry(GameLogEntryType.ANALYSIS, message);
+    }
+
+    @Override
+    public GameLogEntry visit(GameEventTurnEnded ev) {
+        // Generate board state delta summary at end of turn
+        return generateBoardStateDelta();
+    }
+
+    /**
+     * Captures the current board state for all players at turn start.
+     */
+    private void captureBoardState(Game game) {
+        turnStartBoardState.clear();
+
+        for (Player player : game.getPlayers()) {
+            Map<ZoneType, Integer> playerZones = new HashMap<>();
+
+            // Track key zones
+            playerZones.put(ZoneType.Battlefield, player.getZone(ZoneType.Battlefield).size());
+            playerZones.put(ZoneType.Hand, player.getZone(ZoneType.Hand).size());
+            playerZones.put(ZoneType.Graveyard, player.getZone(ZoneType.Graveyard).size());
+            playerZones.put(ZoneType.Library, player.getZone(ZoneType.Library).size());
+            playerZones.put(ZoneType.Exile, player.getZone(ZoneType.Exile).size());
+
+            turnStartBoardState.put(player, playerZones);
+        }
+    }
+
+    /**
+     * Generates a board state delta summary for ANALYSIS level logging.
+     */
+    private GameLogEntry generateBoardStateDelta() {
+        if (turnStartBoardState.isEmpty()) {
+            return null; // No initial state captured
+        }
+
+        StringBuilder summary = new StringBuilder();
+        summary.append("=== Turn Summary - Board State Changes ===\n");
+
+        // Add zone change details
+        if (!turnZoneChanges.isEmpty()) {
+            summary.append("Zone Changes:\n");
+            for (String change : turnZoneChanges) {
+                summary.append("  - ").append(change).append("\n");
+            }
+        }
+
+        // Calculate deltas
+        summary.append("\nBoard State Delta:\n");
+        for (Map.Entry<Player, Map<ZoneType, Integer>> entry : turnStartBoardState.entrySet()) {
+            Player player = entry.getKey();
+            Map<ZoneType, Integer> startState = entry.getValue();
+
+            summary.append(player.getName()).append(":\n");
+
+            for (Map.Entry<ZoneType, Integer> zoneEntry : startState.entrySet()) {
+                ZoneType zone = zoneEntry.getKey();
+                int startCount = zoneEntry.getValue();
+                int currentCount = player.getZone(zone).size();
+                int delta = currentCount - startCount;
+
+                if (delta != 0) {
+                    String deltaStr = delta > 0 ? "+" + delta : String.valueOf(delta);
+                    summary.append(String.format("  %s: %d -> %d (%s)\n",
+                        zone.toString(), startCount, currentCount, deltaStr));
+                }
+            }
+        }
+
+        return new GameLogEntry(GameLogEntryType.ANALYSIS, summary.toString());
+    }
+
+    /**
+     * Counts the number of lands a player has on the battlefield.
+     */
+    private int countLands(Player player) {
+        int count = 0;
+        for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
+            if (card.isLand()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Calculates the available mana a player can produce from untapped sources.
+     * This is an estimate based on mana abilities of permanents on the battlefield.
+     */
+    private int calculateAvailableMana(Player player) {
+        int availableMana = 0;
+
+        // Add mana already in the pool
+        availableMana += player.getManaPool().totalMana();
+
+        // Calculate potential mana from untapped sources
+        for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
+            if (card.isUntapped() && !card.getManaAbilities().isEmpty()) {
+                // Estimate the maximum mana this source can produce
+                for (forge.game.spellability.SpellAbility ma : card.getManaAbilities()) {
+                    if (ma.canPlay()) {
+                        // Count the number of mana symbols this ability produces
+                        String produced = ma.getParamOrDefault("Produced", "");
+                        if (!produced.isEmpty()) {
+                            // Split by space to count individual mana symbols
+                            String[] manaSymbols = produced.split(" ");
+                            int producedAmount = ma.hasParam("Amount")
+                                ? forge.game.ability.AbilityUtils.calculateAmount(card, ma.getParam("Amount"), ma)
+                                : 1;
+                            availableMana += manaSymbols.length * producedAmount;
+                            break; // Only count one ability per card (the best one)
+                        }
+                    }
+                }
+            }
+        }
+
+        return availableMana;
     }
 
     @Subscribe

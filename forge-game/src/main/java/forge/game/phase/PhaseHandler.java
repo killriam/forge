@@ -365,6 +365,20 @@ public class PhaseHandler implements java.io.Serializable {
                     }
 
                     game.getEndOfTurn().executeAt();
+
+                    // for analytics add Land statistics
+                    // count lands
+                    CardCollectionView permantens = playerTurn.getCardsIn(ZoneType.Battlefield);
+                    int amountManacard = playerTurn.countManaLandRampsIn(permantens);
+                    String producalbeMana = Player.listManaCreatableIn(permantens);
+
+                    playerTurn.setManacurveData(producalbeMana, playerTurn.getTurn());
+
+                    CardCollection cardswithManaAbilities = Player.getCardswithManaAbilities(permantens);
+
+                    System.out.println("Player " + playerTurn.getName() + " in Turn " + playerTurn.getTurn() +
+                        " can produce with card " + cardswithManaAbilities + "(" + amountManacard + ") mana: " + producalbeMana);
+                    // add them to turn index list
                     break;
 
                 case CLEANUP:
