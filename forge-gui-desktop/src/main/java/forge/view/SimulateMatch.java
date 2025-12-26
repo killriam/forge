@@ -19,6 +19,7 @@ import forge.deck.io.DeckSerializer;
 import forge.game.*;
 import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
+import forge.game.log.GameReplaySimulation;
 import forge.game.player.DeckStats;
 import forge.game.player.RegisteredPlayer;
 import forge.gamemodes.tournament.system.AbstractTournament;
@@ -41,6 +42,13 @@ import static forge.localinstance.properties.ForgeConstants.DECK_COMMANDER_DIR;
 public class SimulateMatch {
     public static void simulate(String[] args) {
         FModel.initialize(null, null);
+
+        // Check for replay simulation mode (standalone test)
+        if (args.length >= 2 && "-replay".equals(args[1])) {
+            String outputDir = args.length >= 3 ? args[2] : ".";
+            runReplaySimulation(outputDir);
+            return;
+        }
 
         System.out.println("Simulation mode");
         if (args.length < 4) {
@@ -196,6 +204,10 @@ public class SimulateMatch {
         System.out.println("\tF - format of games, defaults to constructed");
         System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
+        System.out.println();
+        System.out.println("Alternative: forge.exe sim -replay [output_dir]");
+        System.out.println("\t-replay - Run standalone replay notation test (generates JSON log)");
+        System.out.println("\toutput_dir - Directory for JSON output (defaults to current directory)");
     }
 
     public static void simulateSingleMatch(final Match mc, int iGame, boolean outputGamelog) {
@@ -653,6 +665,33 @@ public class SimulateMatch {
         }
 
         return analysis;
+    }
+
+    /**
+     * Run the replay notation simulation (standalone test).
+     * This generates a simulated game and exports it in JSON Replay Notation format.
+     */
+    private static void runReplaySimulation(String outputDir) {
+        System.out.println("MTG Replay Notation - Standalone Simulation");
+        System.out.println("============================================\n");
+
+        try {
+            File outputDirectory = new File(outputDir);
+            GameReplaySimulation simulation = new GameReplaySimulation();
+            File jsonFile = simulation.simulateGame(outputDirectory);
+
+            System.out.println("\n✅ Simulation complete!");
+            System.out.println("📄 JSON file: " + jsonFile.getAbsolutePath());
+            System.out.println("\nYou can now:");
+            System.out.println("  - View the JSON file");
+            System.out.println("  - Validate it");
+            System.out.println("  - Use it for replay or analysis");
+
+        } catch (Exception e) {
+            System.err.println("\n❌ Simulation failed:");
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 
  }

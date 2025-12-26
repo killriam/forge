@@ -69,7 +69,30 @@ public class Match {
     }
 
     public Game createGame() {
-        return new Game(players, rules, this);
+        Game game = new Game(players, rules, this);
+
+        // AUTO-ENABLE: Replay Notation für alle Spiele
+        // Dies aktiviert automatisch JSON-Logging parallel zum Text-Log
+        // Kommentiere diese Zeilen aus, wenn du Replay Notation deaktivieren willst
+        try {
+            // Note: GameLogSaver is in forge-gui module, so we use reflection to avoid dependency
+            Class<?> saverClass = Class.forName("forge.game.GameLogSaver");
+            java.lang.reflect.Method method = saverClass.getMethod("enableReplayNotation", Game.class);
+            method.invoke(null, game);
+            System.out.println("[Replay Notation] ✅ Auto-enabled for game " + game.getId());
+        } catch (ClassNotFoundException e) {
+            System.err.println("[Replay Notation] ❌ GameLogSaver class not found - forge-gui module not loaded");
+            System.err.println("[Replay Notation] ERROR: " + e.getMessage());
+        } catch (NoSuchMethodException e) {
+            System.err.println("[Replay Notation] ❌ enableReplayNotation method not found");
+            System.err.println("[Replay Notation] ERROR: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("[Replay Notation] ❌ Failed to enable replay notation");
+            System.err.println("[Replay Notation] ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return game;
     }
 
     public void startGame(final Game game) {

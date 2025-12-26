@@ -15,6 +15,7 @@ import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.event.*;
 import forge.game.event.GameEventCardDamaged.DamageType;
+import forge.game.log.ReplayNotationExporter;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.TargetChoices;
@@ -31,8 +32,44 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     private final Map<Player, Map<ZoneType, Integer>> turnStartBoardState = new HashMap<>();
     private final List<String> turnZoneChanges = new ArrayList<>();
 
+    // Replay Notation Integration (optional)
+    private ReplayNotationExporter replayExporter;
+    private int currentTurn = 0;
+    private String currentPhase = "PREGAME";
+    private int priorityCounter = 0;
+
     public GameLogFormatter(GameLog gameLog) {
         log = gameLog;
+    }
+
+    /**
+     * Enable JSON Replay Notation logging alongside text logging.
+     * @param exporter The replay notation exporter to use
+     */
+    public void setReplayExporter(ReplayNotationExporter exporter) {
+        this.replayExporter = exporter;
+    }
+
+    /**
+     * Get the replay notation exporter if enabled.
+     * @return The exporter, or null if not enabled
+     */
+    public ReplayNotationExporter getReplayExporter() {
+        return replayExporter;
+    }
+
+    /**
+     * Generate time marker for current game state.
+     * @return Time marker string in format T<turn>.<phase>[:<priority>]
+     */
+    private String generateTimeMarker() {
+        StringBuilder marker = new StringBuilder();
+        marker.append("T").append(currentTurn);
+        marker.append(".").append(currentPhase);
+        if (priorityCounter > 0) {
+            marker.append(":").append(priorityCounter);
+        }
+        return marker.toString();
     }
 
     @Override
@@ -115,6 +152,13 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             messageForLog = localizer.getMessage("lblLogPlayerActionObject", player, action, object);
         }
 
+        // Log to JSON if enabled
+        if (replayExporter != null && event.sa().isSpell()) {
+            priorityCounter++; // Increment priority when spell is cast
+            replayExporter.logCast(event.sa().getHostCard(), event.sa().getActivatingPlayer(),
+                                 generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.STACK_ADD, messageForLog);
     }
 
@@ -186,6 +230,31 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         Player p = ev.playerTurn();
         String phaseMessage = ev.phaseDesc() + Lang.getInstance().getPossessedObject(p.getName(), ev.phase().nameForUi);
 
+        // Update time tracking for replay notation
+        if (ev.phase() == forge.game.phase.PhaseType.UPKEEP && !ev.phaseDesc().equals("Repeat")) {
+            currentTurn++;
+            priorityCounter = 0;
+        }
+
+        // Map phase to short name for time marker
+        String phaseName = ev.phase().name();
+        if (phaseName.equals("MAIN1")) {
+            currentPhase = "MP1";
+        } else if (phaseName.equals("MAIN2")) {
+            currentPhase = "MP2";
+        } else if (phaseName.equals("COMBAT_BEGIN") || phaseName.equals("COMBAT_DECLARE_ATTACKERS")
+                || phaseName.equals("COMBAT_DECLARE_BLOCKERS") || phaseName.equals("COMBAT_FIRST_STRIKE_DAMAGE")
+                || phaseName.equals("COMBAT_DAMAGE") || phaseName.equals("COMBAT_END")) {
+            currentPhase = "COMBAT";
+        } else {
+            currentPhase = phaseName;
+        }
+
+        // Log to JSON if enabled
+        if (replayExporter != null && !ev.phaseDesc().equals("Repeat")) {
+            replayExporter.logPhaseChange(currentPhase, phaseName, p, generateTimeMarker());
+        }
+
         // After untap phase, log land count and available mana
         if (ev.phase() == forge.game.phase.PhaseType.UNTAP && !ev.phaseDesc().equals("Repeat")) {
             int landCount = countLands(p);
@@ -213,6 +282,14 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             additionalLog = localizer.getMessage("lblRemovingNLoyaltyCounter", String.valueOf(event.amount()));
         }
         String message = localizer.getMessage("lblSourceDealsNDamageToDest", event.source().toString(), String.valueOf(event.amount()), additionalLog.isEmpty() ? "" : " (" + additionalLog + ")", event.card().toString());
+
+        // Log to JSON if enabled
+        if (replayExporter != null) {
+            // For card damage, we don't have combat flag, so we use "non-combat" as default
+            String damageType = "non-combat";
+            replayExporter.logDamage(event.source(), event.card(), event.amount(), damageType, generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.DAMAGE, message);
     }
 
@@ -244,6 +321,13 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         String damageType = ev.combat() ? localizer.getMessage("lblCombat") : localizer.getMessage("lblNonCombat");
         String message = localizer.getMessage("lblLogSourceDealsNDamageOfTypeToDest", ev.source().toString(),
                             String.valueOf(ev.amount()), damageType, ev.target().toString(), extra);
+
+        // Log to JSON if enabled
+        if (replayExporter != null) {
+            String type = ev.combat() ? "combat" : "spell";
+            replayExporter.logDamage(ev.source(), ev.target(), ev.amount(), type, generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.DAMAGE, message);
     }
 
@@ -367,12 +451,42 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
 
         // Build detailed zone change message for ANALYSIS level
         String cardName = card.getName();
+        if (cardName == null || cardName.isEmpty()) {
+            cardName = card.toString();
+            if (cardName == null || cardName.isEmpty()) {
+                cardName = "[Unknown Card]";
+            }
+        }
+
         String ownerName = card.getOwner() != null ? card.getOwner().getName() : "Unknown";
-        String message = String.format("%s: %s moved from %s to %s",
-            ownerName, cardName, fromZone.toString(), toZone.toString());
+
+        // Add type prefix for battlefield entries
+        String typePrefix = "";
+        if (toZone == ZoneType.Battlefield) {
+            if (card.isLand()) {
+                typePrefix = "[LAND] ";
+            } else if (card.isPermanent()) {
+                typePrefix = "[PERMANENT] ";
+            }
+        }
+
+        String message = String.format("%s: %s%s moved from %s to %s",
+            ownerName, typePrefix, cardName, fromZone.toString(), toZone.toString());
 
         // Track zone changes for turn summary
         turnZoneChanges.add(message);
+
+        // Log to JSON if enabled
+        if (replayExporter != null) {
+            replayExporter.logZoneChange(card, fromZone, toZone, generateTimeMarker(), card.getOwner());
+        }
+
+        // Special ANALYSIS log for lands entering the battlefield
+        if (toZone == ZoneType.Battlefield && card.isLand()) {
+            String landMessage = String.format("Land added to battlefield: %s (%s) from %s",
+                cardName, ownerName, fromZone.toString());
+            log.add(GameLogEntryType.ANALYSIS, landMessage);
+        }
 
         return new GameLogEntry(GameLogEntryType.ANALYSIS, message);
     }
@@ -474,20 +588,25 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
             if (card.isUntapped() && !card.getManaAbilities().isEmpty()) {
                 // Estimate the maximum mana this source can produce
+                boolean counted = false;
                 for (forge.game.spellability.SpellAbility ma : card.getManaAbilities()) {
-                    if (ma.canPlay()) {
-                        // Count the number of mana symbols this ability produces
-                        String produced = ma.getParamOrDefault("Produced", "");
-                        if (!produced.isEmpty()) {
-                            // Split by space to count individual mana symbols
-                            String[] manaSymbols = produced.split(" ");
-                            int producedAmount = ma.hasParam("Amount")
-                                ? forge.game.ability.AbilityUtils.calculateAmount(card, ma.getParam("Amount"), ma)
-                                : 1;
-                            availableMana += manaSymbols.length * producedAmount;
-                            break; // Only count one ability per card (the best one)
-                        }
+                    // Count the number of mana symbols this ability produces
+                    String produced = ma.getParamOrDefault("Produced", "");
+                    if (!produced.isEmpty()) {
+                        // Split by space to count individual mana symbols
+                        String[] manaSymbols = produced.split(" ");
+                        int producedAmount = ma.hasParam("Amount")
+                            ? forge.game.ability.AbilityUtils.calculateAmount(card, ma.getParam("Amount"), ma)
+                            : 1;
+                        availableMana += manaSymbols.length * producedAmount;
+                        counted = true;
+                        break; // Only count one ability per card (the best one)
                     }
+                }
+
+                // If no "Produced" param found but has mana abilities, assume 1 mana (for basic lands)
+                if (!counted && card.isLand()) {
+                    availableMana += 1;
                 }
             }
         }

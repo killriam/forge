@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Observable;
 
 import forge.game.event.IGameEventVisitor;
+import forge.game.log.ReplayNotationExporter;
 
 /**
  * <p>
@@ -92,5 +93,21 @@ public class GameLog extends Observable implements Serializable {
 
     public IGameEventVisitor<?> getEventVisitor() {
         return formatter;
+    }
+
+    /**
+     * Enable JSON Replay Notation logging alongside text logging.
+     * @param exporter The replay notation exporter to use
+     */
+    public void enableReplayNotation(ReplayNotationExporter exporter) {
+        formatter.setReplayExporter(exporter);
+    }
+
+    /**
+     * Get the replay notation exporter if enabled.
+     * @return The exporter, or null if not enabled
+     */
+    public ReplayNotationExporter getReplayExporter() {
+        return formatter.getReplayExporter();
     }
 }
