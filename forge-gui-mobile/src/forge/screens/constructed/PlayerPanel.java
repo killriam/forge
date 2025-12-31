@@ -115,6 +115,8 @@ public class PlayerPanel extends FContainer {
                 btnDeck.setEnabled(mayEdit);
                 btnDeck.setText(deckChooser.getSelectedDeckType().toString() + ":" + (Forge.isLandscapeMode() ? " " : "\n") +
                         Lang.joinHomogenous(((DeckManager)e.getSource()).getSelectedItems(), DeckProxy::getName));
+                // Save the selected deck state
+                deckChooser.saveState();
                 if (allowNetworking && btnDeck.isEnabled() && humanAiSwitch.isToggled()) { //if its ready but changed the deck, update it
                     screen.updateMyDeck(index);
                 }

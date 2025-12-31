@@ -1,12 +1,14 @@
 package forge.screens.home;
 
 import java.util.Arrays;
+import java.util.Set;
 import java.util.Vector;
 
 import javax.swing.SwingUtilities;
 
 import com.google.common.collect.Iterables;
 import forge.deck.DeckProxy;
+import forge.game.GameType;
 import forge.localinstance.properties.ForgePreferences;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
@@ -73,5 +75,16 @@ public class CLobby {
         // Pre-select checkboxes
         view.getCbSingletons().setSelected(prefs.getPrefBoolean(FPref.DECKGEN_SINGLETONS));
         view.getCbArtifacts().setSelected(prefs.getPrefBoolean(FPref.DECKGEN_ARTIFACTS));
+
+        // Load saved variants or default to Commander
+        Set<GameType> savedVariants = prefs.getGameType(FPref.UI_APPLIED_VARIANTS);
+        if (!savedVariants.isEmpty()) {
+            for (GameType variant : savedVariants) {
+                view.applyVariant(variant);
+            }
+        } else {
+            // Default to Commander if no variants are saved
+            view.applyVariant(GameType.Commander);
+        }
     }
 }

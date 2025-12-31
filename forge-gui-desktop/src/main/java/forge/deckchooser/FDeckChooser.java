@@ -414,10 +414,12 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
         long step1 = System.currentTimeMillis();
         System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - calling CommanderDeckGenerator.getCommanderDecks(cardGen=true)...");
-        Iterable<DeckProxy> decks = CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, true);
-        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - getCommanderDecks(): " + (System.currentTimeMillis() - step1) + "ms");
+        // getCommanderDecks returns a List, so it's already evaluated
+        List<DeckProxy> decks = (List<DeckProxy>) CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, true);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - getCommanderDecks() returned " + decks.size() + " decks in: " + (System.currentTimeMillis() - step1) + "ms");
 
         long step2 = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - calling setPool()...");
         lstDecks.setPool(decks);
         System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - setPool: " + (System.currentTimeMillis() - step2) + "ms");
 
@@ -898,7 +900,8 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
     public void saveState() {
         if (stateSetting == null) {
-            throw new NullPointerException("State setting missing. Specify first using the initialize() method.");
+            // Not yet initialized, skip saving
+            return;
         }
         prefs.setPref(stateSetting, getState());
         prefs.save();
@@ -962,13 +965,10 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
         System.out.println("[DECK LOADING DEBUG] restoreSavedState() thread: " + Thread.currentThread().getName());
         System.out.println("[DECK LOADING DEBUG] restoreSavedState() is EDT: " + javax.swing.SwingUtilities.isEventDispatchThread());
 
-        final DeckType oldDeckType = selectedDeckType;
-        System.out.println("[DECK LOADING DEBUG] restoreSavedState() oldDeckType: " + oldDeckType);
-
         if (stateSetting == null) {
             System.out.println("[DECK LOADING DEBUG] restoreSavedState() - stateSetting is null, refreshing deck list");
             //if can't restore saved state, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+            refreshDecksList(selectedDeckType, true, null);
             System.out.println("[DECK LOADING DEBUG] restoreSavedState() total time: " + (System.currentTimeMillis() - restoreStart) + "ms");
             return;
         }
@@ -985,10 +985,42 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
         refreshDecksList(deckTypeFromState, true, null);
         System.out.println("[DECK LOADING DEBUG] restoreSavedState() refreshDecksList took: " + (System.currentTimeMillis() - beforeRefresh) + "ms");
 
-        if (!lstDecks.setSelectedStrings(getSelectedDecksFromSavedState(savedState))) {
-            System.out.println("[DECK LOADING DEBUG] restoreSavedState() - couldn't select old decks, refreshing again");
-            //if can't select old decks, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+        // Try to select the saved deck
+        List<String> savedDeckNames = getSelectedDecksFromSavedState(savedState);
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() savedDeckNames: " + savedDeckNames);
+
+        boolean selected = false;
+        if (!savedDeckNames.isEmpty()) {
+            // First try exact match
+            selected = lstDecks.setSelectedStrings(savedDeckNames);
+            System.out.println("[DECK LOADING DEBUG] restoreSavedState() exact match result: " + selected);
+
+            // If exact match fails, try to find deck by partial name match
+            if (!selected && lstDecks.getItemCount() > 0) {
+                String savedDeckName = savedDeckNames.get(0);
+                System.out.println("[DECK LOADING DEBUG] restoreSavedState() trying partial match for: " + savedDeckName);
+
+                // Try to find a deck that contains the saved name or vice versa
+                for (DeckProxy deck : lstDecks.getFilteredItems().toFlatList()) {
+                    String deckName = deck.toString();
+                    if (deckName.equals(savedDeckName) ||
+                        deckName.contains(savedDeckName) ||
+                        savedDeckName.contains(deckName) ||
+                        deckName.equalsIgnoreCase(savedDeckName)) {
+                        System.out.println("[DECK LOADING DEBUG] restoreSavedState() found partial match: " + deckName);
+                        lstDecks.setSelectedString(deckName);
+                        selected = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!selected) {
+            System.out.println("[DECK LOADING DEBUG] restoreSavedState() - couldn't select saved deck, selecting first available");
+            if (lstDecks.getItemCount() > 0) {
+                lstDecks.setSelectedIndex(0);
+            }
         }
         System.out.println("[DECK LOADING DEBUG] restoreSavedState() total time: " + (System.currentTimeMillis() - restoreStart) + "ms");
     }

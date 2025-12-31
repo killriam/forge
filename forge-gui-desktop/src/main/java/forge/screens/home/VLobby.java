@@ -766,9 +766,37 @@ public class VLobby implements ILobbyView {
                 } else {
                     lobby.removeVariant(variantType);
                 }
+                saveVariants();
                 VLobby.this.update(false);
             });
         }
+    }
+
+    /**
+     * Apply a variant and update the checkbox.
+     */
+    public void applyVariant(final GameType variantType) {
+        lobby.applyVariant(variantType);
+        // Update the checkbox to reflect the applied variant
+        for (VariantCheckBox vcb : vntBoxesLocal) {
+            if (vcb.variant == variantType) {
+                vcb.setSelected(true);
+                break;
+            }
+        }
+        update(false);
+    }
+
+    /**
+     * Save the current variants to preferences.
+     */
+    private void saveVariants() {
+        java.util.Set<GameType> gameTypes = new java.util.HashSet<>();
+        for (GameType variant : lobby.getAppliedVariants()) {
+            gameTypes.add(variant);
+        }
+        prefs.setGameType(FPref.UI_APPLIED_VARIANTS, gameTypes);
+        prefs.save();
     }
 
     private FDeckChooser createDeckChooser(final GameType type, final int iSlot, final boolean ai) {

@@ -1,4 +1,5 @@
 /*
+
  * Forge: Play Magic: the Gathering.
  * Copyright (C) 2011
  *

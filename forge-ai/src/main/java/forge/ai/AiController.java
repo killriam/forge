@@ -734,6 +734,12 @@ public class AiController {
 
         // TODO - "Look" at Targeted SA and "calculate" the threshold
         // if (bestRestriction < targetedThreshold) return false;
+
+        // Log the counterspell decision
+        if (bestSA != null) {
+            AiDecisionLogger.logDecision(player, bestSA, AiPlayDecision.WillPlay);
+        }
+
         return bestSA;
     }
 
@@ -1607,6 +1613,10 @@ public class AiController {
         FutureTask<SpellAbility> future = new FutureTask<>(() -> {
             //avoid ComputerUtil.aiLifeInDanger in loops as it slows down a lot.. call this outside loops will generally be fast...
             boolean isLifeInDanger = useLivingEnd && ComputerUtil.aiLifeInDanger(player, true, 0);
+
+            // Collect playable alternatives for logging (up to 4: 1 chosen + 3 alternatives)
+            List<SpellAbility> playableOptions = new ArrayList<>();
+
             for (final SpellAbility sa : ComputerUtilAbility.getOriginalAndAltCostAbilities(all, player)) {
                 // Don't add Counterspells to the "normal" playcard lookups
                 if (skipCounter && sa.getApi() == ApiType.Counter) {
@@ -1681,7 +1691,31 @@ public class AiController {
                 if (opinion != AiPlayDecision.WillPlay)
                     continue;
 
-                return sa;
+                // Collect playable options (up to 4 total)
+                if (playableOptions.size() < 4) {
+                    playableOptions.add(sa);
+                }
+
+                // First playable option is the chosen one
+                if (playableOptions.size() == 1) {
+                    // Log the AI's decision to play this spell/ability with alternatives
+                    // We'll continue collecting a few more alternatives before returning
+                    continue;
+                }
+
+                // Once we have 4 options (or checked all), log and return the first one
+                if (playableOptions.size() >= 4) {
+                    SpellAbility chosen = playableOptions.get(0);
+                    AiDecisionLogger.logDecisionWithAlternatives(player, chosen, AiPlayDecision.WillPlay, playableOptions);
+                    return chosen;
+                }
+            }
+
+            // If we found any playable options, return the first one
+            if (!playableOptions.isEmpty()) {
+                SpellAbility chosen = playableOptions.get(0);
+                AiDecisionLogger.logDecisionWithAlternatives(player, chosen, AiPlayDecision.WillPlay, playableOptions);
+                return chosen;
             }
 
             return null;

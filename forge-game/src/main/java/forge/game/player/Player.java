@@ -4129,7 +4129,7 @@ public class Player extends GameEntity implements Comparable<Player> {
                         } else {
                             combinedManas.append(collect);
                         }
-                    } else {
+                    } else if (mana.getManaPart() != null) {
                         if (mana.getManaPart().mana(mana) != null) {
                             String mana1 = mana.getManaPart().mana(mana);
                             if (countmanaAbilities >= 1) {

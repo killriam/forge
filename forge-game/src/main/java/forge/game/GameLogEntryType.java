@@ -20,7 +20,8 @@ public enum GameLogEntryType {
     EFFECT_REPLACED("Replacement Effect"),
     MANA("Mana"),
     PHASE("Phase"),
-    ANALYSIS("Analysis");
+    ANALYSIS("Analysis"),
+    AI_DECISION("AI Decision");
 
     private final String caption; 
     GameLogEntryType(String name) {

@@ -81,6 +81,12 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         for (String outcome : ev.result().getOutcomeStrings()) {
             log.add(GameLogEntryType.GAME_OUTCOME, outcome);
         }
+
+        // Update replay notation with game outcome
+        if (replayExporter != null) {
+            replayExporter.setGameOutcome(ev.result());
+        }
+
         return generateSummary(ev.history());
     }
 
@@ -156,7 +162,7 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         if (replayExporter != null && event.sa().isSpell()) {
             priorityCounter++; // Increment priority when spell is cast
             replayExporter.logCast(event.sa().getHostCard(), event.sa().getActivatingPlayer(),
-                                 generateTimeMarker());
+                                 generateTimeMarker(), event.sa());
         }
 
         return new GameLogEntry(GameLogEntryType.STACK_ADD, messageForLog);
