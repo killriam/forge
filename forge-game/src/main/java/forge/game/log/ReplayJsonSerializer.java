@@ -24,6 +24,7 @@ public class ReplayJsonSerializer {
         // Format
         json.append("  \"format\": \"").append(escape(log.getFormat())).append("\",\n");
         json.append("  \"version\": \"").append(escape(log.getVersion())).append("\",\n");
+        json.append("  \"spec_version\": \"").append(escape(log.getSpecVersion())).append("\",\n");
 
         // Meta
         json.append("  \"meta\": ");
@@ -48,8 +49,8 @@ public class ReplayJsonSerializer {
         appendGameState(json, log.getInitialState());
         json.append(",\n");
 
-        // L1 Events
-        json.append("  \"log_l1\": ");
+        // L1 Events (spec key: "events")
+        json.append("  \"events\": ");
         appendL1Events(json, log.getLogL1());
         json.append(",\n");
 
@@ -61,6 +62,16 @@ public class ReplayJsonSerializer {
         // Learning Markers (spec v1.3.0)
         json.append("  \"learning_markers\": ");
         appendLearningMarkers(json, log.getLearningMarkers());
+        json.append(",\n");
+
+        // Per-Turn Summary (spec v1.5.0)
+        json.append("  \"per_turn_summary\": ");
+        appendPerTurnSummary(json, log.getPerTurnSummary());
+        json.append(",\n");
+
+        // Game Summary (spec v1.5.0)
+        json.append("  \"game_summary\": ");
+        appendGameSummary(json, log.getGameSummary());
         json.append("\n");
 
         json.append("}");
@@ -135,14 +146,39 @@ public class ReplayJsonSerializer {
         boolean first = true;
         for (Map.Entry<String, ReplayMeta.PlayerMeta> entry : meta.getPlayers().entrySet()) {
             if (!first) json.append(",");
+            ReplayMeta.PlayerMeta pm = entry.getValue();
             json.append("\n      \"").append(escape(entry.getKey())).append("\": {");
-            json.append("\"name\": \"").append(escape(entry.getValue().getName())).append("\"");
-            if (entry.getValue().getDeckName() != null) {
-                json.append(", \"deck_name\": \"").append(escape(entry.getValue().getDeckName())).append("\"");
+            json.append("\"name\": \"").append(escape(pm.getName())).append("\"");
+
+            // Always output deck_name (placeholder if missing)
+            json.append(", \"deck_name\": ");
+            if (pm.getDeckName() != null) {
+                json.append("\"").append(escape(pm.getDeckName())).append("\"");
+            } else {
+                json.append("\"unknown\"");
             }
-            if (entry.getValue().getDeckHash() != null) {
-                json.append(", \"deck_hash\": \"").append(escape(entry.getValue().getDeckHash())).append("\"");
+
+            // Always output deck_hash (null if missing)
+            json.append(", \"deck_hash\": ");
+            if (pm.getDeckHash() != null) {
+                json.append("\"").append(escape(pm.getDeckHash())).append("\"");
+            } else {
+                json.append("null");
             }
+
+            // deck_link: always output per spec v1.4.0 (null for AI players)
+            json.append(", \"deck_link\": ");
+            if (pm.getDeckLink() != null) {
+                json.append("\"").append(escape(pm.getDeckLink())).append("\"");
+            } else {
+                json.append("null");
+            }
+
+            // Player type info
+            json.append(", \"is_ai\": ").append(pm.isAi());
+            json.append(", \"player_type\": \"").append(escape(pm.getPlayerType() != null ? pm.getPlayerType() : "unknown")).append("\"");
+            json.append(", \"starting_life\": ").append(pm.getStartingLife());
+
             json.append("}");
             first = false;
         }
@@ -185,6 +221,26 @@ public class ReplayJsonSerializer {
             if (card.getType() != null && !card.getType().isEmpty()) {
                 json.append(", \"type\": \"").append(escape(card.getType())).append("\"");
             }
+            if (card.getOracleId() != null && !card.getOracleId().isEmpty()) {
+                json.append(", \"oracle_id\": \"").append(escape(card.getOracleId())).append("\"");
+            }
+            if (card.getOracleText() != null && !card.getOracleText().isEmpty()) {
+                json.append(", \"oracle_text\": \"").append(escape(card.getOracleText())).append("\"");
+            }
+            if (card.getPower() != null) {
+                json.append(", \"power\": \"").append(escape(card.getPower())).append("\"");
+            }
+            if (card.getToughness() != null) {
+                json.append(", \"toughness\": \"").append(escape(card.getToughness())).append("\"");
+            }
+            if (card.getSubtypes() != null && !card.getSubtypes().isEmpty()) {
+                json.append(", \"subtypes\": [");
+                for (int i = 0; i < card.getSubtypes().size(); i++) {
+                    if (i > 0) json.append(", ");
+                    json.append("\"").append(escape(card.getSubtypes().get(i))).append("\"");
+                }
+                json.append("]");
+            }
             json.append("}");
             first = false;
         }
@@ -226,14 +282,20 @@ public class ReplayJsonSerializer {
             GameState.PlayerState ps = entry.getValue();
             json.append("\"life\": ").append(ps.getLife());
             json.append(", \"max_hand_size\": ").append(ps.getMaxHandSize());
-            json.append(", \"lands_played\": ").append(ps.getLandsPlayedThisTurn());
+            json.append(", \"lands_played_this_turn\": ").append(ps.getLandsPlayedThisTurn());
+            // Spec: always output mana_pool (empty [] when none)
+            json.append(", \"mana_pool\": ");
             if (ps.getManaPool() != null) {
-                json.append(", \"mana_pool\": ");
                 appendValue(json, ps.getManaPool());
+            } else {
+                json.append("[]");
             }
+            // Spec: always output counters (empty {} when none)
+            json.append(", \"counters\": ");
             if (ps.getCounters() != null && !ps.getCounters().isEmpty()) {
-                json.append(", \"counters\": ");
                 appendIntegerMap(json, ps.getCounters());
+            } else {
+                json.append("{}");
             }
             json.append("}");
             first = false;
@@ -271,24 +333,34 @@ public class ReplayJsonSerializer {
         json.append(", \"owner\": ").append(quote(obj.getOwner()));
         json.append(", \"controller\": ").append(quote(obj.getController()));
         json.append(", \"zone\": ").append(quote(obj.getZone()));
+        // Spec section 8.2: always output state flags
+        json.append(", \"tapped\": ").append(obj.isTapped());
+        json.append(", \"flipped\": ").append(obj.isFlipped());
+        json.append(", \"face_down\": ").append(obj.isFaceDown());
+        json.append(", \"damage_marked\": ").append(obj.getDamageMarked());
 
-        if (obj.isTapped()) json.append(", \"tapped\": true");
-        if (obj.isFaceDown()) json.append(", \"face_down\": true");
-        if (obj.isFlipped()) json.append(", \"flipped\": true");
-        if (obj.getDamageMarked() > 0) json.append(", \"damage_marked\": ").append(obj.getDamageMarked());
-
+        // Spec: always output counters (empty {} when none)
+        json.append(", \"counters\": ");
         if (obj.getCounters() != null && !obj.getCounters().isEmpty()) {
-            json.append(", \"counters\": ");
             appendIntegerMap(json, obj.getCounters());
+        } else {
+            json.append("{}");
         }
 
+        // Spec: always output attached_to (null when not attached)
+        json.append(", \"attached_to\": ");
         if (obj.getAttachedTo() != null) {
-            json.append(", \"attached_to\": ").append(quote(obj.getAttachedTo()));
+            json.append(quote(obj.getAttachedTo()));
+        } else {
+            json.append("null");
         }
 
+        // Spec: always output notes (empty {} when none)
+        json.append(", \"notes\": ");
         if (obj.getNotes() != null && !obj.getNotes().isEmpty()) {
-            json.append(", \"notes\": ");
             appendMap(json, obj.getNotes());
+        } else {
+            json.append("{}");
         }
 
         json.append("}");
@@ -313,7 +385,145 @@ public class ReplayJsonSerializer {
     }
 
     private static void appendL2Units(StringBuilder json, List<L2Unit> units) {
-        json.append("[]");  // Simplified for now
+        if (units == null || units.isEmpty()) {
+            json.append("[]");
+            return;
+        }
+        json.append("[\n");
+        for (int i = 0; i < units.size(); i++) {
+            L2Unit unit = units.get(i);
+            json.append("    {\n");
+            json.append("      \"u\": ").append(unit.getU()).append(",\n");
+            json.append("      \"t_start\": ").append(quote(unit.getTStart())).append(",\n");
+            json.append("      \"t_end\": ").append(quote(unit.getTEnd())).append(",\n");
+
+            // l1_range
+            json.append("      \"l1_range\": ");
+            if (unit.getL1Range() != null && unit.getL1Range().length == 2) {
+                json.append("[").append(unit.getL1Range()[0]).append(", ").append(unit.getL1Range()[1]).append("]");
+            } else {
+                json.append("null");
+            }
+            json.append(",\n");
+
+            // decision_events
+            json.append("      \"decision_events\": [");
+            List<Integer> de = unit.getDecisionEvents();
+            for (int j = 0; j < de.size(); j++) {
+                json.append(de.get(j));
+                if (j < de.size() - 1) json.append(", ");
+            }
+            json.append("],\n");
+
+            // before state
+            json.append("      \"before\": ");
+            if (unit.getBefore() != null) {
+                appendGameState(json, unit.getBefore());
+            } else {
+                json.append("null");
+            }
+            json.append(",\n");
+
+            // stack
+            json.append("      \"stack\": ");
+            appendStackItems(json, unit.getStack());
+            json.append(",\n");
+
+            // after state
+            json.append("      \"after\": ");
+            if (unit.getAfter() != null) {
+                appendGameState(json, unit.getAfter());
+            } else {
+                json.append("null");
+            }
+            json.append(",\n");
+
+            // annotations
+            json.append("      \"annotations\": ");
+            appendAnnotations(json, unit.getAnnotations());
+            json.append("\n");
+
+            json.append("    }");
+            if (i < units.size() - 1) json.append(",");
+            json.append("\n");
+        }
+        json.append("  ]");
+    }
+
+    private static void appendStackItems(StringBuilder json, List<L2Unit.StackItem> items) {
+        if (items == null || items.isEmpty()) {
+            json.append("[]");
+            return;
+        }
+        json.append("[\n");
+        for (int i = 0; i < items.size(); i++) {
+            L2Unit.StackItem si = items.get(i);
+            json.append("        {");
+            json.append("\"stack\": ").append(quote(si.getStack()));
+            json.append(", \"kind\": ").append(quote(si.getKind()));
+            json.append(", \"controller\": ").append(quote(si.getController()));
+            json.append(", \"source\": ").append(quote(si.getSource()));
+            json.append(", \"card\": ").append(quote(si.getCard()));
+            json.append(", \"card_name\": ").append(quote(si.getCardName()));
+
+            // targets
+            json.append(", \"targets\": [");
+            List<L2Unit.StackItem.Target> targets = si.getTargets();
+            for (int j = 0; j < targets.size(); j++) {
+                L2Unit.StackItem.Target t = targets.get(j);
+                json.append("{\"slot\": ").append(quote(t.getSlot()));
+                json.append(", \"obj\": ").append(quote(t.getObj()));
+                json.append(", \"name\": ").append(quote(t.getName()));
+                json.append(", \"valid\": ").append(t.isValid()).append("}");
+                if (j < targets.size() - 1) json.append(", ");
+            }
+            json.append("]");
+
+            json.append(", \"choices\": ");
+            appendMap(json, si.getChoices());
+
+            json.append(", \"linked_decision_event\": ").append(si.getLinkedDecisionEvent());
+
+            json.append(", \"mana_paid\": [");
+            List<String> mp = si.getManaPaid();
+            for (int j = 0; j < mp.size(); j++) {
+                json.append(quote(mp.get(j)));
+                if (j < mp.size() - 1) json.append(", ");
+            }
+            json.append("]");
+
+            json.append(", \"outcome\": ").append(quote(si.getOutcome()));
+            json.append("}");
+            if (i < items.size() - 1) json.append(",");
+            json.append("\n");
+        }
+        json.append("      ]");
+    }
+
+    private static void appendAnnotations(StringBuilder json, L2Unit.Annotations ann) {
+        if (ann == null) {
+            json.append("{\"decision_quality\": null, \"alternative_lines\": [], \"key_moment\": false, \"teaching_notes\": \"\"}");
+            return;
+        }
+        json.append("{");
+        json.append("\"decision_quality\": ");
+        if (ann.getDecisionQuality() != null) {
+            appendValue(json, ann.getDecisionQuality());
+        } else {
+            json.append("null");
+        }
+        json.append(", \"alternative_lines\": [");
+        List<String> lines = ann.getAlternativeLines();
+        if (lines != null) {
+            for (int i = 0; i < lines.size(); i++) {
+                json.append(quote(lines.get(i)));
+                if (i < lines.size() - 1) json.append(", ");
+            }
+        }
+        json.append("]");
+        json.append(", \"key_moment\": ").append(ann.isKeyMoment());
+        json.append(", \"teaching_notes\": ").append(quote(ann.getTeachingNotes() != null ? ann.getTeachingNotes() : ""));
+        json.append("}");
     }
 
     /**
@@ -419,6 +629,95 @@ public class ReplayJsonSerializer {
             .replace("\n", "\\n")
             .replace("\r", "\\r")
             .replace("\t", "\\t");
+    }
+
+    // =========================================================================
+    //  Per-Turn Summary serialization (spec v1.5.0)
+    // =========================================================================
+
+    private static void appendPerTurnSummary(StringBuilder json, List<TurnSummary> summaries) {
+        if (summaries == null || summaries.isEmpty()) {
+            json.append("[]");
+            return;
+        }
+        json.append("[\n");
+        for (int i = 0; i < summaries.size(); i++) {
+            TurnSummary ts = summaries.get(i);
+            json.append("    {\n");
+            json.append("      \"turn\": ").append(ts.getTurn()).append(",\n");
+            json.append("      \"active_player\": \"").append(escape(ts.getActivePlayer())).append("\",\n");
+            json.append("      \"players\": {\n");
+
+            boolean firstPlayer = true;
+            for (Map.Entry<String, TurnSummary.PlayerTurnStats> entry : ts.getPlayers().entrySet()) {
+                if (!firstPlayer) json.append(",\n");
+                TurnSummary.PlayerTurnStats s = entry.getValue();
+                json.append("        \"").append(escape(entry.getKey())).append("\": {");
+                json.append("\"lands_played\": ").append(s.getLandsPlayed());
+                json.append(", \"land_drop_rating\": \"").append(escape(s.getLandDropRating())).append("\"");
+                json.append(", \"cards_drawn\": ").append(s.getCardsDrawn());
+                json.append(", \"spells_cast\": ").append(s.getSpellsCast());
+                json.append(", \"abilities_activated\": ").append(s.getAbilitiesActivated());
+                json.append(", \"land_count\": ").append(s.getLandCount());
+                json.append(", \"available_mana\": ").append(s.getAvailableMana());
+                json.append(", \"life\": ").append(s.getLife());
+                json.append(", \"cards_in_hand\": ").append(s.getCardsInHand());
+                json.append(", \"creatures_on_battlefield\": ").append(s.getCreaturesOnBattlefield());
+                json.append(", \"permanents_on_battlefield\": ").append(s.getPermanentsOnBattlefield());
+                json.append(", \"damage_dealt\": ").append(s.getDamageDealt());
+                json.append(", \"damage_taken\": ").append(s.getDamageTaken());
+                json.append("}");
+                firstPlayer = false;
+            }
+            json.append("\n      }\n");
+            json.append("    }");
+            if (i < summaries.size() - 1) json.append(",");
+            json.append("\n");
+        }
+        json.append("  ]");
+    }
+
+    // =========================================================================
+    //  Game Summary serialization (spec v1.5.0)
+    // =========================================================================
+
+    private static void appendGameSummary(StringBuilder json, GameSummary gs) {
+        if (gs == null) {
+            json.append("null");
+            return;
+        }
+        json.append("{\n");
+        json.append("    \"total_turns\": ").append(gs.getTotalTurns()).append(",\n");
+        json.append("    \"duration_seconds\": ").append(gs.getDurationSeconds()).append(",\n");
+        json.append("    \"winner\": ").append(gs.getWinner() != null ? "\"" + escape(gs.getWinner()) + "\"" : "null").append(",\n");
+        json.append("    \"win_condition\": ").append(gs.getWinCondition() != null ? "\"" + escape(gs.getWinCondition()) + "\"" : "null").append(",\n");
+        json.append("    \"players\": {\n");
+
+        boolean first = true;
+        for (Map.Entry<String, GameSummary.PlayerGameStats> entry : gs.getPlayers().entrySet()) {
+            if (!first) json.append(",\n");
+            GameSummary.PlayerGameStats p = entry.getValue();
+            json.append("      \"").append(escape(entry.getKey())).append("\": {\n");
+            json.append("        \"total_cards_drawn\": ").append(p.getTotalCardsDrawn()).append(",\n");
+            json.append("        \"card_draw_rate\": ").append(p.getCardDrawRate()).append(",\n");
+            json.append("        \"total_spells_cast\": ").append(p.getTotalSpellsCast()).append(",\n");
+            json.append("        \"spell_velocity\": ").append(p.getSpellVelocity()).append(",\n");
+            json.append("        \"total_abilities_activated\": ").append(p.getTotalAbilitiesActivated()).append(",\n");
+            json.append("        \"missed_land_drops\": ").append(p.getMissedLandDrops()).append(",\n");
+            json.append("        \"total_lands_played\": ").append(p.getTotalLandsPlayed()).append(",\n");
+            json.append("        \"peak_mana\": ").append(p.getPeakMana()).append(",\n");
+            json.append("        \"total_damage_dealt\": ").append(p.getTotalDamageDealt()).append(",\n");
+            json.append("        \"total_damage_received\": ").append(p.getTotalDamageReceived()).append(",\n");
+            json.append("        \"total_creatures_played\": ").append(p.getTotalCreaturesPlayed()).append(",\n");
+            json.append("        \"starting_life\": ").append(p.getStartingLife()).append(",\n");
+            json.append("        \"ending_life\": ").append(p.getEndingLife()).append(",\n");
+            json.append("        \"life_delta\": ").append(p.getLifeDelta()).append(",\n");
+            json.append("        \"total_counters_placed\": ").append(p.getTotalCountersPlaced()).append("\n");
+            json.append("      }");
+            first = false;
+        }
+        json.append("\n    }\n");
+        json.append("  }");
     }
 }
 

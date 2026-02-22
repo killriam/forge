@@ -1,6 +1,7 @@
 package forge.game.log;
 
 import forge.game.Game;
+import forge.game.GameEntity;
 import forge.game.GameOutcome;
 import forge.game.card.Card;
 import forge.game.log.model.*;
@@ -10,7 +11,9 @@ import forge.game.zone.ZoneType;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
@@ -19,7 +22,8 @@ import java.util.*;
  */
 public class ReplayNotationExporter {
 
-    private static final SimpleDateFormat ISO_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    private static final DateTimeFormatter ISO_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            .withZone(ZoneOffset.UTC);
 
     private final Game game;
     private final ReplayLog replayLog;
@@ -27,7 +31,9 @@ public class ReplayNotationExporter {
     private final Map<Card, String> cardIdMap = new HashMap<>();
     private int cardIdCounter = 0;
     private int stackIdCounter = 0;
-    private long gameStartTime = System.currentTimeMillis();
+    private int learningMarkerCounter = 0;
+    private final long gameStartTime = System.currentTimeMillis();
+    private final Map<Card, String> cardToStackId = new HashMap<>();
 
     // Phase-Event Buffering: Skip empty phases
     private Map<String, Object> pendingPhaseEvent = null;
@@ -36,6 +42,28 @@ public class ReplayNotationExporter {
     private static final Set<String> ALWAYS_EMPTY_PHASES = new HashSet<>(Arrays.asList(
         "PREGAME", "UNTAP", "DRAW", "CLEANUP"
     ));
+
+    // ---- Turn summary tracking ----
+    private int trackingTurn = 0;
+    private String trackingActivePlayer = null;
+    // Per-player counters reset each turn: playerId → counter
+    private final Map<String, Integer> turnLandsPlayed = new HashMap<>();
+    private final Map<String, Integer> turnCardsDrawn = new HashMap<>();
+    private final Map<String, Integer> turnSpellsCast = new HashMap<>();
+    private final Map<String, Integer> turnAbilitiesActivated = new HashMap<>();
+    private final Map<String, Integer> turnDamageDealt = new HashMap<>();
+    private final Map<String, Integer> turnDamageReceived = new HashMap<>();
+    // Game-wide accumulators
+    private final Map<String, Integer> gameTotalCardsDrawn = new HashMap<>();
+    private final Map<String, Integer> gameTotalSpellsCast = new HashMap<>();
+    private final Map<String, Integer> gameTotalAbilitiesActivated = new HashMap<>();
+    private final Map<String, Integer> gameTotalLandsPlayed = new HashMap<>();
+    private final Map<String, Integer> gameMissedLandDrops = new HashMap<>();
+    private final Map<String, Integer> gameTotalDamageDealt = new HashMap<>();
+    private final Map<String, Integer> gameTotalDamageReceived = new HashMap<>();
+    private final Map<String, Integer> gameTotalCreaturesPlayed = new HashMap<>();
+    private final Map<String, Integer> gameTotalCountersPlaced = new HashMap<>();
+    private final Map<String, Integer> gamePeakMana = new HashMap<>();
 
     public ReplayNotationExporter(Game game) {
         this.game = game;
@@ -49,8 +77,8 @@ public class ReplayNotationExporter {
     private void initializeReplayLog() {
         // Set metadata
         ReplayMeta meta = replayLog.getMeta();
-        meta.setGameId("game-" + UUID.randomUUID().toString());
-        meta.setTimestamp(ISO_FORMAT.format(new Date()));
+        meta.setGameId("game-" + UUID.randomUUID());
+        meta.setTimestamp(ISO_FORMAT.format(Instant.now()));
 
         if (game.getRules() != null && game.getRules().getGameType() != null) {
             meta.setGameType(game.getRules().getGameType().toString());
@@ -63,6 +91,11 @@ public class ReplayNotationExporter {
             ReplayMeta.PlayerMeta playerMeta = new ReplayMeta.PlayerMeta();
             playerMeta.setName(player.getName());
 
+            // Player type and AI status
+            playerMeta.setAi(player.isAI());
+            playerMeta.setPlayerType(player.isAI() ? "AI" : "Human");
+            playerMeta.setStartingLife(player.getStartingLife());
+
             // Add deck name and hash if available
             if (player.getRegisteredPlayer() != null &&
                 player.getRegisteredPlayer().getDeck() != null) {
@@ -73,6 +106,10 @@ public class ReplayNotationExporter {
                 // deck_link (spec v1.4.0): currently null – no mamo.games integration.
                 // Future: build URL as https://mamo.games/deck/<uuid>#<DDMMYYYY>_<deck_hash>
                 playerMeta.setDeckLink(null);
+            } else {
+                playerMeta.setDeckName("unknown");
+                playerMeta.setDeckHash(null);
+                playerMeta.setDeckLink(null);
             }
 
             meta.getPlayers().put(getPlayerId(player), playerMeta);
@@ -82,6 +119,17 @@ public class ReplayNotationExporter {
         replayLog.setSeed(System.currentTimeMillis());
 
         // Initialize initial state
+        captureInitialState();
+    }
+
+    /**
+     * Re-capture the initial game state after opening hands are drawn and
+     * mulligan decisions are finalized (P1.1 fix).
+     * Called once from GameLogFormatter when pregame ends (first Turn 1 upkeep).
+     * Replaces the empty initial_state that was captured in the constructor
+     * before zones were populated.
+     */
+    public void recaptureInitialState() {
         captureInitialState();
     }
 
@@ -98,6 +146,7 @@ public class ReplayNotationExporter {
         for (Player player : game.getPlayers()) {
             GameState.PlayerState playerState = new GameState.PlayerState();
             playerState.setLife(player.getLife());
+            playerState.setManaPool(new ArrayList<>()); // Spec: always []
             playerState.setMaxHandSize(7);
             state.getPlayers().put(getPlayerId(player), playerState);
         }
@@ -285,23 +334,15 @@ public class ReplayNotationExporter {
 
             forge.game.player.GameLossReason reason = p.getOutcome().lossState;
             if (reason != null) {
-                switch (reason) {
-                    case LifeReachedZero:
-                        return "life_zero";
-                    case CommanderDamage:
-                        return "commander_damage";
-                    case Poisoned:
-                        return "poison";
-                    case Milled:
-                        return "decked";
-                    case Conceded:
-                        return "concession";
-                    case SpellEffect:
-                    case OpponentWon:
-                        return "alternate_win";
-                    default:
-                        return "unknown";
-                }
+                return switch (reason) {
+                    case LifeReachedZero -> "life_zero";
+                    case CommanderDamage -> "commander_damage";
+                    case Poisoned -> "poison";
+                    case Milled -> "decked";
+                    case Conceded -> "concession";
+                    case SpellEffect, OpponentWon -> "alternate_win";
+                    default -> "unknown";
+                };
             }
 
             // Check for alternate win
@@ -386,7 +427,7 @@ public class ReplayNotationExporter {
 
     /**
      * Get or create a stable ID for a card.
-     * Handles face-down cards by using the actual card name for the index.
+     * Each card instance gets its own entry in card_index keyed by its card ID (e.g. "c43").
      */
     private String getCardId(Card card) {
         return cardIdMap.computeIfAbsent(card, c -> {
@@ -396,29 +437,66 @@ public class ReplayNotationExporter {
             // Get the actual card name (even for face-down cards)
             String actualName = getActualCardName(c);
 
-            // Add to card index with actual name as key
-            // Use unique key to avoid collisions (cardId + name)
-            String indexKey = actualName.isEmpty() ? cardId : actualName;
+            // Create card definition for this specific card instance
+            CardDefinition def = new CardDefinition();
+            def.setName(actualName);
 
-            // Only add if not already present with this name
-            if (!replayLog.getCardIndex().containsKey(indexKey)) {
-                CardDefinition def = new CardDefinition();
-                def.setName(actualName);
-
-                // Get mana cost from actual card state if available
-                if (c.getManaCost() != null && !c.getManaCost().isNoCost()) {
-                    def.setCost(c.getManaCost().toString());
-                } else if (c.getCurrentState() != null && c.getCurrentState().getManaCost() != null) {
-                    def.setCost(c.getCurrentState().getManaCost().toString());
-                } else {
-                    def.setCost("no cost");
-                }
-
-                // Get type
-                def.setType(c.getType() != null ? c.getType().toString() : "Unknown");
-
-                replayLog.getCardIndex().put(indexKey, def);
+            // Get mana cost from actual card state if available
+            if (c.getManaCost() != null && !c.getManaCost().isNoCost()) {
+                def.setCost(c.getManaCost().toString());
+            } else if (c.getCurrentState() != null && c.getCurrentState().getManaCost() != null) {
+                def.setCost(c.getCurrentState().getManaCost().toString());
+            } else {
+                def.setCost("no cost");
             }
+
+            // Get type
+            def.setType(c.getType() != null ? c.getType().toString() : "Unknown");
+
+            // P1.2: Set oracle_id from PaperCard if available
+            if (c.getPaperCard() != null) {
+                String surrogateId = c.getPaperCard().getName();
+                if (c.getPaperCard().getEdition() != null) {
+                    surrogateId += "|" + c.getPaperCard().getEdition();
+                }
+                if (c.getPaperCard().getCollectorNumber() != null) {
+                    surrogateId += "|" + c.getPaperCard().getCollectorNumber();
+                }
+                def.setOracleId(surrogateId);
+            }
+
+            // P12: Enrich card_index with oracle_text, power, toughness, subtypes
+            try {
+                String oracleText = c.getOracleText();
+                if (oracleText != null && !oracleText.isEmpty()) {
+                    def.setOracleText(oracleText);
+                }
+            } catch (Exception ignored) { /* oracle text not available */ }
+
+            try {
+                if (c.isCreature()) {
+                    def.setPower(c.getBasePowerString());
+                    def.setToughness(c.getBaseToughnessString());
+                }
+            } catch (Exception ignored) { /* P/T not available */ }
+
+            try {
+                if (c.getType() != null) {
+                    Iterable<String> subs = c.getType().getSubtypes();
+                    if (subs != null) {
+                        List<String> subtypeList = new ArrayList<>();
+                        for (String s : subs) {
+                            subtypeList.add(s);
+                        }
+                        if (!subtypeList.isEmpty()) {
+                            def.setSubtypes(subtypeList);
+                        }
+                    }
+                }
+            } catch (Exception ignored) { /* subtypes not available */ }
+
+            // Key is the card ID itself (e.g. "c43") for direct lookup from events
+            replayLog.getCardIndex().put(cardId, def);
 
             return cardId;
         });
@@ -582,8 +660,10 @@ public class ReplayNotationExporter {
         Map<String, Object> data = new HashMap<>();
         data.put("card", getCardId(land));
         data.put("card_name", getActualCardName(land));
+        data.put("player", getPlayerId(player));
 
         addEvent(timeMarker, getPlayerId(player), "PLAY_LAND", data);
+        trackLandPlayed(player);
     }
 
     /**
@@ -603,19 +683,57 @@ public class ReplayNotationExporter {
 
         // Draw is a system action, but we record which player drew
         addEvent(timeMarker, "SYS", "DRAW", data);
+        trackCardDrawn(player);
     }
 
     /**
      * Log a mulligan decision by a player.
      * This is a player decision event.
+     * Spec-compliant: includes hand_size_before, hand_size_after, mulligan_count,
+     * cards_seen, cards_to_bottom, cards_to_bottom_names.
      */
-    public void logMulligan(Player player, int cardsKept, boolean keepHand, String timeMarker) {
+    public void logMulligan(Player player, int handSizeBefore, int handSizeAfter,
+                            int mulliganCount, boolean keepHand,
+                            List<Card> cardsSeen, List<Card> cardsToBottom,
+                            String timeMarker) {
         Map<String, Object> data = new HashMap<>();
-        data.put("player", getPlayerId(player));
-        data.put("cards_kept", cardsKept);
         data.put("decision", keepHand ? "keep" : "mulligan");
+        data.put("hand_size_before", handSizeBefore);
+        data.put("hand_size_after", handSizeAfter);
+        data.put("mulligan_count", mulliganCount);
+
+        // Cards seen (optional, card IDs in hand when decision made)
+        if (cardsSeen != null && !cardsSeen.isEmpty()) {
+            List<String> seenIds = new ArrayList<>();
+            for (Card c : cardsSeen) {
+                seenIds.add(getCardId(c));
+            }
+            data.put("cards_seen", seenIds);
+        }
+
+        // Cards put to bottom (London mulligan, only on keep)
+        if (cardsToBottom != null && !cardsToBottom.isEmpty()) {
+            List<String> bottomIds = new ArrayList<>();
+            List<String> bottomNames = new ArrayList<>();
+            for (Card c : cardsToBottom) {
+                bottomIds.add(getCardId(c));
+                bottomNames.add(getActualCardName(c));
+            }
+            data.put("cards_to_bottom", bottomIds);
+            data.put("cards_to_bottom_names", bottomNames);
+        }
 
         addEvent(timeMarker, getPlayerId(player), "MULLIGAN", data);
+    }
+
+    /**
+     * Legacy method for backwards compatibility.
+     * @deprecated Use {@link #logMulligan(Player, int, int, int, boolean, List, List, String)} instead.
+     */
+    @Deprecated
+    public void logMulligan(Player player, int cardsKept, boolean keepHand, String timeMarker) {
+        logMulligan(player, keepHand ? cardsKept : cardsKept + 1, cardsKept,
+                    keepHand ? 0 : 1, keepHand, null, null, timeMarker);
     }
 
     /**
@@ -677,6 +795,7 @@ public class ReplayNotationExporter {
         data.put("choices", new HashMap<>());
 
         addEvent(timeMarker, getPlayerId(caster), "CAST", data);
+        trackSpellCast(caster);
     }
 
     /**
@@ -788,7 +907,7 @@ public class ReplayNotationExporter {
             }
         }
 
-        return manaStr.length() > 0 ? manaStr.toString() : "0";
+        return !manaStr.isEmpty() ? manaStr.toString() : "0";
     }
 
     /**
@@ -885,8 +1004,12 @@ public class ReplayNotationExporter {
     public void logPutOnStack(Card card, Player controller, String timeMarker) {
         flushPendingPhase(); // Something happened! Log the phase.
 
+        String stackId = generateStackId();
+        // Track card→stackId for RESOLVE events
+        cardToStackId.put(card, stackId);
+
         Map<String, Object> data = new HashMap<>();
-        data.put("stack", generateStackId());
+        data.put("stack", stackId);
         data.put("kind", "SPELL");
         data.put("source", getCardId(card));
         data.put("source_name", getActualCardName(card));
@@ -897,6 +1020,142 @@ public class ReplayNotationExporter {
         data.put("choices", new HashMap<>());
 
         addEvent(timeMarker, "SYS", "PUT_ON_STACK", data);
+    }
+
+    /**
+     * Log an activated ability (spec §2.1).
+     * Emits ACTIVATE event for non-spell, non-trigger abilities.
+     */
+    public void logActivate(Card card, Player activator, forge.game.spellability.SpellAbility sa, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("card", getCardId(card));
+        data.put("card_name", getActualCardName(card));
+        data.put("ability", sa != null ? sa.getStackDescription() : "unknown ability");
+        data.put("controller", getPlayerId(activator));
+        data.put("targets", new ArrayList<>());
+        data.put("choices", new HashMap<>());
+
+        addEvent(timeMarker, getPlayerId(activator), "ACTIVATE", data);
+        trackAbilityActivated(activator);
+    }
+
+    /**
+     * Log a triggered ability (spec §2.2).
+     * Emits TRIGGER event when an ability triggers.
+     */
+    public void logTrigger(Card source, Player controller, forge.game.spellability.SpellAbility sa, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("source", getCardId(source));
+        data.put("source_name", getActualCardName(source));
+        data.put("trigger", sa != null ? sa.getStackDescription() : "unknown trigger");
+        data.put("controller", getPlayerId(controller));
+
+        addEvent(timeMarker, "SYS", "TRIGGER", data);
+    }
+
+    /**
+     * Log a spell/ability resolving (spec §2.3).
+     * Emits RESOLVE event when a spell or ability resolves from the stack.
+     */
+    public void logResolve(Card card, boolean fizzled, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        // Look up the stack ID assigned when the card was put on the stack
+        String stackId = cardToStackId.remove(card);
+        data.put("stack", stackId != null ? stackId : "unknown");
+        data.put("card", getCardId(card));
+        data.put("card_name", getActualCardName(card));
+        data.put("fizzled", fizzled);
+
+        addEvent(timeMarker, "SYS", "RESOLVE", data);
+    }
+
+    /**
+     * Log attackers being declared (spec §2.5).
+     * Emits DECLARE_ATTACKERS event with attacker→defender mapping.
+     */
+    public void logDeclareAttackers(Player attackingPlayer,
+                                     com.google.common.collect.Multimap<GameEntity, Card> attackersMap,
+                                     String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> attackers = new HashMap<>();
+
+        for (Map.Entry<GameEntity, java.util.Collection<Card>> entry : attackersMap.asMap().entrySet()) {
+            GameEntity defender = entry.getKey();
+            String defenderId;
+            if (defender instanceof Player) {
+                defenderId = getPlayerId((Player) defender);
+            } else if (defender instanceof Card) {
+                defenderId = getCardId((Card) defender);
+            } else {
+                defenderId = defender.toString();
+            }
+
+            for (Card attacker : entry.getValue()) {
+                attackers.put(getCardId(attacker), defenderId);
+            }
+        }
+
+        data.put("attackers", attackers);
+        data.put("attacking_player", getPlayerId(attackingPlayer));
+
+        addEvent(timeMarker, getPlayerId(attackingPlayer), "DECLARE_ATTACKERS", data);
+    }
+
+    /**
+     * Log blockers being declared (spec §2.6).
+     * Emits DECLARE_BLOCKERS event with blocker→attacker mapping.
+     */
+    public void logDeclareBlockers(Player defendingPlayer,
+                                    Map<GameEntity, forge.util.maps.MapOfLists<Card, Card>> blockersMap,
+                                    String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> blockers = new HashMap<>();
+
+        for (Map.Entry<GameEntity, forge.util.maps.MapOfLists<Card, Card>> kv : blockersMap.entrySet()) {
+            for (Map.Entry<Card, java.util.Collection<Card>> att : kv.getValue().entrySet()) {
+                Card attacker = att.getKey();
+                List<String> blockerIds = new ArrayList<>();
+                for (Card blocker : att.getValue()) {
+                    blockerIds.add(getCardId(blocker));
+                }
+                if (!blockerIds.isEmpty()) {
+                    blockers.put(getCardId(attacker), blockerIds);
+                }
+            }
+        }
+
+        data.put("blockers", blockers);
+
+        String actor = getPlayerId(defendingPlayer);
+        addEvent(timeMarker, actor, "DECLARE_BLOCKERS", data);
+    }
+
+    /**
+     * Log counter change on a card (spec §2.8).
+     * Emits COUNTERS event for +1/+1, loyalty, and other counter changes.
+     */
+    public void logCounters(Card card, String counterType, int oldValue, int newValue, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("obj", getCardId(card));
+        data.put("card_name", getActualCardName(card));
+        data.put("counter_type", counterType);
+        data.put("delta", newValue - oldValue);
+        data.put("new_total", newValue);
+
+        addEvent(timeMarker, "SYS", "COUNTERS", data);
+        trackCounterPlaced(newValue - oldValue);
     }
 
     /**
@@ -922,6 +1181,11 @@ public class ReplayNotationExporter {
         data.put("prevented", 0);
 
         addEvent(timeMarker, "SYS", "DAMAGE", data);
+
+        // Track damage for summaries
+        Player sourceController = (source != null && source.getController() != null) ? source.getController() : null;
+        Player targetPlayer = (target instanceof Player) ? (Player) target : null;
+        trackDamageDealt(sourceController, targetPlayer, amount);
     }
 
     /**
@@ -980,6 +1244,62 @@ public class ReplayNotationExporter {
         data.put("tapped", tapped);
 
         addEvent(timeMarker, "SYS", "TAP", data);
+    }
+
+    /**
+     * Log a learning marker (player bookmark) at the current game state.
+     * Spec 1.3.0: Emits LEARNING_MARKER L1 event and adds a top-level summary entry.
+     * @param player The player placing the marker
+     * @param label Short description or question about this moment
+     * @param category One of: decision_review, mistake, turning_point, interesting_interaction, sideboard_note, general
+     * @param timeMarker Current time marker
+     */
+    public void logLearningMarker(Player player, String label, String category, String timeMarker) {
+        learningMarkerCounter++;
+        String markerId = "lm-" + learningMarkerCounter;
+        String createdAt = ISO_FORMAT.format(Instant.now());
+
+        // Emit L1 event
+        Map<String, Object> data = new HashMap<>();
+        data.put("marker_id", markerId);
+        data.put("label", label);
+        data.put("category", category != null ? category : "general");
+        data.put("created_at", createdAt);
+
+        int currentEventIndex = eventIndex; // capture before addEvent increments it
+        addEvent(timeMarker, getPlayerId(player), "LEARNING_MARKER", data);
+
+        // Create top-level summary entry with snapshot
+        ReplayLog.LearningMarker marker = new ReplayLog.LearningMarker();
+        marker.setMarkerId(markerId);
+        marker.setEventIndex(currentEventIndex);
+        marker.setT(timeMarker);
+        marker.setPlayer(getPlayerId(player));
+        marker.setLabel(label);
+        marker.setCategory(category != null ? category : "general");
+        marker.setCreatedAt(createdAt);
+        marker.setNotes("");
+
+        // Build lightweight snapshot from current game state
+        ReplayLog.LearningMarker.Snapshot snapshot = new ReplayLog.LearningMarker.Snapshot();
+        if (game.getPhaseHandler() != null) {
+            snapshot.setTurn(game.getPhaseHandler().getTurn());
+            snapshot.setPhase(game.getPhaseHandler().getPhase() != null ?
+                    game.getPhaseHandler().getPhase().toString() : "UNKNOWN");
+            snapshot.setActivePlayer(game.getPhaseHandler().getPlayerTurn() != null ?
+                    getPlayerId(game.getPhaseHandler().getPlayerTurn()) : getPlayerId(player));
+        }
+
+        for (Player p : game.getPlayers()) {
+            String pId = getPlayerId(p);
+            snapshot.getLifeTotals().put(pId, p.getLife());
+            snapshot.getCardsInHand().put(pId, p.getCardsIn(ZoneType.Hand).size());
+            snapshot.getBattlefieldCount().put(pId, p.getCardsIn(ZoneType.Battlefield).size());
+        }
+        snapshot.setStackEmpty(game.getStackZone().isEmpty());
+
+        marker.setSnapshot(snapshot);
+        replayLog.addLearningMarker(marker);
     }
 
     /**
@@ -1049,24 +1369,16 @@ public class ReplayNotationExporter {
      * Format a zone for the log.
      */
     private String formatZone(ZoneType zone, Player player) {
-        switch (zone) {
-            case Battlefield:
-                return "battlefield";
-            case Stack:
-                return "stack";
-            case Exile:
-                return "exile";
-            case Hand:
-                return getPlayerId(player) + ":hand";
-            case Library:
-                return getPlayerId(player) + ":library";
-            case Graveyard:
-                return getPlayerId(player) + ":graveyard";
-            case Command:
-                return getPlayerId(player) + ":command";
-            default:
-                return zone.name().toLowerCase();
-        }
+        return switch (zone) {
+            case Battlefield -> "battlefield";
+            case Stack -> "stack";
+            case Exile -> "exile";
+            case Hand -> getPlayerId(player) + ":hand";
+            case Library -> getPlayerId(player) + ":library";
+            case Graveyard -> getPlayerId(player) + ":graveyard";
+            case Command -> getPlayerId(player) + ":command";
+            default -> zone.name().toLowerCase();
+        };
     }
 
     /**
@@ -1087,6 +1399,203 @@ public class ReplayNotationExporter {
         return String.format("T%d.%s", turn, phase);
     }
 
+    // =========================================================================
+    //  Turn Summary & Game Summary tracking
+    // =========================================================================
+
+    private void incrementCounter(Map<String, Integer> map, String key, int delta) {
+        map.merge(key, delta, Integer::sum);
+    }
+
+    private int getCounter(Map<String, Integer> map, String key) {
+        return map.getOrDefault(key, 0);
+    }
+
+    /**
+     * Called when a new turn begins. Flushes the previous turn's summary and resets per-turn counters.
+     */
+    public void onTurnBegin(int turnNumber, Player activePlayer) {
+        // Flush the previous turn's summary (skip turn 0 / pregame)
+        if (trackingTurn > 0) {
+            flushTurnSummary();
+        }
+
+        trackingTurn = turnNumber;
+        trackingActivePlayer = getPlayerId(activePlayer);
+
+        // Reset per-turn counters
+        turnLandsPlayed.clear();
+        turnCardsDrawn.clear();
+        turnSpellsCast.clear();
+        turnAbilitiesActivated.clear();
+        turnDamageDealt.clear();
+        turnDamageReceived.clear();
+    }
+
+    /**
+     * Capture the current turn's stats and add a TurnSummary to the replay log.
+     */
+    private void flushTurnSummary() {
+        TurnSummary summary = new TurnSummary(trackingTurn, trackingActivePlayer);
+
+        for (Player player : game.getPlayers()) {
+            String pid = getPlayerId(player);
+            TurnSummary.PlayerTurnStats stats = new TurnSummary.PlayerTurnStats();
+
+            int landsPlayed = getCounter(turnLandsPlayed, pid);
+            stats.setLandsPlayed(landsPlayed);
+            stats.setLandDropRating(landsPlayed == 0 ? "bad" : landsPlayed == 1 ? "good" : "super");
+            stats.setCardsDrawn(getCounter(turnCardsDrawn, pid));
+            stats.setSpellsCast(getCounter(turnSpellsCast, pid));
+            stats.setAbilitiesActivated(getCounter(turnAbilitiesActivated, pid));
+            stats.setDamageDealt(getCounter(turnDamageDealt, pid));
+            stats.setDamageTaken(getCounter(turnDamageReceived, pid));
+
+            // Snapshot current game state
+            stats.setLife(player.getLife());
+            stats.setCardsInHand(player.getCardsIn(ZoneType.Hand).size());
+
+            int landCount = 0;
+            int creatureCount = 0;
+            int permanentCount = 0;
+            for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+                permanentCount++;
+                if (c.isLand()) landCount++;
+                if (c.isCreature()) creatureCount++;
+            }
+            stats.setLandCount(landCount);
+            stats.setCreaturesOnBattlefield(creatureCount);
+            stats.setPermanentsOnBattlefield(permanentCount);
+
+            // Estimate available mana from untapped sources
+            int mana = 0;
+            for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+                if (c.isUntapped() && !c.getManaAbilities().isEmpty()) {
+                    mana++;
+                }
+            }
+            stats.setAvailableMana(mana);
+
+            // Track peak mana for game summary
+            int currentPeak = getCounter(gamePeakMana, pid);
+            if (mana > currentPeak) {
+                gamePeakMana.put(pid, mana);
+            }
+
+            // Track missed land drops (active player only, not turn 0)
+            if (pid.equals(trackingActivePlayer) && landsPlayed == 0 && trackingTurn > 1) {
+                incrementCounter(gameMissedLandDrops, pid, 1);
+            }
+
+            summary.getPlayers().put(pid, stats);
+        }
+
+        replayLog.addTurnSummary(summary);
+    }
+
+    // --- Tracking hooks called from log* methods ---
+
+    /** Track a land play for turn/game summary. */
+    public void trackLandPlayed(Player player) {
+        String pid = getPlayerId(player);
+        incrementCounter(turnLandsPlayed, pid, 1);
+        incrementCounter(gameTotalLandsPlayed, pid, 1);
+    }
+
+    /** Track a card draw for turn/game summary. */
+    public void trackCardDrawn(Player player) {
+        String pid = getPlayerId(player);
+        incrementCounter(turnCardsDrawn, pid, 1);
+        incrementCounter(gameTotalCardsDrawn, pid, 1);
+    }
+
+    /** Track a spell cast for turn/game summary. */
+    public void trackSpellCast(Player player) {
+        String pid = getPlayerId(player);
+        incrementCounter(turnSpellsCast, pid, 1);
+        incrementCounter(gameTotalSpellsCast, pid, 1);
+    }
+
+    /** Track an activated ability for turn/game summary. */
+    public void trackAbilityActivated(Player player) {
+        String pid = getPlayerId(player);
+        incrementCounter(turnAbilitiesActivated, pid, 1);
+        incrementCounter(gameTotalAbilitiesActivated, pid, 1);
+    }
+
+    /** Track damage dealt for turn/game summary. */
+    public void trackDamageDealt(Player sourceController, Player target, int amount) {
+        if (sourceController != null) {
+            incrementCounter(turnDamageDealt, getPlayerId(sourceController), amount);
+            incrementCounter(gameTotalDamageDealt, getPlayerId(sourceController), amount);
+        }
+        if (target != null) {
+            incrementCounter(turnDamageReceived, getPlayerId(target), amount);
+            incrementCounter(gameTotalDamageReceived, getPlayerId(target), amount);
+        }
+    }
+
+    /** Track a creature entering the battlefield. */
+    public void trackCreaturePlayed(Player player) {
+        incrementCounter(gameTotalCreaturesPlayed, getPlayerId(player), 1);
+    }
+
+    /** Track counter changes for game summary. */
+    public void trackCounterPlaced(int delta) {
+        if (delta > 0) {
+            // We don't know the player, so track globally
+            incrementCounter(gameTotalCountersPlaced, "GLOBAL", delta);
+        }
+    }
+
+    /**
+     * Build the game_summary at end of game. Call this after setGameOutcome().
+     */
+    public void buildGameSummary() {
+        // Flush the last turn
+        if (trackingTurn > 0) {
+            flushTurnSummary();
+        }
+
+        GameSummary gs = new GameSummary();
+        ReplayMeta meta = replayLog.getMeta();
+        gs.setTotalTurns(meta.getTurns() != null ? meta.getTurns() : trackingTurn);
+        gs.setWinner(meta.getWinner());
+        gs.setWinCondition(meta.getWinCondition());
+        long durationMs = System.currentTimeMillis() - gameStartTime;
+        gs.setDurationSeconds((int) (durationMs / 1000));
+
+        int totalTurns = Math.max(1, gs.getTotalTurns());
+
+        for (Player player : game.getPlayers()) {
+            String pid = getPlayerId(player);
+            GameSummary.PlayerGameStats pgs = new GameSummary.PlayerGameStats();
+
+            int drawn = getCounter(gameTotalCardsDrawn, pid);
+            int cast = getCounter(gameTotalSpellsCast, pid);
+
+            pgs.setTotalCardsDrawn(drawn);
+            pgs.setCardDrawRate(Math.round(((double) drawn / totalTurns) * 100.0) / 100.0);
+            pgs.setTotalSpellsCast(cast);
+            pgs.setSpellVelocity(Math.round(((double) cast / totalTurns) * 100.0) / 100.0);
+            pgs.setTotalAbilitiesActivated(getCounter(gameTotalAbilitiesActivated, pid));
+            pgs.setMissedLandDrops(getCounter(gameMissedLandDrops, pid));
+            pgs.setTotalLandsPlayed(getCounter(gameTotalLandsPlayed, pid));
+            pgs.setPeakMana(getCounter(gamePeakMana, pid));
+            pgs.setTotalDamageDealt(getCounter(gameTotalDamageDealt, pid));
+            pgs.setTotalDamageReceived(getCounter(gameTotalDamageReceived, pid));
+            pgs.setTotalCreaturesPlayed(getCounter(gameTotalCreaturesPlayed, pid));
+            pgs.setStartingLife(player.getStartingLife());
+            pgs.setEndingLife(player.getLife());
+            pgs.setLifeDelta(player.getLife() - player.getStartingLife());
+            pgs.setTotalCountersPlaced(getCounter(gameTotalCountersPlaced, pid));
+
+            gs.getPlayers().put(pid, pgs);
+        }
+
+        replayLog.setGameSummary(gs);
+    }
+
     /**
      * Export the replay log to a JSON file.
      */
@@ -1097,7 +1606,8 @@ public class ReplayNotationExporter {
             }
         }
 
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+        String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
+                .withZone(ZoneOffset.UTC).format(Instant.now());
         String filename = String.format("replay_%s_%s.json",
             replayLog.getMeta().getGameType(), timestamp);
         File outputFile = new File(outputDir, filename);

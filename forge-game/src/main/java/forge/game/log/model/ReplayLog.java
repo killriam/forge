@@ -17,10 +17,13 @@ import java.util.Map;
  * - 1.3.1 (spec 1.2.1): Added ACTIVE_PLAYER_CHANGE event for turn transitions
  * - 1.4.0 (spec 1.3.0): Added LEARNING_MARKER event and learning_markers top-level array
  * - 1.4.0 (spec 1.4.0): Added deck_link field in player metadata
+ * - 1.5.0 (spec 1.5.0): Renamed log_l1→events, added spec_version, ACTIVATE, TRIGGER, RESOLVE,
+ *                        DECLARE_ATTACKERS, DECLARE_BLOCKERS, COUNTERS events; enriched card_index
  */
 public class ReplayLog {
     private String format = "mtg-replay";
-    private String version = "1.4.0";
+    private String version = "1.5.0";
+    private String specVersion = "1.5.0";
     private ReplayMeta meta;
     private long seed;
     private GameStartInfo gameStart;
@@ -30,6 +33,10 @@ public class ReplayLog {
     private List<L2Unit> viewsL2;
     /** v1.4.0 (spec 1.3.0): Top-level index of all LEARNING_MARKER events for quick navigation. */
     private List<LearningMarker> learningMarkers;
+    /** v1.5.0: Per-turn summary of key statistics for each player. */
+    private List<TurnSummary> perTurnSummary;
+    /** v1.5.0: Aggregated game-wide statistics. */
+    private GameSummary gameSummary;
 
     public ReplayLog() {
         this.meta = new ReplayMeta();
@@ -39,6 +46,7 @@ public class ReplayLog {
         this.logL1 = new ArrayList<>();
         this.viewsL2 = new ArrayList<>();
         this.learningMarkers = new ArrayList<>();
+        this.perTurnSummary = new ArrayList<>();
     }
 
     // Getters and Setters
@@ -47,6 +55,9 @@ public class ReplayLog {
 
     public String getVersion() { return version; }
     public void setVersion(String version) { this.version = version; }
+
+    public String getSpecVersion() { return specVersion; }
+    public void setSpecVersion(String specVersion) { this.specVersion = specVersion; }
 
     public ReplayMeta getMeta() { return meta; }
     public void setMeta(ReplayMeta meta) { this.meta = meta; }
@@ -71,6 +82,14 @@ public class ReplayLog {
 
     public List<LearningMarker> getLearningMarkers() { return learningMarkers; }
     public void setLearningMarkers(List<LearningMarker> learningMarkers) { this.learningMarkers = learningMarkers; }
+
+    public List<TurnSummary> getPerTurnSummary() { return perTurnSummary; }
+    public void setPerTurnSummary(List<TurnSummary> perTurnSummary) { this.perTurnSummary = perTurnSummary; }
+
+    public GameSummary getGameSummary() { return gameSummary; }
+    public void setGameSummary(GameSummary gameSummary) { this.gameSummary = gameSummary; }
+
+    public void addTurnSummary(TurnSummary summary) { this.perTurnSummary.add(summary); }
 
     public void addL1Event(L1Event event) {
         this.logL1.add(event);

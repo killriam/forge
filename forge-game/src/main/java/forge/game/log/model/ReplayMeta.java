@@ -62,6 +62,12 @@ public class ReplayMeta {
          * Null for AI players or when no deck link is available.
          */
         private String deckLink;
+        /** Whether this player is controlled by AI. */
+        private boolean isAi;
+        /** Starting life total for this player. */
+        private int startingLife;
+        /** Player type description, e.g. "Human", "AI (Simulated)", "AI (Random)". */
+        private String playerType;
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
@@ -74,5 +80,14 @@ public class ReplayMeta {
 
         public String getDeckLink() { return deckLink; }
         public void setDeckLink(String deckLink) { this.deckLink = deckLink; }
+
+        public boolean isAi() { return isAi; }
+        public void setAi(boolean ai) { this.isAi = ai; }
+
+        public int getStartingLife() { return startingLife; }
+        public void setStartingLife(int startingLife) { this.startingLife = startingLife; }
+
+        public String getPlayerType() { return playerType; }
+        public void setPlayerType(String playerType) { this.playerType = playerType; }
     }
 }

@@ -2,10 +2,12 @@ package forge.game;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.collect.Iterables;
 import com.google.common.eventbus.Subscribe;
@@ -37,6 +39,14 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     private int currentTurn = 0;
     private String currentPhase = "PREGAME";
     private int priorityCounter = 0;
+    private boolean initialStateCaptured = false; // P1.1: Track if initial state has been captured
+    private Player previousTurnPlayer = null; // P2.10: Track for ACTIVE_PLAYER_CHANGE
+    private Player currentActivePlayer = null; // Track whose turn it is for time markers
+    // P4.3: Track lands played via PLAY_LAND to suppress duplicate MOVE events
+    private final Set<Card> recentlyPlayedLands = new HashSet<>();
+    // P15: Track drawn/discarded cards to suppress duplicate MOVE events
+    private final Set<Card> recentlyDrawnCards = new HashSet<>();
+    private final Set<Card> recentlyDiscardedCards = new HashSet<>();
 
     public GameLogFormatter(GameLog gameLog) {
         log = gameLog;
@@ -85,6 +95,7 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         // Update replay notation with game outcome
         if (replayExporter != null) {
             replayExporter.setGameOutcome(ev.result());
+            replayExporter.buildGameSummary();
         }
 
         return generateSummary(ev.history());
@@ -147,6 +158,11 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             log.add(GameLogEntryType.ANALYSIS, analysisMsg);
         }
 
+        // Log to JSON if enabled - RESOLVE event
+        if (replayExporter != null) {
+            replayExporter.logResolve(ev.spell().getHostCard(), ev.hasFizzled(), generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.STACK_RESOLVE, messageForLog);
     }
 
@@ -176,10 +192,19 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         }
 
         // Log to JSON if enabled
-        if (replayExporter != null && event.sa().isSpell()) {
-            priorityCounter++; // Increment priority when spell is cast
-            replayExporter.logCast(event.sa().getHostCard(), event.sa().getActivatingPlayer(),
-                                 generateTimeMarker(), event.sa());
+        if (replayExporter != null) {
+            priorityCounter++; // Increment priority when spell/ability is cast
+            if (event.sa().isSpell()) {
+                replayExporter.logCast(event.sa().getHostCard(), event.sa().getActivatingPlayer(),
+                                     generateTimeMarker(), event.sa());
+            } else if (event.sa().isTrigger()) {
+                replayExporter.logTrigger(event.sa().getHostCard(), event.sa().getActivatingPlayer(),
+                                         event.sa(), generateTimeMarker());
+            } else {
+                // Activated ability (non-spell, non-trigger)
+                replayExporter.logActivate(event.sa().getHostCard(), event.sa().getActivatingPlayer(),
+                                          event.sa(), generateTimeMarker());
+            }
         }
 
         return new GameLogEntry(GameLogEntryType.STACK_ADD, messageForLog);
@@ -251,12 +276,20 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     @Override
     public GameLogEntry visit(GameEventTurnPhase ev) {
         Player p = ev.playerTurn();
+        currentActivePlayer = p; // Track whose turn it is
         String phaseMessage = ev.phaseDesc() + Lang.getInstance().getPossessedObject(p.getName(), ev.phase().nameForUi);
 
         // Update time tracking for replay notation
         if (ev.phase() == forge.game.phase.PhaseType.UPKEEP && !ev.phaseDesc().equals("Repeat")) {
             currentTurn++;
             priorityCounter = 0;
+
+            // P1.1: Recapture initial_state once at Turn 1 upkeep,
+            // after opening hands are drawn and mulligans are finalized.
+            if (!initialStateCaptured && replayExporter != null) {
+                replayExporter.recaptureInitialState();
+                initialStateCaptured = true;
+            }
         }
 
         // Map phase to short name for time marker
@@ -331,6 +364,8 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         // Log to JSON if enabled - use PLAY_LAND event type with player as actor
         if (replayExporter != null) {
             replayExporter.logPlayLand(ev.land(), ev.player(), generateTimeMarker());
+            // P4.3: Track this land to suppress the duplicate MOVE event
+            recentlyPlayedLands.add(ev.land());
         }
 
         return new GameLogEntry(GameLogEntryType.LAND, message);
@@ -343,6 +378,14 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         if (turnPlayer != null && turnPlayer.getGame() != null) {
             captureBoardState(turnPlayer.getGame());
             turnZoneChanges.clear(); // Clear zone changes from previous turn
+        }
+
+        // P2.10: Emit ACTIVE_PLAYER_CHANGE for turn transitions
+        if (replayExporter != null) {
+            replayExporter.logActivePlayerChange(previousTurnPlayer, turnPlayer,
+                                                  event.turnNumber(), generateTimeMarker());
+            replayExporter.onTurnBegin(event.turnNumber(), turnPlayer);
+            previousTurnPlayer = turnPlayer;
         }
 
         String message = localizer.getMessage("lblLogTurnNOwnerByPlayer", String.valueOf(event.turnNumber()), event.turnOwner().toString());
@@ -388,6 +431,17 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     }
 
     @Override
+    public GameLogEntry visit(GameEventCardCounters ev) {
+        // P2.8: Emit COUNTERS event for counter changes to JSON
+        if (replayExporter != null) {
+            String counterType = ev.type() != null ? ev.type().getName() : "unknown";
+            replayExporter.logCounters(ev.card(), counterType, ev.oldValue(), ev.newValue(), generateTimeMarker());
+        }
+        // No text log entry — counter changes show via other mechanisms
+        return null;
+    }
+
+    @Override
     public GameLogEntry visit(GameEventPlayerPoisoned ev) {
         String message = localizer.getMessage("lblLogPlayerReceivesNPosionCounterFrom",
                             ev.receiver().toString(), String.valueOf(ev.amount()), ev.source().toString());
@@ -425,6 +479,12 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             sb.append(localizer.getMessage("lblLogPlayerAssignedAttackerToAttackTarget", ev.player(), Lang.joinHomogenous(attackers), k));
         }
         if (sb.length() == 0) return null;
+
+        // Log to JSON if enabled - DECLARE_ATTACKERS
+        if (replayExporter != null) {
+            replayExporter.logDeclareAttackers(ev.player(), ev.attackersMap(), generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.COMBAT, sb.toString());
     }
 
@@ -466,6 +526,11 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
                 }
                 firstAttacker = false;
             }
+        }
+
+        // Log to JSON if enabled - DECLARE_BLOCKERS
+        if (replayExporter != null) {
+            replayExporter.logDeclareBlockers(ev.defendingPlayer(), ev.blockers(), generateTimeMarker());
         }
 
         return new GameLogEntry(GameLogEntryType.COMBAT, sb.toString());
@@ -547,17 +612,30 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         if (replayExporter != null) {
             Player owner = card.getOwner();
 
-            // Determine the appropriate event type based on zone transition
-            if (fromZone == ZoneType.Library && toZone == ZoneType.Hand) {
+            // P4.3: Skip MOVE if this card was just played as a land (already emitted PLAY_LAND)
+            if (recentlyPlayedLands.remove(card)) {
+                // Already logged as PLAY_LAND — suppress duplicate MOVE
+            } else if (recentlyDrawnCards.remove(card)) {
+                // P15: Already logged as DRAW — suppress duplicate MOVE
+            } else if (recentlyDiscardedCards.remove(card)) {
+                // P15: Already logged as DISCARD — suppress duplicate MOVE
+            } else if (fromZone == ZoneType.Library && toZone == ZoneType.Hand) {
                 // Drawing a card
                 replayExporter.logDraw(card, owner, generateTimeMarker());
+                recentlyDrawnCards.add(card);
             } else if (fromZone == ZoneType.Hand && toZone == ZoneType.Graveyard) {
                 // Discarding a card - assume player choice for now
                 // TODO: Track forced discards separately
                 replayExporter.logDiscard(card, owner, true, generateTimeMarker());
+                recentlyDiscardedCards.add(card);
             } else {
                 // Generic zone change - use MOVE event
                 replayExporter.logZoneChange(card, fromZone, toZone, generateTimeMarker(), owner);
+            }
+
+            // Track creatures entering battlefield for game summary
+            if (toZone == ZoneType.Battlefield && card.isCreature() && card.getController() != null) {
+                replayExporter.trackCreaturePlayed(card.getController());
             }
         }
 
