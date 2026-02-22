@@ -46,7 +46,7 @@ public enum ColumnDef {
      * The column containing the inventory item name.
      */
     STRING("", "", 0, false, SortState.ASC,
-            from -> from.getKey() instanceof Comparable<?> ? (Comparable<?>) from.getKey() : from.getKey().getName(),
+            from -> from.getKey().getName(),
             from -> from.getKey().toString()),
     /**
      * The name column.

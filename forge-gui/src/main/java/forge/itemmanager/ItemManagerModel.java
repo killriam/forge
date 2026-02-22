@@ -123,11 +123,25 @@ public final class ItemManagerModel<T extends InventoryItem> {
     }
 
     public void refreshSort() {
+        System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - ENTRY");
+        long start = System.currentTimeMillis();
         final List<Entry<T, Integer>> list = getOrderedList();
-        if (list.isEmpty()) { return; }
-        try { list.sort(new MyComparator()); }
+        System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - getOrderedList() returned " + list.size() + " items in " + (System.currentTimeMillis() - start) + "ms");
+        if (list.isEmpty()) {
+            System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - list empty, returning");
+            return;
+        }
+        try {
+            long sortStart = System.currentTimeMillis();
+            System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - calling list.sort()...");
+            list.sort(new MyComparator());
+            System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - list.sort(): " + (System.currentTimeMillis() - sortStart) + "ms");
+        }
         //fix NewDeck editor not loading on Android if a user deleted unwanted sets on edition folder
-        catch (IllegalArgumentException ex) {}
+        catch (IllegalArgumentException ex) {
+            System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - IllegalArgumentException: " + ex.getMessage());
+        }
+        System.out.println("[DECK LOADING DEBUG] ItemManagerModel.refreshSort() - EXIT, total: " + (System.currentTimeMillis() - start) + "ms");
     }
 
     //Manages sorting orders for multiple depths of sorting

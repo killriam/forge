@@ -91,6 +91,23 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     }
 
     @Override
+    public GameLogEntry visit(GameEventGameStarted ev) {
+        String message = ev.toString();
+
+        // Log to JSON if enabled - GAME_START is the first event
+        if (replayExporter != null) {
+            replayExporter.logGameStart(
+                ev.gameType().toString(),
+                ev.firstTurn(),
+                ev.players(),
+                generateTimeMarker()
+            );
+        }
+
+        return new GameLogEntry(GameLogEntryType.GAME_OUTCOME, message);
+    }
+
+    @Override
     public GameLogEntry visit(GameEventScry ev) {
         String scryOutcome = "";
 
@@ -261,8 +278,8 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             replayExporter.logPhaseChange(currentPhase, phaseName, p, generateTimeMarker());
         }
 
-        // After untap phase, log land count and available mana
-        if (ev.phase() == forge.game.phase.PhaseType.UNTAP && !ev.phaseDesc().equals("Repeat")) {
+        // At upkeep phase, log land count and available mana (after untap has completed)
+        if (ev.phase() == forge.game.phase.PhaseType.UPKEEP && !ev.phaseDesc().equals("Repeat")) {
             int landCount = countLands(p);
             int availableMana = calculateAvailableMana(p);
 
@@ -270,6 +287,11 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
                 p.getName(), landCount, landCount == 1 ? "" : "s", availableMana);
 
             log.add(GameLogEntryType.PHASE, resourceMessage);
+
+            // Log to JSON if enabled
+            if (replayExporter != null) {
+                replayExporter.logResources(p, landCount, availableMana, generateTimeMarker());
+            }
         }
 
         return new GameLogEntry(GameLogEntryType.PHASE, phaseMessage);
@@ -305,6 +327,12 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     @Override
     public GameLogEntry visit(GameEventLandPlayed ev) {
         String message = localizer.getMessage("lblLogPlayerPlayedLand", ev.player().toString(), ev.land().toString());
+
+        // Log to JSON if enabled - use PLAY_LAND event type with player as actor
+        if (replayExporter != null) {
+            replayExporter.logPlayLand(ev.land(), ev.player(), generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.LAND, message);
     }
 
@@ -335,6 +363,28 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         }
 
         return new GameLogEntry(GameLogEntryType.DAMAGE, message);
+    }
+
+    @Override
+    public GameLogEntry visit(GameEventPlayerLivesChanged ev) {
+        // P2.4: Wire existing logLifeChange() — emit LIFE event to JSON
+        if (replayExporter != null) {
+            int delta = ev.newLives() - ev.oldLives();
+            String cause = delta < 0 ? "damage_or_loss" : "gain";
+            replayExporter.logLifeChange(ev.player(), delta, ev.newLives(), cause, generateTimeMarker());
+        }
+        // No text log entry — life changes are already logged via damage events
+        return null;
+    }
+
+    @Override
+    public GameLogEntry visit(GameEventCardTapped ev) {
+        // P2.7: Emit TAP event for tap/untap state changes to JSON
+        if (replayExporter != null) {
+            replayExporter.logTap(ev.card(), ev.tapped(), generateTimeMarker());
+        }
+        // No text log entry — tap/untap is handled by other UI components
+        return null;
     }
 
     @Override
@@ -423,7 +473,18 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
 
     @Override
     public GameLogEntry visit(GameEventMulligan ev) {
-        String message = localizer.getMessage("lblPlayerHasMulliganedDownToNCards").replace("%d", String.valueOf(ev.player().getZone(ZoneType.Hand).size())).replace("%s", ev.player().toString());
+        int cardsKept = ev.player().getZone(ZoneType.Hand).size();
+        String message = localizer.getMessage("lblPlayerHasMulliganedDownToNCards").replace("%d", String.valueOf(cardsKept)).replace("%s", ev.player().toString());
+
+        // Log to JSON if enabled - MULLIGAN is a player decision event
+        if (replayExporter != null) {
+            // Record the mulligan in game_start section
+            replayExporter.recordMulliganTaken(ev.player());
+
+            // Also log the event
+            replayExporter.logMulligan(ev.player(), cardsKept, false, generateTimeMarker());
+        }
+
         return new GameLogEntry(GameLogEntryType.MULLIGAN, message);
     }
 
@@ -482,9 +543,22 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         // Track zone changes for turn summary
         turnZoneChanges.add(message);
 
-        // Log to JSON if enabled
+        // Log to JSON if enabled - use specific event types based on zone transition
         if (replayExporter != null) {
-            replayExporter.logZoneChange(card, fromZone, toZone, generateTimeMarker(), card.getOwner());
+            Player owner = card.getOwner();
+
+            // Determine the appropriate event type based on zone transition
+            if (fromZone == ZoneType.Library && toZone == ZoneType.Hand) {
+                // Drawing a card
+                replayExporter.logDraw(card, owner, generateTimeMarker());
+            } else if (fromZone == ZoneType.Hand && toZone == ZoneType.Graveyard) {
+                // Discarding a card - assume player choice for now
+                // TODO: Track forced discards separately
+                replayExporter.logDiscard(card, owner, true, generateTimeMarker());
+            } else {
+                // Generic zone change - use MOVE event
+                replayExporter.logZoneChange(card, fromZone, toZone, generateTimeMarker(), owner);
+            }
         }
 
         // Special ANALYSIS log for lands entering the battlefield

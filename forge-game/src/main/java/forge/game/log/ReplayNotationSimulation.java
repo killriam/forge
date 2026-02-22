@@ -197,7 +197,7 @@ public class ReplayNotationSimulation {
         System.out.println("Generated JSON:");
         System.out.println("  - Length: " + json.length() + " characters");
         System.out.println("  - Contains format: " + json.contains("\"format\": \"mtg-replay\""));
-        System.out.println("  - Contains version: " + json.contains("\"version\": \"1.0.0\""));
+        System.out.println("  - Contains version: " + json.contains("\"version\": \"1.4.0\""));
         System.out.println("  - Contains player: " + json.contains("Alice"));
         System.out.println("  - Contains card: " + json.contains("Test Card"));
 
@@ -220,13 +220,15 @@ public class ReplayNotationSimulation {
 
         String[] playerDecisions = {
             "CAST", "ACTIVATE", "PLAY_LAND", "DECLARE_ATTACKERS",
-            "DECLARE_BLOCKERS", "PASS_PRIORITY", "MULLIGAN", "CHOOSE"
+            "DECLARE_BLOCKERS", "PASS_PRIORITY", "MULLIGAN", "CHOOSE",
+            "LEARNING_MARKER"  // spec v1.3.0
         };
 
         String[] systemEvents = {
             "PUT_ON_STACK", "TRIGGER", "RESOLVE", "MOVE", "DAMAGE",
-            "LIFE", "COUNTERS", "TAP", "PHASE_CHANGE", "TURN_START",
-            "TURN_END", "STATE_BASED", "RANDOM", "DRAW"
+            "LIFE", "COUNTERS", "TAP", "PHASE_CHANGE",
+            "ACTIVE_PLAYER_CHANGE",  // spec v1.2.1
+            "RESOURCES", "STATE_BASED", "RANDOM", "DRAW"
         };
 
         System.out.println("Player Decision Events (" + playerDecisions.length + "):");
@@ -345,18 +347,24 @@ public class ReplayNotationSimulation {
     private void addSimulatedEvents(ReplayLog log) {
         int i = 0;
 
-        // Turn 1
+        // Turn 1 – P1 active
+        addEvent(log, i++, "T1.UP", "SYS", "ACTIVE_PLAYER_CHANGE",
+                "previous_player", null, "new_player", "P1", "turn_number", 1);
         addEvent(log, i++, "T1.DRAW", "SYS", "DRAW", "player", "P1", "card", "c1");
         addEvent(log, i++, "T1.MP1:0", "P1", "PLAY_LAND", "card", "c5");
         addEvent(log, i++, "T1.MP1:0", "SYS", "MOVE", "obj", "c5", "from", "P1:hand", "to", "battlefield");
         addEvent(log, i++, "T1.MP1:0", "P1", "PASS_PRIORITY", "stack_size", 0);
 
-        // Turn 2
+        // Turn 2 – P2 active
+        addEvent(log, i++, "T2.UP", "SYS", "ACTIVE_PLAYER_CHANGE",
+                "previous_player", "P1", "new_player", "P2", "turn_number", 2);
         addEvent(log, i++, "T2.DRAW", "SYS", "DRAW", "player", "P2", "card", "c6");
         addEvent(log, i++, "T2.MP1:0", "P2", "PLAY_LAND", "card", "c7");
         addEvent(log, i++, "T2.MP1:0", "P2", "PASS_PRIORITY", "stack_size", 0);
 
-        // Turn 3 - Lightning Bolt
+        // Turn 3 – P1 active – Lightning Bolt
+        addEvent(log, i++, "T3.UP", "SYS", "ACTIVE_PLAYER_CHANGE",
+                "previous_player", "P2", "new_player", "P1", "turn_number", 3);
         addEvent(log, i++, "T3.DRAW", "SYS", "DRAW", "player", "P1", "card", "c17");
         addEvent(log, i++, "T3.MP1:0", "P1", "CAST", "card", "c17", "cost", createCost());
         addEvent(log, i++, "T3.MP1:0", "SYS", "PUT_ON_STACK", "stack", "s1", "kind", "SPELL", "card", "c17");
@@ -365,6 +373,54 @@ public class ReplayNotationSimulation {
         addEvent(log, i++, "T3.MP1:2", "SYS", "DAMAGE", "source", "c17", "target", "P2", "amount", 3);
         addEvent(log, i++, "T3.MP1:2", "SYS", "LIFE", "player", "P2", "delta", -3, "new_total", 17);
         addEvent(log, i++, "T3.MP1:2", "SYS", "MOVE", "obj", "c17", "from", "stack", "to", "P1:graveyard");
+
+        // Learning marker placed by P1 (spec v1.3.0)
+        addLearningMarkerEvent(log, i++, "T3.MP1:3", "P1",
+                "lm-1", "Should I have held Bolt for the creature?", "decision_review");
+        addLearningMarkerToTopLevel(log, i - 1, "T3.MP1:3", "P1",
+                "lm-1", "Should I have held Bolt for the creature?", "decision_review",
+                3, "MAIN_1");
+    }
+
+    /** Add a LEARNING_MARKER L1 event. */
+    private void addLearningMarkerEvent(ReplayLog log, int index, String time, String actor,
+                                         String markerId, String label, String category) {
+        L1Event event = new L1Event(index, time, actor, "LEARNING_MARKER");
+        event.addData("marker_id", markerId);
+        event.addData("label", label);
+        event.addData("category", category);
+        event.addData("created_at", "2026-02-22T12:00:00Z");
+        log.addL1Event(event);
+    }
+
+    /** Add the top-level learning_markers summary entry. */
+    private void addLearningMarkerToTopLevel(ReplayLog log, int eventIndex, String time,
+                                              String player, String markerId, String label,
+                                              String category, int turn, String phase) {
+        ReplayLog.LearningMarker marker = new ReplayLog.LearningMarker();
+        marker.setMarkerId(markerId);
+        marker.setEventIndex(eventIndex);
+        marker.setT(time);
+        marker.setPlayer(player);
+        marker.setLabel(label);
+        marker.setCategory(category);
+        marker.setCreatedAt("2026-02-22T12:00:00Z");
+        marker.setNotes("");
+
+        ReplayLog.LearningMarker.Snapshot snapshot = new ReplayLog.LearningMarker.Snapshot();
+        snapshot.setTurn(turn);
+        snapshot.setPhase(phase);
+        snapshot.setActivePlayer(player);
+        snapshot.getLifeTotals().put("P1", 20);
+        snapshot.getLifeTotals().put("P2", 17);
+        snapshot.getCardsInHand().put("P1", 3);
+        snapshot.getCardsInHand().put("P2", 5);
+        snapshot.getBattlefieldCount().put("P1", 1);
+        snapshot.getBattlefieldCount().put("P2", 1);
+        snapshot.setStackEmpty(true);
+        marker.setSnapshot(snapshot);
+
+        log.addLearningMarker(marker);
     }
 
     private void addEvent(ReplayLog log, int index, String time, String actor, String type, Object... kvPairs) {
@@ -395,6 +451,7 @@ public class ReplayNotationSimulation {
         System.out.println("Cards:        " + log.getCardIndex().size());
         System.out.println("L1 Events:    " + log.getLogL1().size());
         System.out.println("L2 Units:     " + log.getViewsL2().size());
+        System.out.println("Markers:      " + log.getLearningMarkers().size());
 
         // Event breakdown
         Map<String, Integer> counts = new HashMap<>();

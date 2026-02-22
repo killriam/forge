@@ -62,6 +62,19 @@ public class ReplayNotationExporter {
         for (Player player : game.getPlayers()) {
             ReplayMeta.PlayerMeta playerMeta = new ReplayMeta.PlayerMeta();
             playerMeta.setName(player.getName());
+
+            // Add deck name and hash if available
+            if (player.getRegisteredPlayer() != null &&
+                player.getRegisteredPlayer().getDeck() != null) {
+                forge.deck.Deck deck = player.getRegisteredPlayer().getDeck();
+                playerMeta.setDeckName(deck.getName());
+                String deckHash = calculateDeckHash(deck);
+                playerMeta.setDeckHash(deckHash);
+                // deck_link (spec v1.4.0): currently null – no mamo.games integration.
+                // Future: build URL as https://mamo.games/deck/<uuid>#<DDMMYYYY>_<deck_hash>
+                playerMeta.setDeckLink(null);
+            }
+
             meta.getPlayers().put(getPlayerId(player), playerMeta);
         }
 
@@ -89,15 +102,54 @@ public class ReplayNotationExporter {
             state.getPlayers().put(getPlayerId(player), playerState);
         }
 
-        // Initialize zones
+        // Initialize zones and capture all game objects
+        List<String> handCards = new ArrayList<>();
+        List<String> libraryCards = new ArrayList<>();
         for (Player player : game.getPlayers()) {
             String playerId = getPlayerId(player);
+
+            // Capture library cards with position
+            libraryCards.clear();
+            int position = 0;
+            for (Card card : player.getZone(ZoneType.Library)) {
+                String cardId = getCardId(card);
+                libraryCards.add(cardId);
+
+                // Create object state for this card
+                GameState.ObjectState objState = createObjectState(card, playerId + ":library", position++);
+                state.getObjects().put(cardId, objState);
+            }
             Map<String, Object> libraryInfo = new HashMap<>();
-            libraryInfo.put("count", player.getZone(ZoneType.Library).size());
+            libraryInfo.put("count", libraryCards.size());
+            libraryInfo.put("cards", new ArrayList<>(libraryCards));
             state.getZones().put(playerId + ":library", libraryInfo);
 
-            state.getZones().put(playerId + ":hand", new ArrayList<>());
+            // Capture hand cards
+            handCards.clear();
+            for (Card card : player.getZone(ZoneType.Hand)) {
+                String cardId = getCardId(card);
+                handCards.add(cardId);
+
+                GameState.ObjectState objState = createObjectState(card, playerId + ":hand", -1);
+                state.getObjects().put(cardId, objState);
+            }
+            state.getZones().put(playerId + ":hand", new ArrayList<>(handCards));
+
+            // Capture graveyard (usually empty at start)
             state.getZones().put(playerId + ":graveyard", new ArrayList<>());
+
+            // Capture command zone (for Commander format)
+            List<String> commandCards = new ArrayList<>();
+            for (Card card : player.getZone(ZoneType.Command)) {
+                String cardId = getCardId(card);
+                commandCards.add(cardId);
+
+                GameState.ObjectState objState = createObjectState(card, playerId + ":command", -1);
+                state.getObjects().put(cardId, objState);
+            }
+            if (!commandCards.isEmpty()) {
+                state.getZones().put(playerId + ":command", commandCards);
+            }
         }
 
         state.getZones().put("battlefield", new ArrayList<>());
@@ -113,6 +165,60 @@ public class ReplayNotationExporter {
     private String getPlayerId(Player player) {
         int index = game.getPlayers().indexOf(player);
         return "P" + (index + 1);
+    }
+
+    /**
+     * Create an ObjectState for a card at a given zone and position.
+     * @param card The card to create state for
+     * @param zone The zone name (e.g., "P1:library", "battlefield")
+     * @param position The position in the zone (-1 if not applicable)
+     * @return The created ObjectState
+     */
+    private GameState.ObjectState createObjectState(Card card, String zone, int position) {
+        GameState.ObjectState objState = new GameState.ObjectState();
+
+        // Card reference (name) for easy lookup
+        objState.setCardRef(getActualCardName(card));
+
+        // Owner and controller
+        if (card.getOwner() != null) {
+            objState.setOwner(getPlayerId(card.getOwner()));
+        }
+        if (card.getController() != null) {
+            objState.setController(getPlayerId(card.getController()));
+        } else {
+            objState.setController(objState.getOwner());
+        }
+
+        // Zone
+        objState.setZone(zone);
+
+        // State flags
+        objState.setTapped(card.isTapped());
+        objState.setFaceDown(card.isFaceDown());
+        objState.setFlipped(card.isFlipped());
+
+        // Counters
+        if (card.getCounters() != null && !card.getCounters().isEmpty()) {
+            for (Map.Entry<forge.game.card.CounterType, Integer> counter : card.getCounters().entrySet()) {
+                objState.getCounters().put(counter.getKey().getName(), counter.getValue());
+            }
+        }
+
+        // Damage marked
+        objState.setDamageMarked(card.getDamage());
+
+        // Attached to
+        if (card.getAttachedTo() != null) {
+            objState.setAttachedTo(getCardId(card.getAttachedTo()));
+        }
+
+        // Position in zone (for library ordering)
+        if (position >= 0) {
+            objState.getNotes().put("position", position);
+        }
+
+        return objState;
     }
 
     /**
@@ -137,7 +243,23 @@ public class ReplayNotationExporter {
                     break;
                 }
             }
+        } else if (outcome.isDraw()) {
+            meta.setWinner("draw");
         }
+
+        // Set win condition
+        meta.setWinCondition(determineWinCondition(outcome));
+
+        // Set conceded flag
+        boolean anyoneConceded = false;
+        for (Player p : game.getPlayers()) {
+            if (p.getOutcome() != null &&
+                p.getOutcome().lossState == forge.game.player.GameLossReason.Conceded) {
+                anyoneConceded = true;
+                break;
+            }
+        }
+        meta.setConceded(anyoneConceded);
 
         // Set turns
         meta.setTurns(outcome.getLastTurnNumber());
@@ -145,6 +267,121 @@ public class ReplayNotationExporter {
         // Set duration
         long durationMs = System.currentTimeMillis() - gameStartTime;
         meta.setDurationSeconds((int) (durationMs / 1000));
+    }
+
+    /**
+     * Determine the win condition string based on how players lost.
+     */
+    private String determineWinCondition(GameOutcome outcome) {
+        if (outcome.isDraw()) {
+            return "draw";
+        }
+
+        // Check each losing player's reason
+        for (Player p : game.getPlayers()) {
+            if (p.getOutcome() == null || p.getOutcome().hasWon()) {
+                continue;
+            }
+
+            forge.game.player.GameLossReason reason = p.getOutcome().lossState;
+            if (reason != null) {
+                switch (reason) {
+                    case LifeReachedZero:
+                        return "life_zero";
+                    case CommanderDamage:
+                        return "commander_damage";
+                    case Poisoned:
+                        return "poison";
+                    case Milled:
+                        return "decked";
+                    case Conceded:
+                        return "concession";
+                    case SpellEffect:
+                    case OpponentWon:
+                        return "alternate_win";
+                    default:
+                        return "unknown";
+                }
+            }
+
+            // Check for alternate win
+            if (p.getOutcome().altWinSourceName != null) {
+                return "alternate_win";
+            }
+        }
+
+        return "unknown";
+    }
+
+    /**
+     * Calculate a stable hash for a deck based on its card contents.
+     * The hash is independent of deck name and based only on:
+     * - Card names (sorted alphabetically)
+     * - Card quantities
+     * - Main deck and Commander sections only (Sideboard excluded)
+     *
+     * This allows identifying the same deck even if renamed.
+     * Sideboard is excluded as it may vary between games.
+     *
+     * @param deck The deck to hash
+     * @return A hex string representing the deck hash (first 16 chars of SHA-256)
+     */
+    private String calculateDeckHash(forge.deck.Deck deck) {
+        if (deck == null) {
+            return null;
+        }
+
+        try {
+            // Build a canonical string representation of the deck
+            StringBuilder deckContent = new StringBuilder();
+
+            // Only process Main and Commander sections (exclude Sideboard, etc.)
+            forge.deck.DeckSection[] sectionsToHash = {
+                forge.deck.DeckSection.Main,
+                forge.deck.DeckSection.Commander
+            };
+
+            for (forge.deck.DeckSection section : sectionsToHash) {
+                forge.deck.CardPool pool = deck.get(section);
+                if (pool == null || pool.isEmpty()) {
+                    continue;
+                }
+
+                deckContent.append("[").append(section.name()).append("]");
+
+                // Get all cards, sort by name for consistency
+                List<String> cardEntries = new ArrayList<>();
+                for (Map.Entry<forge.item.PaperCard, Integer> entry : pool) {
+                    // Format: "CardName:Quantity"
+                    cardEntries.add(entry.getKey().getName() + ":" + entry.getValue());
+                }
+                Collections.sort(cardEntries);
+
+                for (String entry : cardEntries) {
+                    deckContent.append(entry).append(";");
+                }
+            }
+
+            // Calculate SHA-256 hash
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = md.digest(deckContent.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            // Convert to hex string (first 16 characters = 64 bits, enough for uniqueness)
+            StringBuilder hexString = new StringBuilder();
+            for (int i = 0; i < 8; i++) { // 8 bytes = 16 hex chars
+                String hex = Integer.toHexString(0xff & hashBytes[i]);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+
+            return hexString.toString();
+
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 should always be available, but fallback to simple hash
+            return Integer.toHexString(deck.toString().hashCode());
+        }
     }
 
     /**
@@ -234,19 +471,170 @@ public class ReplayNotationExporter {
     }
 
     /**
+     * Log game start event.
+     * This is the first event in any game log.
+     */
+    public void logGameStart(String gameType, Player firstPlayer, Iterable<Player> allPlayers, String timeMarker) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("game_type", gameType);
+        data.put("first_player", getPlayerId(firstPlayer));
+
+        List<String> playerIds = new ArrayList<>();
+        for (Player p : allPlayers) {
+            playerIds.add(getPlayerId(p));
+        }
+        data.put("players", playerIds);
+
+        // Also populate the game_start section
+        GameStartInfo gameStart = replayLog.getGameStart();
+        gameStart.setStartingPlayer(getPlayerId(firstPlayer));
+
+        // Initialize mulligan info for all players
+        for (Player p : allPlayers) {
+            GameStartInfo.MulliganInfo mulliganInfo = new GameStartInfo.MulliganInfo(getPlayerId(p));
+            gameStart.addMulligan(mulliganInfo);
+        }
+
+        addEvent(timeMarker, "SYS", "GAME_START", data);
+    }
+
+    /**
+     * Set the toss winner and play/draw choice.
+     * Call this when the starting player is determined.
+     */
+    public void setTossWinner(Player tossWinner, boolean choseToPlay) {
+        GameStartInfo gameStart = replayLog.getGameStart();
+        gameStart.setTossWinner(getPlayerId(tossWinner));
+        gameStart.setPlayDrawChoice(choseToPlay ? "play" : "draw");
+    }
+
+    /**
+     * Record a mulligan decision for a player.
+     * Call this each time a player mulligans.
+     */
+    public void recordMulliganTaken(Player player) {
+        GameStartInfo gameStart = replayLog.getGameStart();
+        for (GameStartInfo.MulliganInfo info : gameStart.getMulligans()) {
+            if (info.getPlayer().equals(getPlayerId(player))) {
+                info.recordMulligan();
+                break;
+            }
+        }
+    }
+
+    /**
+     * Record the final keep decision with cards put to bottom (London mulligan).
+     */
+    public void recordKeepHand(Player player, int cardsToBottom) {
+        GameStartInfo gameStart = replayLog.getGameStart();
+        for (GameStartInfo.MulliganInfo info : gameStart.getMulligans()) {
+            if (info.getPlayer().equals(getPlayerId(player))) {
+                info.setFinalHandSize(player.getCardsIn(ZoneType.Hand).size());
+                info.setCardsToBottom(cardsToBottom);
+                break;
+            }
+        }
+    }
+
+    /**
      * Log a zone change event.
+     * The actor is determined by the context:
+     * - For player-initiated moves (hand to battlefield, etc.): the card's controller
+     * - For system moves (library to hand during draw, etc.): "SYS"
      */
     public void logZoneChange(Card card, ZoneType from, ZoneType to, String timeMarker, Player owner) {
+        logZoneChange(card, from, to, timeMarker, owner, false);
+    }
+
+    /**
+     * Log a zone change event with explicit actor control.
+     * @param isPlayerAction true if this is a deliberate player action (play land, etc.)
+     */
+    public void logZoneChange(Card card, ZoneType from, ZoneType to, String timeMarker, Player owner, boolean isPlayerAction) {
         flushPendingPhase(); // Something happened! Log the phase.
 
         Map<String, Object> data = new HashMap<>();
         data.put("obj", getCardId(card));
+        data.put("card_name", getActualCardName(card));
         data.put("from", formatZone(from, owner));
         data.put("to", formatZone(to, owner));
         data.put("pos", "top");
         data.put("visibility", isPublicZone(to) ? "public" : "private");
 
-        addEvent(timeMarker, "SYS", "MOVE", data);
+        // Determine actor: player action or system action
+        String actor = "SYS";
+        if (isPlayerAction && card.getController() != null) {
+            actor = getPlayerId(card.getController());
+        } else if (isPlayerAction && owner != null) {
+            actor = getPlayerId(owner);
+        }
+
+        addEvent(timeMarker, actor, "MOVE", data);
+    }
+
+    /**
+     * Log a land being played by a player.
+     * This is always a player action, so the actor is the player who played the land.
+     */
+    public void logPlayLand(Card land, Player player, String timeMarker) {
+        flushPendingPhase(); // Something happened! Log the phase.
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("card", getCardId(land));
+        data.put("card_name", getActualCardName(land));
+
+        addEvent(timeMarker, getPlayerId(player), "PLAY_LAND", data);
+    }
+
+    /**
+     * Log a card being drawn by a player.
+     * Drawing is a system action that happens to a player.
+     */
+    public void logDraw(Card card, Player player, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("obj", getCardId(card));
+        data.put("card_name", getActualCardName(card));
+        data.put("from", getPlayerId(player) + ":library");
+        data.put("to", getPlayerId(player) + ":hand");
+        data.put("pos", "top");
+        data.put("visibility", "private");
+
+        // Draw is a system action, but we record which player drew
+        addEvent(timeMarker, "SYS", "DRAW", data);
+    }
+
+    /**
+     * Log a mulligan decision by a player.
+     * This is a player decision event.
+     */
+    public void logMulligan(Player player, int cardsKept, boolean keepHand, String timeMarker) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("player", getPlayerId(player));
+        data.put("cards_kept", cardsKept);
+        data.put("decision", keepHand ? "keep" : "mulligan");
+
+        addEvent(timeMarker, getPlayerId(player), "MULLIGAN", data);
+    }
+
+    /**
+     * Log a card being discarded by a player.
+     * This can be either a player action (choosing to discard) or forced.
+     */
+    public void logDiscard(Card card, Player player, boolean isChoice, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("obj", getCardId(card));
+        data.put("card_name", getActualCardName(card));
+        data.put("from", getPlayerId(player) + ":hand");
+        data.put("to", getPlayerId(player) + ":graveyard");
+        data.put("forced", !isChoice);
+
+        // If player chose which card to discard, they are the actor
+        String actor = isChoice ? getPlayerId(player) : "SYS";
+        addEvent(timeMarker, actor, "DISCARD", data);
     }
 
     /**
@@ -257,6 +645,7 @@ public class ReplayNotationExporter {
 
         Map<String, Object> data = new HashMap<>();
         data.put("card", getCardId(card));
+        data.put("card_name", getActualCardName(card));
 
         // Determine play mode
         String playMode = determinePlayMode(sa);
@@ -500,8 +889,10 @@ public class ReplayNotationExporter {
         data.put("stack", generateStackId());
         data.put("kind", "SPELL");
         data.put("source", getCardId(card));
+        data.put("source_name", getActualCardName(card));
         data.put("controller", getPlayerId(controller));
         data.put("card", getCardId(card));
+        data.put("card_name", getActualCardName(card));
         data.put("targets", new ArrayList<>());
         data.put("choices", new HashMap<>());
 
@@ -516,11 +907,14 @@ public class ReplayNotationExporter {
 
         Map<String, Object> data = new HashMap<>();
         data.put("source", source != null ? getCardId(source) : "unknown");
+        data.put("source_name", source != null ? getActualCardName(source) : "unknown");
 
         if (target instanceof Card) {
             data.put("target", getCardId((Card) target));
+            data.put("target_name", getActualCardName((Card) target));
         } else if (target instanceof Player) {
             data.put("target", getPlayerId((Player) target));
+            data.put("target_name", ((Player) target).getName());
         }
 
         data.put("amount", amount);
@@ -528,6 +922,21 @@ public class ReplayNotationExporter {
         data.put("prevented", 0);
 
         addEvent(timeMarker, "SYS", "DAMAGE", data);
+    }
+
+    /**
+     * Log player resources (land count and available mana) at the start of upkeep.
+     * This provides valuable information for AI analysis and replay.
+     */
+    public void logResources(Player player, int landCount, int availableMana, String timeMarker) {
+        // Don't flush pending phase - this is part of the phase transition, not a game action
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("player", getPlayerId(player));
+        data.put("land_count", landCount);
+        data.put("available_mana", availableMana);
+
+        addEvent(timeMarker, "SYS", "RESOURCES", data);
     }
 
     /**
@@ -543,6 +952,34 @@ public class ReplayNotationExporter {
         data.put("cause", cause);
 
         addEvent(timeMarker, "SYS", "LIFE", data);
+    }
+
+    /**
+     * Log an active player change (turn transition).
+     * Spec P2.10: Emits ACTIVE_PLAYER_CHANGE so consumers can detect turn boundaries.
+     */
+    public void logActivePlayerChange(Player previousPlayer, Player newPlayer, int turnNumber, String timeMarker) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("previous_player", previousPlayer != null ? getPlayerId(previousPlayer) : null);
+        data.put("new_player", getPlayerId(newPlayer));
+        data.put("turn_number", turnNumber);
+
+        addEvent(timeMarker, "SYS", "ACTIVE_PLAYER_CHANGE", data);
+    }
+
+    /**
+     * Log a card being tapped or untapped.
+     * Spec P2.7: Emits TAP event for tap/untap state changes.
+     */
+    public void logTap(Card card, boolean tapped, String timeMarker) {
+        flushPendingPhase();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("obj", getCardId(card));
+        data.put("card_name", getActualCardName(card));
+        data.put("tapped", tapped);
+
+        addEvent(timeMarker, "SYS", "TAP", data);
     }
 
     /**
