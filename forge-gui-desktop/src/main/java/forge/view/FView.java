@@ -86,7 +86,13 @@ public enum FView {
 
 	FView() {
 		frmSplash = new SplashFrame();
-		frmDocument.setTitle("Forge: " + BuildInfo.getVersionString());
+		String version = BuildInfo.getVersionString();
+		String commit = BuildInfo.getGitCommit();
+		String title = "Forge: " + version;
+		if (!"unknown".equals(commit) && !commit.isEmpty()) {
+			title += "  [" + commit + "]";
+		}
+		frmDocument.setTitle(title);
 		JOptionPane.setRootFrame(frmDocument);
 	}
 

@@ -4,12 +4,16 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Point;
+import java.io.File;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
+import forge.game.GameLogSaver;
+import forge.game.ReplayLogParser;
 import forge.gui.GuiBase;
 import org.apache.commons.lang3.StringUtils;
 
@@ -187,6 +191,12 @@ public class ViewWinLose implements IWinLoseView<FButton> {
     }
 
     public final void show() {
+        // Auto-save game log to file (skip for scenario mode and replay mode)
+        if (!game.getGame().getRules().isScenarioMode()
+                && game.getGame().getRules().isAutoSaveReplay()) {
+            GameLogSaver.saveGameLogAndGetPath(game);
+        }
+
         SwingUtilities.invokeLater(() -> {
             scrLog.getViewport().setViewPosition(new Point(0, 0));
             // populateCustomPanel may have changed which buttons are
@@ -200,6 +210,10 @@ public class ViewWinLose implements IWinLoseView<FButton> {
 
         showGameOutcomeSummary();
         showPlayerScores();
+
+        if (game.getGame().getRules().isReplayMode()) {
+            showReplayComparison();
+        }
     }
 
     public final ControlWinLose getControl() {
@@ -264,6 +278,40 @@ public class ViewWinLose implements IWinLoseView<FButton> {
 
     private static String removePlayerTypeFromLogMessage(final String message) {
         return message.replaceAll("\\[[^\\]]*\\]", "");
+    }
+
+    /**
+     * When playing in Replay Mode, show the original game's outcome alongside the current result.
+     */
+    private void showReplayComparison() {
+        String replayLogPath = game.getGame().getRules().getReplayLogPath();
+        if (replayLogPath == null) return;
+        try {
+            ReplayLogParser parser = new ReplayLogParser(new File(replayLogPath));
+            if (!parser.parse()) return;
+
+            String originalWinnerId = parser.getWinner();
+            String originalWinnerName = null;
+            if (originalWinnerId != null) {
+                Map<String, ReplayLogParser.PlayerInfo> players = parser.getPlayers();
+                ReplayLogParser.PlayerInfo info = players.get(originalWinnerId);
+                if (info != null) originalWinnerName = info.name;
+            }
+
+            String currentWinner = game.getWinningPlayerName();
+
+            StringBuilder sb = new StringBuilder("Original game: ");
+            sb.append(originalWinnerName != null ? originalWinnerName + " won" : "draw");
+            sb.append("  |  This replay: ");
+            sb.append((currentWinner != null && !currentWinner.isEmpty()) ? currentWinner + " won" : "draw");
+
+            boolean different = !java.util.Objects.equals(originalWinnerName, currentWinner);
+            if (different) sb.append("  \u2605 Different outcome!");
+
+            pnlOutcomes.add(new FLabel.Builder().text(sb.toString()).fontSize(12).build(), "h 20!");
+        } catch (Exception ignored) {
+            // Non-fatal — don't break the end screen if parsing fails
+        }
     }
 
     @Override

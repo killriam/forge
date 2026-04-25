@@ -1,6 +1,9 @@
 package forge.view;
 
-import java.io.File;
+import java.io.*;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -10,14 +13,14 @@ import org.apache.commons.lang3.time.StopWatch;
 import forge.LobbyPlayer;
 import forge.deck.Deck;
 import forge.deck.DeckGroup;
+import forge.deck.DeckImportController;
+import forge.deck.DeckRecognizer;
 import forge.deck.io.DeckSerializer;
-import forge.game.Game;
-import forge.game.GameEndReason;
-import forge.game.GameLogEntry;
-import forge.game.GameLogEntryType;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
+import forge.game.*;
+import forge.game.card.Card;
+import forge.game.card.CardCollectionView;
+import forge.game.log.GameReplaySimulation;
+import forge.game.player.DeckStats;
 import forge.game.player.RegisteredPlayer;
 import forge.gamemodes.tournament.system.AbstractTournament;
 import forge.gamemodes.tournament.system.TournamentBracket;
@@ -29,13 +32,33 @@ import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
 import forge.util.Lang;
+import forge.util.SQLiteConnection;
 import forge.util.TextUtil;
 import forge.util.WordUtil;
 import forge.util.storage.IStorage;
 
+import static forge.localinstance.properties.ForgeConstants.DECK_COMMANDER_DIR;
+
 public class SimulateMatch {
     public static void simulate(String[] args) {
-        FModel.initialize(null, null);
+        try {
+            FModel.initialize(null, null);
+        } catch (ExceptionInInitializerError | Exception e) {
+            System.err.println("=== INITIALIZATION FAILED ===");
+            e.printStackTrace(System.err);
+            if (e.getCause() != null) {
+                System.err.println("=== ROOT CAUSE ===");
+                e.getCause().printStackTrace(System.err);
+            }
+            return;
+        }
+
+        // Check for replay simulation mode (standalone test)
+        if (args.length >= 2 && "-replay".equals(args[1])) {
+            String outputDir = args.length >= 3 ? args[2] : ".";
+            runReplaySimulation(outputDir);
+            return;
+        }
 
         System.out.println("Simulation mode");
         if (args.length < 4) {
@@ -88,6 +111,8 @@ public class SimulateMatch {
 
         GameRules rules = new GameRules(type);
         rules.setAppliedVariants(EnumSet.of(type));
+        // Mark as simulation so replay JSON files get "sim_" prefix (not "replay_")
+        rules.setSimulationMode(true);
 
         if (matchSize != 0) {
             rules.setGamesPerMatch(matchSize);
@@ -95,6 +120,28 @@ public class SimulateMatch {
 
         if (params.containsKey("t")) {
             simulateTournament(params, rules, outputGamelog);
+            System.out.flush();
+            return;
+        }
+
+        // Extended deck testing mode
+        if (params.containsKey("xd")) {
+            try {
+                simulationSeries(params, rules, nGames, type);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            System.out.flush();
+            return;
+        }
+
+        // Extended deck testing mode
+        if (params.containsKey("xd")) {
+            try {
+                simulationSeries(params, rules, nGames, type);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             System.out.flush();
             return;
         }
@@ -134,6 +181,22 @@ public class SimulateMatch {
             rules.setSimTimeout(Integer.parseInt(params.get("c").get(0)));
         }
 
+        // Replay mode: reorder libraries from a replay JSON log
+        if (params.containsKey("r")) {
+            String replayPath = params.get("r").get(0);
+            rules.setReplayLogPath(replayPath);
+            System.out.println("Replay mode enabled: " + replayPath);
+        }
+
+        // Decklist-based mulligan config: -l <config1.json> [config2.json] ...
+        if (params.containsKey("l")) {
+            List<String> configPaths = params.get("l");
+            for (int idx = 0; idx < configPaths.size() && idx < pp.size(); idx++) {
+                pp.get(idx).setDecklistConfigPath(configPaths.get(idx));
+                System.out.println("Decklist mulligan config for player " + (idx + 1) + ": " + configPaths.get(idx));
+            }
+        }
+
         sb.append(" - ").append(Lang.nounWithNumeral(nGames, "game")).append(" of ").append(type);
 
         System.out.println(sb.toString());
@@ -157,7 +220,7 @@ public class SimulateMatch {
     }
 
     private static void argumentHelp() {
-        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -q");
+        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -q -r [R] -l [L1] [L2]");
         System.out.println("\tsim - stands for simulation mode");
         System.out.println("\tdeck1 (or deck2,...,X) - constructed deck name or filename (has to be quoted when contains multiple words)");
         System.out.println("\tdeck is treated as file if it ends with a dot followed by three numbers or letters");
@@ -169,6 +232,12 @@ public class SimulateMatch {
         System.out.println("\tF - format of games, defaults to constructed");
         System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
+        System.out.println("\tr - Replay mode. Path to a replay JSON log; reorders libraries to match recorded draw order.");
+        System.out.println("\tl - Decklist mulligan config. One JSON path per player (Commander Decklist Notation format).");
+        System.out.println();
+        System.out.println("Alternative: forge.exe sim -replay [output_dir]");
+        System.out.println("\t-replay - Run standalone replay notation test (generates JSON log)");
+        System.out.println("\toutput_dir - Directory for JSON output (defaults to current directory)");
     }
 
     public static void simulateSingleMatch(final Match mc, int iGame, boolean outputGamelog) {
@@ -204,6 +273,16 @@ public class SimulateMatch {
         Collections.reverse(log);
         for (GameLogEntry l : log) {
             System.out.println(l);
+        }
+
+        // Save game log to file
+        try {
+            File logFile = forge.game.GameLogSaver.saveGameLog(g1);
+            if (logFile != null) {
+                System.out.println("\nGame log saved to: " + logFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to save game log: " + e.getMessage());
         }
 
         // If both players life totals to 0 in a single turn, the game should end in a draw
@@ -371,4 +450,278 @@ public class SimulateMatch {
         return deckStore.get(deckname);
     }
 
-}
+    // Extended deck testing simulation series
+    private static void simulationSeries(Map<String, List<String>> params, GameRules rules,
+                                         int nGames, GameType type) throws SQLException {
+        String deckIdeaPath = params.get("xd").get(1);
+        int mode = Integer.parseInt(params.get("xd").get(0));
+
+        System.out.println("Extended deck testing mode: " + mode);
+        System.out.println("Deck idea file: " + deckIdeaPath);
+
+        // Read deck from file
+        List<String> deckLines = readAndSplitFile(deckIdeaPath);
+        if (deckLines == null || deckLines.isEmpty()) {
+            System.out.println("Could not read deck file: " + deckIdeaPath);
+            return;
+        }
+
+        // Parse the deck
+        DeckRecognizer recognizer = new DeckRecognizer();
+        List<DeckRecognizer.Token> tokens = recognizer.parseCardList(deckLines.toArray(new String[0]));
+        Deck testDeck = DeckImportController.createDeckOutof(tokens, false);
+
+        if (testDeck == null) {
+            System.out.println("Could not parse deck from file");
+            return;
+        }
+
+        // Find sparring deck
+        Deck sparringDeck = findDeckIn(DECK_COMMANDER_DIR, "DO Nothing DECK.dck");
+        if (sparringDeck == null) {
+            System.out.println("Could not find sparring deck");
+            return;
+        }
+
+        // Initialize database
+        SQLiteConnection.createNewTable();
+        int setOfGamesID = getFirstInsertOfGameset(testDeck.getName());
+
+        // Initialize deck stats
+        Map<String, DeckStats> deckStatsMap = initDeckstats(testDeck, sparringDeck, setOfGamesID);
+
+        StopWatch totalTime = new StopWatch();
+        totalTime.start();
+
+        // Run games
+        for (int iGame = 0; iGame < nGames; iGame++) {
+            List<RegisteredPlayer> players = new ArrayList<>();
+
+            RegisteredPlayer rp1;
+            RegisteredPlayer rp2;
+
+            if (type.equals(GameType.Commander)) {
+                rp1 = RegisteredPlayer.forCommander(testDeck);
+                rp2 = RegisteredPlayer.forCommander(sparringDeck);
+            } else {
+                rp1 = new RegisteredPlayer(testDeck);
+                rp2 = new RegisteredPlayer(sparringDeck);
+            }
+
+            rp1.setPlayer(GamePlayerUtil.createAiPlayer("TestDeck-" + testDeck.getName(), 0));
+            rp2.setPlayer(GamePlayerUtil.createAiPlayer("Sparring-" + sparringDeck.getName(), 1));
+
+            players.add(rp1);
+            players.add(rp2);
+
+            Match mc = new Match(rules, players, "DeckTest");
+
+            GameAnalysis analysis = simulateSingleMatchWithAnalysis(mc, iGame, false);
+
+            if (analysis != null) {
+                String winnerName = analysis.getWinningPlayer();
+                DeckStats winnerStats = deckStatsMap.get(winnerName);
+                if (winnerStats != null) {
+                    winnerStats.addVictoryStats(analysis.getLastTurnNumber(), analysis.getLifeDelta());
+                }
+
+                // Record starting hand stats for test deck
+                DeckStats testDeckStats = deckStatsMap.get("TestDeck-" + testDeck.getName());
+                if (testDeckStats != null && analysis.getCardsinStartingHand() != null) {
+                    InsertStartingHandStats(testDeckStats.getId(), analysis.getCardsinStartingHand(),
+                            analysis.getLifeDelta() + analysis.getLastTurnNumber() * 10);
+                }
+            }
+
+            if ((iGame + 1) % 100 == 0) {
+                System.out.println("Completed " + (iGame + 1) + " games");
+            }
+        }
+
+        totalTime.stop();
+
+        // Update database with final stats
+        for (DeckStats stats : deckStatsMap.values()) {
+            SQLiteConnection.updateDeckStatsBy(stats);
+        }
+
+        SQLiteConnection.insertGameAnalysis(setOfGamesID, nGames, (int)(totalTime.getTime() / 60000));
+
+        // Display results
+        displayDeckStats(deckStatsMap, nGames);
+    }
+
+    private static List<String> readAndSplitFile(String filePath) {
+        List<String> lines = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading file: " + e.getMessage());
+            return null;
+        }
+        return lines;
+    }
+
+    private static Deck findDeckIn(String directory, String deckName) {
+        File f = new File(directory + deckName);
+        if (f.exists()) {
+            return DeckSerializer.fromFile(f);
+        }
+        return null;
+    }
+
+    private static Map<String, DeckStats> initDeckstats(Deck testDeck, Deck sparringDeck,
+                                                         int setOfGamesID) {
+        Map<String, DeckStats> statsMap = new HashMap<>();
+
+        String testName = "TestDeck-" + testDeck.getName();
+        String sparringName = "Sparring-" + sparringDeck.getName();
+
+        DeckStats testStats = new DeckStats(testName);
+        testStats.setId(SQLiteConnection.insertDeckStats(setOfGamesID, testName));
+        statsMap.put(testName, testStats);
+
+        DeckStats sparringStats = new DeckStats(sparringName);
+        sparringStats.setId(SQLiteConnection.insertDeckStats(setOfGamesID, sparringName));
+        statsMap.put(sparringName, sparringStats);
+
+        return statsMap;
+    }
+
+    private static int getFirstInsertOfGameset(String deckName) throws SQLException {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String dateStr = now.format(formatter);
+        return SQLiteConnection.insertSetOfGames(deckName, dateStr);
+    }
+
+    private static void InsertStartingHandStats(int deckStatsId, CardCollectionView cards, int score) {
+        StringBuilder combinedHand = new StringBuilder();
+        for (Card c : cards) {
+            SQLiteConnection.insertorUpdateCardOccurence(deckStatsId, c.getName(), score);
+            if (combinedHand.length() > 0) {
+                combinedHand.append("|");
+            }
+            combinedHand.append(c.getName());
+        }
+        SQLiteConnection.insertorUpdateCardInHandsOccurence(deckStatsId, combinedHand.toString(), score);
+    }
+
+    private static void displayDeckStats(Map<String, DeckStats> statsMap, int totalGames) {
+        System.out.println("\n========== Deck Statistics ==========");
+        System.out.println("Total games played: " + totalGames);
+        for (DeckStats stats : statsMap.values()) {
+            System.out.println(stats.toString());
+            if (stats.getWinCount() > 0) {
+                double winRate = (double) stats.getWinCount() / totalGames * 100;
+                System.out.printf("  Win rate: %.2f%%%n", winRate);
+            }
+        }
+        System.out.println("======================================\n");
+    }
+
+    private static GameAnalysis simulateSingleMatchWithAnalysis(final Match mc, int iGame,
+                                                                 boolean outputGamelog) {
+        final StopWatch sw = new StopWatch();
+        sw.start();
+
+        final Game g1 = mc.createGame();
+
+        // Store starting hands
+        for (forge.game.player.Player p : g1.getPlayers()) {
+            p.setCardsInStartingHand(p.getCardsIn(forge.game.zone.ZoneType.Hand));
+        }
+
+        try {
+            TimeLimitedCodeBlock.runWithTimeout(() -> {
+                mc.startGame(g1);
+                sw.stop();
+            }, mc.getRules().getSimTimeout(), TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            System.out.println("Stopping slow match as draw");
+        } catch (Exception | StackOverflowError e) {
+            e.printStackTrace();
+        } finally {
+            if (sw.isStarted()) {
+                sw.stop();
+            }
+            if (!g1.isGameOver()) {
+                g1.setGameOver(GameEndReason.Draw);
+            }
+        }
+
+        // Create game analysis
+        GameAnalysis analysis = null;
+        if (!g1.getOutcome().isDraw()) {
+            String winnerName = g1.getOutcome().getWinningLobbyPlayer().getName();
+            int lastTurn = g1.getPhaseHandler().getTurn();
+
+            // Calculate life delta
+            int lifeDelta = 0;
+            forge.game.player.Player winner = null;
+            for (forge.game.player.Player p : g1.getPlayers()) {
+                if (p.getName().equals(winnerName)) {
+                    winner = p;
+                    lifeDelta = p.getLife();
+                    break;
+                }
+            }
+
+            CardCollectionView startingHand = winner != null ? winner.getCardsInStartingHand() : null;
+            int manaScore = winner != null ? winner.countManaLandAndRampsInStartingHand() : 0;
+
+            analysis = new GameAnalysis(winnerName, lastTurn, lifeDelta, startingHand, manaScore);
+        }
+
+        if (outputGamelog) {
+            List<GameLogEntry> log = g1.getGameLog().getLogEntries(null);
+            Collections.reverse(log);
+            for (GameLogEntry l : log) {
+                System.out.println(l);
+            }
+        }
+
+        // Save game log to file
+        try {
+            File logFile = forge.game.GameLogSaver.saveGameLog(g1);
+            if (logFile != null && outputGamelog) {
+                System.out.println("\nGame log saved to: " + logFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to save game log: " + e.getMessage());
+        }
+
+        return analysis;
+    }
+
+    /**
+     * Run the replay notation simulation (standalone test).
+     * This generates a simulated game and exports it in JSON Replay Notation format.
+     */
+    private static void runReplaySimulation(String outputDir) {
+        System.out.println("MTG Replay Notation - Standalone Simulation");
+        System.out.println("============================================\n");
+
+        try {
+            File outputDirectory = new File(outputDir);
+            GameReplaySimulation simulation = new GameReplaySimulation();
+            File jsonFile = simulation.simulateGame(outputDirectory);
+
+            System.out.println("\n✅ Simulation complete!");
+            System.out.println("📄 JSON file: " + jsonFile.getAbsolutePath());
+            System.out.println("\nYou can now:");
+            System.out.println("  - View the JSON file");
+            System.out.println("  - Validate it");
+            System.out.println("  - Use it for replay or analysis");
+
+        } catch (Exception e) {
+            System.err.println("\n❌ Simulation failed:");
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+
+ }

@@ -125,7 +125,8 @@ public class CDock implements ICDoc {
         final String temp = FModel.getPreferences()
                 .getPref(FPref.UI_TARGETING_OVERLAY);
         final Integer arcState = Ints.tryParse(temp);
-        setArcState(ArcState.values()[arcState == null ? 0 : arcState]);
+        // Default to ON (2) if preference is missing or invalid
+        setArcState(ArcState.values()[arcState == null ? 2 : arcState]);
         refreshArcStateDisplay();
 
         view.getBtnConcede().setCommand((UiCommand) matchUI::concede);
@@ -136,7 +137,7 @@ public class CDock implements ICDoc {
         view.getBtnOpenLayout().setCommand((UiCommand) SLayoutIO::openLayout);
         view.getBtnSaveLayout().setCommand((UiCommand) SLayoutIO::saveLayout);
         view.getBtnAlphaStrike().setCommand((UiCommand) () -> matchUI.getGameController().alphaStrike());
-        view.getBtnTargeting().setCommand((UiCommand) this::toggleTargeting);
+        view.getBtnLearningMarker().setCommand((UiCommand) matchUI::placeLearningMarker);
     }
 
     /* (non-Javadoc)

@@ -10,6 +10,8 @@ import forge.screens.bazaar.CBazaarUI;
 import forge.screens.bazaar.VBazaarUI;
 import forge.screens.deckeditor.CDeckEditorUI;
 import forge.screens.deckeditor.VDeckEditorUI;
+import forge.screens.gamelearning.CGameLearningUI;
+import forge.screens.gamelearning.VGameLearningUI;
 import forge.screens.home.CHomeUI;
 import forge.screens.home.VHomeUI;
 import forge.screens.match.CMatchUI;
@@ -179,6 +181,15 @@ public class FScreen {
             true,
             "lblLeaveBazaar",
             null,
+            false);
+    public static final FScreen GAME_LEARNING_SCREEN = new FScreen(
+            VGameLearningUI.SINGLETON_INSTANCE,
+            CGameLearningUI.SINGLETON_INSTANCE,
+            "lblGameLearningScreen",
+            FSkin.getIcon(FSkinProp.ICO_QUEST_BOOK),
+            true,
+            "lblBacktoHome",
+            ForgeConstants.GAME_LEARNING_LAYOUT_FILE,
             false);
 
     private final IVTopLevelUI view;

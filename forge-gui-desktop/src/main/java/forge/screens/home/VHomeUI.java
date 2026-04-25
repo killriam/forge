@@ -61,6 +61,9 @@ import forge.screens.home.settings.VSubmenuAvatars;
 import forge.screens.home.settings.VSubmenuDownloaders;
 import forge.screens.home.settings.VSubmenuPreferences;
 import forge.screens.home.settings.VSubmenuReleaseNotes;
+import forge.screens.home.replay.VSubmenuGameLearning;
+import forge.screens.home.replay.VSubmenuReplay;
+import forge.screens.home.replay.VSubmenuScenario;
 import forge.toolbox.FLabel;
 import forge.toolbox.FScrollPanel;
 import forge.toolbox.FSkin;
@@ -139,6 +142,10 @@ public enum VHomeUI implements IVTopLevelUI {
         allSubmenus.add(VSubmenuPuzzleSolve.SINGLETON_INSTANCE);
         allSubmenus.add(VSubmenuPuzzleCreate.SINGLETON_INSTANCE);
         //allSubmenus.add(VSubmenuTutorial.SINGLETON_INSTANCE);
+
+        allSubmenus.add(VSubmenuReplay.SINGLETON_INSTANCE);
+        allSubmenus.add(VSubmenuScenario.SINGLETON_INSTANCE);
+        allSubmenus.add(VSubmenuGameLearning.SINGLETON_INSTANCE);
 
         allSubmenus.add(VSubmenuPreferences.SINGLETON_INSTANCE);
         allSubmenus.add(VSubmenuAchievements.SINGLETON_INSTANCE);

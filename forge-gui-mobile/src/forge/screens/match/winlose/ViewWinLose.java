@@ -14,6 +14,7 @@ import forge.assets.FSkinFont;
 import forge.game.GameLogEntry;
 import forge.game.GameLogEntryType;
 import forge.game.GameView;
+import forge.game.GameLogSaver;
 import forge.gui.FThreads;
 import forge.gui.interfaces.IWinLoseView;
 import forge.gui.util.SGuiChoose;
@@ -116,6 +117,12 @@ public class ViewWinLose extends FOverlay implements IWinLoseView<FButton> {
         }
         if (control == null) {
             control = new ControlWinLose(this, game0);
+        }
+
+        // Auto-save game log to file
+        String savedLogPath = GameLogSaver.saveGameLogAndGetPath(game0);
+        if (savedLogPath != null) {
+            System.out.println("Game log saved to: " + savedLogPath);
         }
 
         showGameOutcomeSummary();

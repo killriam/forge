@@ -30,6 +30,9 @@ import forge.screens.home.settings.VSubmenuAchievements;
 import forge.screens.home.settings.VSubmenuAvatars;
 import forge.screens.home.settings.VSubmenuDownloaders;
 import forge.screens.home.settings.VSubmenuPreferences;
+import forge.screens.home.replay.VSubmenuGameLearning;
+import forge.screens.home.replay.VSubmenuReplay;
+import forge.screens.home.replay.VSubmenuScenario;
 import forge.screens.home.settings.VSubmenuReleaseNotes;
 import forge.screens.workshop.views.VCardDesigner;
 import forge.screens.workshop.views.VCardScript;
@@ -88,6 +91,9 @@ public enum EDocID {
     HOME_WINSTON (VSubmenuWinston.SINGLETON_INSTANCE),
     HOME_NETWORK (VSubmenuOnlineLobby.SINGLETON_INSTANCE),
     HOME_RELEASE_NOTES (VSubmenuReleaseNotes.SINGLETON_INSTANCE),
+    HOME_REPLAY (VSubmenuReplay.SINGLETON_INSTANCE),
+    HOME_SCENARIO (VSubmenuScenario.SINGLETON_INSTANCE),
+    HOME_GAME_LEARNING (VSubmenuGameLearning.SINGLETON_INSTANCE),
 
     REPORT_MESSAGE (),
     REPORT_STACK (),

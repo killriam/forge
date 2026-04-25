@@ -47,6 +47,7 @@ public final class GameMenu {
         menu.add(getMenuItem_Concede());
         menu.add(getMenuItem_EndTurn());
         menu.add(getMenuItem_AlphaStrike());
+        menu.add(getMenuItem_PlaceLearningMarker());
         menu.addSeparator();
         menu.add(getMenuItem_TargetingArcs());
         menu.add(new CardOverlaysMenu(matchUI).getMenu());
@@ -91,6 +92,15 @@ public final class GameMenu {
 
     private ActionListener getAlphaStrikeAction() {
         return e -> matchUI.getGameController().alphaStrike();
+    }
+
+    private SkinnedMenuItem getMenuItem_PlaceLearningMarker() {
+        final Localizer localizer = Localizer.getInstance();
+        final SkinnedMenuItem menuItem = new SkinnedMenuItem(localizer.getMessage("lblBookmarkPlace"));
+        menuItem.setIcon((showIcons ? MenuUtil.getMenuIcon(FSkinProp.ICO_INFORMATION) : null));
+        setAcceleratorFromPref(menuItem, FPref.SHORTCUT_LEARNING_MARKER);
+        menuItem.addActionListener(e -> matchUI.placeLearningMarker());
+        return menuItem;
     }
 
     private SkinnedMenuItem getMenuItem_EndTurn() {

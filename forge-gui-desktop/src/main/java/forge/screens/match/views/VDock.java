@@ -60,6 +60,7 @@ public class VDock implements IVDoc<CDock> {
     private final DockButton btnOpenLayout = new DockButton(FSkin.getIcon(FSkinProp.ICO_OPENLAYOUT), localizer.getMessage("lblOpenLayout"));
     private final DockButton btnSaveLayout = new DockButton(FSkin.getIcon(FSkinProp.ICO_SAVELAYOUT), localizer.getMessage("lblSaveLayout"));
     private final DockButton btnAlphaStrike = new DockButton(FSkin.getIcon(FSkinProp.ICO_ALPHASTRIKE), localizer.getMessage("lblAlphaStrike"));
+    private final DockButton btnLearningMarker = new DockButton(FSkin.getIcon(FSkinProp.ICO_QUEST_BOOK), "Mark Learning Point");
     private final FLabel btnTargeting = new FLabel.Builder().icon(FSkin.getIcon(FSkinProp.ICO_ARCSOFF))
                 .hoverable(true).iconInBackground(true).iconScaleFactor(1.0).build();
 
@@ -94,6 +95,7 @@ public class VDock implements IVDoc<CDock> {
         pnl.add(btnOpenLayout);
         pnl.add(btnSaveLayout);
         pnl.add(btnAlphaStrike);
+        pnl.add(btnLearningMarker);
         pnl.add(btnTargeting);
     }
 
@@ -169,6 +171,10 @@ public class VDock implements IVDoc<CDock> {
 
     public DockButton getBtnAlphaStrike() {
         return btnAlphaStrike;
+    }
+
+    public DockButton getBtnLearningMarker() {
+        return btnLearningMarker;
     }
 
     /** @return {@link forge.toolbox.FLabel} */
