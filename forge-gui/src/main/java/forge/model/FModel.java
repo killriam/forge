@@ -145,6 +145,7 @@ public final class FModel {
     private static final Supplier<ItemPool<PaperCard>> contraptionPool = Suppliers.memoize(() -> ItemPool.createFrom(getMagicDb().getVariantCards().getAllCards(PaperCardPredicates.fromRules(CardRulesPredicates.IS_CONTRAPTION)), PaperCard.class));
 
     public static void initialize(final IProgressBar progressBar, Function<ForgePreferences, Void> adjustPrefs) {
+        System.out.println("[DEBUG][FModel] Initialisiere ImageKeys Directories");
         ImageKeys.initializeDirs(
             ForgeConstants.CACHE_CARD_PICS_DIR, ForgeConstants.CACHE_CARD_PICS_SUBDIR,
             ForgeConstants.CACHE_TOKEN_PICS_DIR, ForgeConstants.CACHE_ICON_PICS_DIR,
@@ -152,8 +153,7 @@ public final class FModel {
             ForgeConstants.CACHE_BOOSTERBOX_PICS_DIR, ForgeConstants.CACHE_PRECON_PICS_DIR,
             ForgeConstants.CACHE_TOURNAMENTPACK_PICS_DIR);
 
-        // Instantiate preferences: quest and regular
-        // Preferences are initialized first so that the splash screen can be translated.
+        System.out.println("[DEBUG][FModel] Initialisiere Preferences");
         try {
             preferences = GuiBase.getForgePrefs();
             if (adjustPrefs != null) {
@@ -162,9 +162,11 @@ public final class FModel {
             GamePlayerUtil.getGuiPlayer().setName(preferences.getPref(FPref.PLAYER_NAME));
         }
         catch (final Exception exn) {
+            System.out.println("[DEBUG][FModel] Fehler bei Preferences: " + exn.getMessage());
             throw new RuntimeException(exn);
         }
 
+        System.out.println("[DEBUG][FModel] Initialisiere Sprache und Localizer");
         Lang.createInstance(getPreferences().getPref(FPref.UI_LANGUAGE));
         Localizer.getInstance().initialize(getPreferences().getPref(FPref.UI_LANGUAGE), ForgeConstants.LANG_DIR);
 
@@ -187,12 +189,10 @@ public final class FModel {
             }
         };
 
-        // if (new AutoUpdater(true).attemptToUpdate()) {}
-        // Load types before loading cards
+        System.out.println("[DEBUG][FModel] Lade dynamische Gamedata");
         loadDynamicGamedata();
 
-        // Load card database
-        // Lazy loading currently disabled
+        System.out.println("[DEBUG][FModel] Lade CardStorageReader (Karten-Datenbank)");
         reader = new CardStorageReader(ForgeConstants.CARD_DATA_DIR, progressBarBridge,
                 false);
         tokenReader = new CardStorageReader(ForgeConstants.TOKEN_DATA_DIR, progressBarBridge,
@@ -201,32 +201,35 @@ public final class FModel {
         try {
            customReader  = new CardStorageReader(ForgeConstants.USER_CUSTOM_CARDS_DIR, progressBarBridge, false);
         } catch (Exception e) {
+            System.out.println("[DEBUG][FModel] Fehler beim CustomReader: " + e.getMessage());
             customReader = null;
         }
 
         try {
             customTokenReader  = new CardStorageReader(ForgeConstants.USER_CUSTOM_TOKENS_DIR, progressBarBridge, false);
         } catch (Exception e) {
+            System.out.println("[DEBUG][FModel] Fehler beim CustomTokenReader: " + e.getMessage());
             customTokenReader = null;
         }
 
-        // Do this first so PaperCards see the real preference
+        System.out.println("[DEBUG][FModel] Preload CardTranslation");
         CardTranslation.preloadTranslation(preferences.getPref(FPref.UI_LANGUAGE), ForgeConstants.LANG_DIR);
 
-        // Create profile dirs if they don't already exist
+        System.out.println("[DEBUG][FModel] Erstelle Profilverzeichnisse falls nötig");
         for (final String dname : ForgeConstants.PROFILE_DIRS) {
             final File path = new File(dname);
             if (path.isDirectory()) {
-                // Already exists
                 continue;
             }
             if (!path.mkdirs()) {
+                System.out.println("[DEBUG][FModel] Fehler beim Erstellen von Profilverzeichnis: " + dname);
                 throw new RuntimeException("cannot create profile directory: " + dname);
             }
         }
 
         ForgePreferences.DEV_MODE = preferences.getPrefBoolean(FPref.DEV_MODE_ENABLED);
 
+        System.out.println("[DEBUG][FModel] Setze MagicDb Filter und Formate");
         getMagicDb().setStandardPredicate(getFormats().getStandard().getFilterRules());
         getMagicDb().setPioneerPredicate(getFormats().getPioneer().getFilterRules());
         getMagicDb().setModernPredicate(getFormats().getModern().getFilterRules());
@@ -238,6 +241,7 @@ public final class FModel {
         try {
             getMagicDb().setMulliganRule(MulliganDefs.MulliganRule.valueOf(preferences.getPref(FPref.MULLIGAN_RULE)));
         } catch(Exception e) {
+            System.out.println("[DEBUG][FModel] Fehler bei MulliganRule: " + e.getMessage());
             getMagicDb().setMulliganRule(MulliganDefs.MulliganRule.London);
         }
 
@@ -247,22 +251,24 @@ public final class FModel {
             FThreads.invokeInEdtLater(() -> progressBar.setDescription(Localizer.getInstance().getMessage("splash.loading.decks")));
         }
 
+        System.out.println("[DEBUG][FModel] Lade CardPreferences, DeckPreferences, ItemManagerConfig");
         CardPreferences.load();
         DeckPreferences.load();
         ItemManagerConfig.load();
 
-        // Preload AI profiles
+        System.out.println("[DEBUG][FModel] Lade AI-Profile");
         AiProfileUtil.loadAllProfiles(ForgeConstants.AI_PROFILE_DIR);
         AiProfileUtil.setAiSideboardingMode(AiProfileUtil.AISideboardingMode.normalizedValueOf(getPreferences().getPref(FPref.MATCH_AI_SIDEBOARDING_MODE)));
 
-        // Generate Deck Gen matrix
         if(getPreferences().getPrefBoolean(FPref.DECKGEN_CARDBASED)) {
+            System.out.println("[DEBUG][FModel] Initialisiere DeckGen-Matrix");
             boolean commanderDeckGenMatrixLoaded=CardRelationMatrixGenerator.initialize();
             deckGenMatrixLoaded=CardArchetypeLDAGenerator.initialize();
             if(!commanderDeckGenMatrixLoaded){
                 deckGenMatrixLoaded=false;
             }
         }
+        System.out.println("[DEBUG][FModel] Initialisierung abgeschlossen");
     }
 
     private static boolean deckGenMatrixLoaded = false;

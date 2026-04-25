@@ -6,6 +6,9 @@
 .metadata
 .recommenders
 
+# Temporary documentation folder
+temp-docs/
+
 
 # Ignore Eclipse config files
 

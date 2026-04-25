@@ -964,7 +964,8 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
 
     public final String getName(CardState state) {
         String name = state.getName();
-        for (CardChangedName change : this.changedCardNames.values()) {
+        // Create defensive copy to avoid ConcurrentModificationException during iteration
+        for (CardChangedName change : ImmutableList.copyOf(this.changedCardNames.values())) {
             if (change.isOverwrite()) {
                 name = change.newName();
             }
@@ -989,7 +990,8 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
 
     public final boolean hasNonLegendaryCreatureNames() {
         boolean result = false;
-        for (CardChangedName change : this.changedCardNames.values()) {
+        // Create defensive copy to avoid ConcurrentModificationException during iteration
+        for (CardChangedName change : ImmutableList.copyOf(this.changedCardNames.values())) {
             if (change.isOverwrite()) {
                 result = false;
             } else if (change.addNonLegendaryCreatureNames()) {
@@ -2065,7 +2067,8 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
         if (changedCardManaCost.isEmpty()) {
             return result;
         }
-        for (CardManaCost mc : changedCardManaCost.values()) {
+        // Create defensive copy to avoid ConcurrentModificationException during iteration
+        for (CardManaCost mc : ImmutableList.copyOf(changedCardManaCost.values())) {
             if (mc.additional()) {
                 result = ManaCost.combine(result, mc.mana());
             } else {
@@ -5509,7 +5512,8 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
         currentState.updateChangedText();
 
         // update changed text in the layer, for Volrath's Shapeshifter
-        for (CardTraitChanges change : this.changedCardTraitsByText.values()) {
+        // Create defensive copy to avoid ConcurrentModificationException during iteration
+        for (CardTraitChanges change : ImmutableList.copyOf(this.changedCardTraitsByText.values())) {
             change.changeText();
         }
 

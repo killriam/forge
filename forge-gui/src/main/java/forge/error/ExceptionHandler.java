@@ -50,6 +50,7 @@ public class ExceptionHandler implements UncaughtExceptionHandler {
      * static initializer has run.
      */
     public static void registerErrorHandling() {
+        System.out.println("[DEBUG][ExceptionHandler] registerErrorHandling() gestartet");
         //initialize log file
         File logFile = new File(ForgeConstants.LOG_FILE);
 
@@ -82,6 +83,7 @@ public class ExceptionHandler implements UncaughtExceptionHandler {
 
         // no logger here, if it ever fails we'll know at least we passed through here
         System.out.println("Error handling registered!");
+        System.out.println("[DEBUG][ExceptionHandler] Error handling registered!");
         FTrace.initialize();
     }
 
@@ -99,6 +101,8 @@ public class ExceptionHandler implements UncaughtExceptionHandler {
     /** {@inheritDoc} */
     @Override
     public final void uncaughtException(final Thread t, final Throwable ex) {
+        System.out.println("[DEBUG][ExceptionHandler] uncaughtException in Thread: " + t.getName());
+        ex.printStackTrace();
         BugReporter.reportException(ex);
     }
 

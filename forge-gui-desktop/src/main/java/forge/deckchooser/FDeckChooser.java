@@ -31,9 +31,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @SuppressWarnings("serial")
 public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
+    // Guard to avoid starting multiple concurrent background loads
+    private final AtomicBoolean loadingDecks = new AtomicBoolean(false);
+    // Last time updateCustom was requested (ms)
+    private volatile long lastUpdateRequestTime = 0L;
     private DecksComboBox decksComboBox;
     private DeckType selectedDeckType;
     private ItemManagerContainer lstDecksContainer;
@@ -118,96 +123,317 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
     public DeckManager getLstDecks() { return lstDecks; }
 
     private void updateDecks(final Iterable<DeckProxy> decks, final ItemManagerConfig config) {
+        long updateStart = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateDecks() called with config: " + config);
+
+        long step1 = System.currentTimeMillis();
         lstDecks.setAllowMultipleSelections(false);
+        System.out.println("[DECK LOADING DEBUG]   - setAllowMultipleSelections: " + (System.currentTimeMillis() - step1) + "ms");
 
+        long step2 = System.currentTimeMillis();
         lstDecks.setPool(decks);
-        lstDecks.setup(config);
+        System.out.println("[DECK LOADING DEBUG]   - setPool: " + (System.currentTimeMillis() - step2) + "ms");
 
+        long step3 = System.currentTimeMillis();
+        lstDecks.setup(config);
+        System.out.println("[DECK LOADING DEBUG]   - setup: " + (System.currentTimeMillis() - step3) + "ms");
+
+        long step4 = System.currentTimeMillis();
         btnRandom.setText(localizer.getMessage("lblRandomDeck"));
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
+        System.out.println("[DECK LOADING DEBUG]   - button setup: " + (System.currentTimeMillis() - step4) + "ms");
 
+        long step5 = System.currentTimeMillis();
         lstDecks.setSelectedIndex(0);
+        System.out.println("[DECK LOADING DEBUG]   - setSelectedIndex: " + (System.currentTimeMillis() - step5) + "ms");
+
+        System.out.println("[DECK LOADING DEBUG] updateDecks() total: " + (System.currentTimeMillis() - updateStart) + "ms");
     }
 
+
     private void updateCustom() {
-        DeckFormat deckFormat = lstDecks.getGameType().getDeckFormat();
-        switch (deckFormat) {
-        case Commander:
-            updateDecks(DeckProxy.getAllCommanderDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        case Oathbreaker:
-            updateDecks(DeckProxy.getAllOathbreakerDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        case Brawl:
-            updateDecks(DeckProxy.getAllBrawlDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        case TinyLeaders:
-            updateDecks(DeckProxy.getAllTinyLeadersDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        default:
-            updateDecks(DeckProxy.getAllConstructedDecks(), ItemManagerConfig.CONSTRUCTED_DECKS);
-            break;
+        final long methodEntryTime = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] ================== updateCustom() ENTRY ==================");
+        System.out.println("[DECK LOADING DEBUG] Entry time: " + new java.util.Date());
+        System.out.println("[DECK LOADING DEBUG] Current thread: " + Thread.currentThread().getName());
+        System.out.println("[DECK LOADING DEBUG] Is EDT: " + javax.swing.SwingUtilities.isEventDispatchThread());
+
+        // Print stack trace to see what called this method
+        System.out.println("[DECK LOADING DEBUG] Call stack:");
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        for (int i = 2; i < Math.min(stack.length, 12); i++) {
+            System.out.println("[DECK LOADING DEBUG]   " + stack[i]);
         }
+
+        // Prevent duplicate background loads
+        lastUpdateRequestTime = System.currentTimeMillis();
+        if (!loadingDecks.compareAndSet(false, true)) {
+            System.out.println("[DECK LOADING DEBUG] updateCustom() called but a load is already in progress - skipping duplicate request.");
+            return;
+        }
+
+        DeckFormat deckFormat = lstDecks.getGameType().getDeckFormat();
+
+        // DEBUG: Log start of deck loading
+        final long startTime = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] ========================================");
+        System.out.println("[DECK LOADING DEBUG] Starting to load decks for format: " + deckFormat);
+        System.out.println("[DECK LOADING DEBUG] Time: " + new java.util.Date());
+        System.out.println("[DECK LOADING DEBUG] Thread: " + Thread.currentThread().getName());
+        System.out.println("[DECK LOADING DEBUG] Time since method entry: " + (startTime - methodEntryTime) + "ms");
+
+        // Load decks asynchronously to prevent GUI freeze
+        System.out.println("[DECK LOADING DEBUG] About to call FThreads.invokeInBackgroundThread()...");
+        final long beforeBgInvoke = System.currentTimeMillis();
+
+        FThreads.invokeInBackgroundThread(() -> {
+            try {
+                final long bgThreadStartTime = System.currentTimeMillis();
+                System.out.println("[DECK LOADING DEBUG] Background thread ACTUALLY started after: " +
+                    (bgThreadStartTime - startTime) + "ms (since startTime)");
+                System.out.println("[DECK LOADING DEBUG] Background thread ACTUALLY started after: " +
+                    (bgThreadStartTime - beforeBgInvoke) + "ms (since invokeInBackgroundThread call)");
+                System.out.println("[DECK LOADING DEBUG] Background thread: " + Thread.currentThread().getName());
+
+                final Iterable<DeckProxy> decks;
+                final ItemManagerConfig config;
+                final String formatName;
+
+                switch (deckFormat) {
+                case Commander:
+                    formatName = "Commander";
+                    System.out.println("[DECK LOADING DEBUG] Loading Commander decks...");
+                    long cmdStart = System.currentTimeMillis();
+                    decks = DeckProxy.getAllCommanderDecks();
+                    long cmdEnd = System.currentTimeMillis();
+                    System.out.println("[DECK LOADING DEBUG] Commander decks loaded in: " + (cmdEnd - cmdStart) + "ms");
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                case Oathbreaker:
+                    formatName = "Oathbreaker";
+                    System.out.println("[DECK LOADING DEBUG] Loading Oathbreaker decks...");
+                    long oathStart = System.currentTimeMillis();
+                    decks = DeckProxy.getAllOathbreakerDecks();
+                    long oathEnd = System.currentTimeMillis();
+                    System.out.println("[DECK LOADING DEBUG] Oathbreaker decks loaded in: " + (oathEnd - oathStart) + "ms");
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                case Brawl:
+                    formatName = "Brawl";
+                    System.out.println("[DECK LOADING DEBUG] Loading Brawl decks...");
+                    long brawlStart = System.currentTimeMillis();
+                    decks = DeckProxy.getAllBrawlDecks();
+                    long brawlEnd = System.currentTimeMillis();
+                    System.out.println("[DECK LOADING DEBUG] Brawl decks loaded in: " + (brawlEnd - brawlStart) + "ms");
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                case TinyLeaders:
+                    formatName = "TinyLeaders";
+                    System.out.println("[DECK LOADING DEBUG] Loading TinyLeaders decks...");
+                    long tinyStart = System.currentTimeMillis();
+                    decks = DeckProxy.getAllTinyLeadersDecks();
+                    long tinyEnd = System.currentTimeMillis();
+                    System.out.println("[DECK LOADING DEBUG] TinyLeaders decks loaded in: " + (tinyEnd - tinyStart) + "ms");
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                default:
+                    formatName = "Constructed";
+                    System.out.println("[DECK LOADING DEBUG] Loading Constructed decks...");
+                    long constStart = System.currentTimeMillis();
+                    decks = DeckProxy.getAllConstructedDecks();
+                    long constEnd = System.currentTimeMillis();
+                    System.out.println("[DECK LOADING DEBUG] Constructed decks loaded in: " + (constEnd - constStart) + "ms");
+                    config = ItemManagerConfig.CONSTRUCTED_DECKS;
+                    break;
+                }
+
+                // Count decks
+                int deckCount = 0;
+                for (@SuppressWarnings("unused") DeckProxy deck : decks) {
+                    deckCount++;
+                }
+                System.out.println("[DECK LOADING DEBUG] Total decks loaded: " + deckCount);
+
+                final long beforeEdtTime = System.currentTimeMillis();
+                System.out.println("[DECK LOADING DEBUG] Total loading time: " + (beforeEdtTime - bgThreadStartTime) + "ms");
+                System.out.println("[DECK LOADING DEBUG] About to call FThreads.invokeInEdtLater()...");
+                System.out.println("[DECK LOADING DEBUG] Current time before EDT invoke: " + new java.util.Date());
+
+                // Update UI in EDT
+                final long edtInvokeTime = System.currentTimeMillis();
+                FThreads.invokeInEdtLater(() -> {
+                    final long edtUpdateStart = System.currentTimeMillis();
+                    final long edtDelay = edtUpdateStart - edtInvokeTime;
+                    System.out.println("[DECK LOADING DEBUG] -------- EDT CALLBACK STARTED --------");
+                    System.out.println("[DECK LOADING DEBUG] EDT update started at: " + new java.util.Date());
+                    System.out.println("[DECK LOADING DEBUG] Time waiting in EDT queue: " + edtDelay + "ms");
+                    System.out.println("[DECK LOADING DEBUG] Total time from updateCustom() start: " +
+                        (edtUpdateStart - startTime) + "ms");
+                    System.out.println("[DECK LOADING DEBUG] EDT thread: " + Thread.currentThread().getName());
+
+                    if (edtDelay > 1000) {
+                        System.out.println("[DECK LOADING DEBUG] WARNING: EDT was blocked for " + edtDelay + "ms!");
+                        System.out.println("[DECK LOADING DEBUG] This suggests the EDT is busy with something else.");
+                    }
+
+                    updateDecks(decks, config);
+
+                    final long edtUpdateEnd = System.currentTimeMillis();
+                    System.out.println("[DECK LOADING DEBUG] EDT updateDecks() took: " +
+                        (edtUpdateEnd - edtUpdateStart) + "ms");
+                    System.out.println("[DECK LOADING DEBUG] Total time from start: " +
+                        (edtUpdateEnd - startTime) + "ms");
+                    System.out.println("[DECK LOADING DEBUG] ========================================");
+                    // Reset loading flag after UI update finished
+                    loadingDecks.set(false);
+                });
+            } catch (Exception e) {
+                final long errorTime = System.currentTimeMillis();
+                FThreads.invokeInEdtLater(() -> {
+                    System.err.println("[DECK LOADING DEBUG] ERROR at " + (errorTime - startTime) + "ms: " + e.getMessage());
+                    e.printStackTrace();
+                    // Ensure loading flag is cleared on error
+                    loadingDecks.set(false);
+                });
+            }
+        });
+
+        System.out.println("[DECK LOADING DEBUG] Main thread continuing (non-blocking)...");
     }
 
     private void updateColors(Predicate<PaperCard> formatFilter) {
+        final long colorStart = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] -------- updateColors() ENTRY --------");
+        System.out.println("[DECK LOADING DEBUG] updateColors() thread: " + Thread.currentThread().getName());
+        System.out.println("[DECK LOADING DEBUG] updateColors() formatFilter: " + (formatFilter != null ? "present" : "null"));
+
+        long step1 = System.currentTimeMillis();
         lstDecks.setAllowMultipleSelections(true);
+        System.out.println("[DECK LOADING DEBUG] updateColors() - setAllowMultipleSelections: " + (System.currentTimeMillis() - step1) + "ms");
 
-        lstDecks.setPool(ColorDeckGenerator.getColorDecks(lstDecks, formatFilter, isAi));
+        long step2 = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateColors() - calling ColorDeckGenerator.getColorDecks()...");
+        Iterable<DeckProxy> colorDecks = ColorDeckGenerator.getColorDecks(lstDecks, formatFilter, isAi);
+        System.out.println("[DECK LOADING DEBUG] updateColors() - ColorDeckGenerator.getColorDecks(): " + (System.currentTimeMillis() - step2) + "ms");
+
+        long step3 = System.currentTimeMillis();
+        lstDecks.setPool(colorDecks);
+        System.out.println("[DECK LOADING DEBUG] updateColors() - setPool: " + (System.currentTimeMillis() - step3) + "ms");
+
+        long step4 = System.currentTimeMillis();
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
+        System.out.println("[DECK LOADING DEBUG] updateColors() - setup: " + (System.currentTimeMillis() - step4) + "ms");
 
+        long step5 = System.currentTimeMillis();
         btnRandom.setText(localizer.getMessage("lblRandomColors"));
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelectColors(lstDecks));
+        System.out.println("[DECK LOADING DEBUG] updateColors() - button setup: " + (System.currentTimeMillis() - step5) + "ms");
 
+        long step6 = System.currentTimeMillis();
         // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0, 1});
+        System.out.println("[DECK LOADING DEBUG] updateColors() - setSelectedIndices: " + (System.currentTimeMillis() - step6) + "ms");
+
+        System.out.println("[DECK LOADING DEBUG] updateColors() TOTAL: " + (System.currentTimeMillis() - colorStart) + "ms");
     }
 
     private void updateMatrix(GameFormat format) {
+        final long start = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] -------- updateMatrix() ENTRY --------");
+        System.out.println("[DECK LOADING DEBUG] updateMatrix() format: " + format);
+
         lstDecks.setAllowMultipleSelections(false);
 
-        lstDecks.setPool(ArchetypeDeckGenerator.getMatrixDecks(format, isAi));
+        long step1 = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateMatrix() - calling ArchetypeDeckGenerator.getMatrixDecks()...");
+        Iterable<DeckProxy> decks = ArchetypeDeckGenerator.getMatrixDecks(format, isAi);
+        System.out.println("[DECK LOADING DEBUG] updateMatrix() - getMatrixDecks(): " + (System.currentTimeMillis() - step1) + "ms");
+
+        long step2 = System.currentTimeMillis();
+        lstDecks.setPool(decks);
+        System.out.println("[DECK LOADING DEBUG] updateMatrix() - setPool: " + (System.currentTimeMillis() - step2) + "ms");
+
+        long step3 = System.currentTimeMillis();
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
+        System.out.println("[DECK LOADING DEBUG] updateMatrix() - setup: " + (System.currentTimeMillis() - step3) + "ms");
 
         btnRandom.setText("Random");
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
 
         // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0});
+
+        System.out.println("[DECK LOADING DEBUG] updateMatrix() TOTAL: " + (System.currentTimeMillis() - start) + "ms");
     }
 
     private void updateRandomCommander() {
+        final long start = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] -------- updateRandomCommander() ENTRY --------");
+
         DeckFormat deckFormat = lstDecks.getGameType().getDeckFormat();
         if (!deckFormat.hasCommander()) {
+            System.out.println("[DECK LOADING DEBUG] updateRandomCommander() - no commander format, returning");
             return;
         }
 
         lstDecks.setAllowMultipleSelections(false);
-        lstDecks.setPool(CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, false));
+
+        long step1 = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateRandomCommander() - calling CommanderDeckGenerator.getCommanderDecks()...");
+        Iterable<DeckProxy> decks = CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, false);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCommander() - getCommanderDecks(): " + (System.currentTimeMillis() - step1) + "ms");
+
+        long step2 = System.currentTimeMillis();
+        lstDecks.setPool(decks);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCommander() - setPool: " + (System.currentTimeMillis() - step2) + "ms");
+
+        long step3 = System.currentTimeMillis();
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCommander() - setup: " + (System.currentTimeMillis() - step3) + "ms");
 
         btnRandom.setText("Random");
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
 
         // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0});
+
+        System.out.println("[DECK LOADING DEBUG] updateRandomCommander() TOTAL: " + (System.currentTimeMillis() - start) + "ms");
     }
 
     private void updateRandomCardGenCommander() {
+        final long start = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] -------- updateRandomCardGenCommander() ENTRY --------");
+
         DeckFormat deckFormat = lstDecks.getGameType().getDeckFormat();
         if (!deckFormat.hasCommander()) {
+            System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - no commander format, returning");
             return;
         }
 
         lstDecks.setAllowMultipleSelections(false);
-        lstDecks.setPool(CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, true));
+
+        long step1 = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - calling CommanderDeckGenerator.getCommanderDecks(cardGen=true)...");
+        // getCommanderDecks returns a List, so it's already evaluated
+        List<DeckProxy> decks = (List<DeckProxy>) CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, true);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - getCommanderDecks() returned " + decks.size() + " decks in: " + (System.currentTimeMillis() - step1) + "ms");
+
+        long step2 = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - calling setPool()...");
+        lstDecks.setPool(decks);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - setPool: " + (System.currentTimeMillis() - step2) + "ms");
+
+        long step3 = System.currentTimeMillis();
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() - setup: " + (System.currentTimeMillis() - step3) + "ms");
 
         btnRandom.setText("Random");
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
 
         // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0});
+
+        System.out.println("[DECK LOADING DEBUG] updateRandomCardGenCommander() TOTAL: " + (System.currentTimeMillis() - start) + "ms");
     }
 
     private void updateThemes() {
@@ -532,16 +758,34 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
     }
 
     private void refreshDecksList(final DeckType deckType, final boolean forceRefresh, final DecksComboBoxEvent ev) {
-        if (decksComboBox == null) { return; } // Not yet populated
-        if (selectedDeckType == deckType && !forceRefresh) { return; }
+        final long refreshStart = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] refreshDecksList() called with deckType=" + deckType + ", forceRefresh=" + forceRefresh);
+        System.out.println("[DECK LOADING DEBUG] refreshDecksList() thread: " + Thread.currentThread().getName());
+        System.out.println("[DECK LOADING DEBUG] refreshDecksList() is EDT: " + javax.swing.SwingUtilities.isEventDispatchThread());
+
+        if (decksComboBox == null) {
+            System.out.println("[DECK LOADING DEBUG] refreshDecksList() - decksComboBox is null, returning early");
+            return;
+        }
+        if (selectedDeckType == deckType && !forceRefresh) {
+            System.out.println("[DECK LOADING DEBUG] refreshDecksList() - same deck type and no force refresh, returning early");
+            return;
+        }
         selectedDeckType = deckType;
 
         if (ev == null) {
+            System.out.println("[DECK LOADING DEBUG] refreshDecksList() - ev is null, calling decksComboBox.refresh()...");
+            final long beforeRefresh = System.currentTimeMillis();
             refreshingDeckType = true;
             decksComboBox.refresh(deckType, isForCommander);
             refreshingDeckType = false;
+            System.out.println("[DECK LOADING DEBUG] refreshDecksList() - decksComboBox.refresh() took: " + (System.currentTimeMillis() - beforeRefresh) + "ms");
         }
+
+        System.out.println("[DECK LOADING DEBUG] refreshDecksList() - calling lstDecks.setCaption()...");
         lstDecks.setCaption(deckType.toString());
+        System.out.println("[DECK LOADING DEBUG] refreshDecksList() - about to switch on deckType: " + deckType);
+        System.out.println("[DECK LOADING DEBUG] refreshDecksList() - time so far: " + (System.currentTimeMillis() - refreshStart) + "ms");
 
         switch (deckType) {
             case CUSTOM_DECK:
@@ -656,7 +900,8 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
     public void saveState() {
         if (stateSetting == null) {
-            throw new NullPointerException("State setting missing. Specify first using the initialize() method.");
+            // Not yet initialized, skip saving
+            return;
         }
         prefs.setPref(stateSetting, getState());
         prefs.save();
@@ -715,19 +960,69 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
     }
 
     public void restoreSavedState() {
-        final DeckType oldDeckType = selectedDeckType;
+        final long restoreStart = System.currentTimeMillis();
+        System.out.println("[DECK LOADING DEBUG] ======= restoreSavedState() ENTRY =======");
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() thread: " + Thread.currentThread().getName());
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() is EDT: " + javax.swing.SwingUtilities.isEventDispatchThread());
+
         if (stateSetting == null) {
+            System.out.println("[DECK LOADING DEBUG] restoreSavedState() - stateSetting is null, refreshing deck list");
             //if can't restore saved state, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+            refreshDecksList(selectedDeckType, true, null);
+            System.out.println("[DECK LOADING DEBUG] restoreSavedState() total time: " + (System.currentTimeMillis() - restoreStart) + "ms");
             return;
         }
 
         final String savedState = prefs.getPref(stateSetting);
-        refreshDecksList(getDeckTypeFromSavedState(savedState), true, null);
-        if (!lstDecks.setSelectedStrings(getSelectedDecksFromSavedState(savedState))) {
-            //if can't select old decks, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() savedState: " + savedState);
+
+        final long beforeGetDeckType = System.currentTimeMillis();
+        DeckType deckTypeFromState = getDeckTypeFromSavedState(savedState);
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() getDeckTypeFromSavedState took: " + (System.currentTimeMillis() - beforeGetDeckType) + "ms");
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() deckTypeFromState: " + deckTypeFromState);
+
+        final long beforeRefresh = System.currentTimeMillis();
+        refreshDecksList(deckTypeFromState, true, null);
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() refreshDecksList took: " + (System.currentTimeMillis() - beforeRefresh) + "ms");
+
+        // Try to select the saved deck
+        List<String> savedDeckNames = getSelectedDecksFromSavedState(savedState);
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() savedDeckNames: " + savedDeckNames);
+
+        boolean selected = false;
+        if (!savedDeckNames.isEmpty()) {
+            // First try exact match
+            selected = lstDecks.setSelectedStrings(savedDeckNames);
+            System.out.println("[DECK LOADING DEBUG] restoreSavedState() exact match result: " + selected);
+
+            // If exact match fails, try to find deck by partial name match
+            if (!selected && lstDecks.getItemCount() > 0) {
+                String savedDeckName = savedDeckNames.get(0);
+                System.out.println("[DECK LOADING DEBUG] restoreSavedState() trying partial match for: " + savedDeckName);
+
+                // Try to find a deck that contains the saved name or vice versa
+                for (DeckProxy deck : lstDecks.getFilteredItems().toFlatList()) {
+                    String deckName = deck.toString();
+                    if (deckName.equals(savedDeckName) ||
+                        deckName.contains(savedDeckName) ||
+                        savedDeckName.contains(deckName) ||
+                        deckName.equalsIgnoreCase(savedDeckName)) {
+                        System.out.println("[DECK LOADING DEBUG] restoreSavedState() found partial match: " + deckName);
+                        lstDecks.setSelectedString(deckName);
+                        selected = true;
+                        break;
+                    }
+                }
+            }
         }
+
+        if (!selected) {
+            System.out.println("[DECK LOADING DEBUG] restoreSavedState() - couldn't select saved deck, selecting first available");
+            if (lstDecks.getItemCount() > 0) {
+                lstDecks.setSelectedIndex(0);
+            }
+        }
+        System.out.println("[DECK LOADING DEBUG] restoreSavedState() total time: " + (System.currentTimeMillis() - restoreStart) + "ms");
     }
 
     private DeckType getDeckTypeFromSavedState(final String savedState) {

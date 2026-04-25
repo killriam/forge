@@ -2340,6 +2340,23 @@ public class GameAction {
 
             runPreOpeningHandActions(first);
 
+            // Replay mode: reorder libraries to match recorded draw order
+            String replayLogPath = game.getRules().getReplayLogPath();
+            if (replayLogPath != null) {
+                forge.game.log.ReplayLibraryReorderer.reorderLibraries(game, replayLogPath);
+                // Initialize per-mulligan draw tracker so that each mulligan shuffle
+                // is followed by a deterministic re-reorder from the correct position.
+                try {
+                    java.util.Map<String, java.util.List<String>> drawOrder =
+                            forge.game.log.ReplayLibraryReorderer.parseDrawOrder(replayLogPath);
+                    game.setReplayDrawTracker(new forge.game.log.ReplayDrawTracker(drawOrder));
+                } catch (java.io.IOException e) {
+                    // Non-fatal: mulligans will be non-deterministic but the game still runs
+                    org.slf4j.LoggerFactory.getLogger(GameAction.class)
+                            .warn("Could not initialise ReplayDrawTracker from {}: {}", replayLogPath, e.getMessage());
+                }
+            }
+
             game.setAge(GameStage.Mulligan);
             for (final Player p1 : game.getPlayers()) {
                 // Choose starting hand for each player with multiple hands

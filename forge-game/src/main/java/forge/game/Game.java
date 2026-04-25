@@ -46,6 +46,7 @@ import forge.game.spellability.SpellAbilityStackInstance;
 import forge.game.staticability.StaticAbilityCantChangeDayTime;
 import forge.game.trigger.TriggerHandler;
 import forge.game.trigger.TriggerType;
+import forge.game.simulation.SimulationMetricsCollector;
 import forge.game.zone.*;
 import forge.trackable.Tracker;
 import forge.util.*;
@@ -136,6 +137,12 @@ public class Game {
 
     private final GameView view;
     private final Tracker tracker = new Tracker();
+
+    // Simulation metrics collector (optional, only for AI simulations)
+    private SimulationMetricsCollector simulationMetricsCollector;
+
+    // Replay draw tracker (optional, only in replay mode — keeps mulligan hands deterministic)
+    private forge.game.log.ReplayDrawTracker replayDrawTracker;
 
     /**
      * Gets the id.
@@ -1405,5 +1412,21 @@ public class Game {
     }
     public boolean canUseTimeout() {
         return AI_CAN_USE_TIMEOUT;
+    }
+
+    public SimulationMetricsCollector getSimulationMetricsCollector() {
+        return simulationMetricsCollector;
+    }
+
+    public void setSimulationMetricsCollector(SimulationMetricsCollector simulationMetricsCollector) {
+        this.simulationMetricsCollector = simulationMetricsCollector;
+    }
+
+    public forge.game.log.ReplayDrawTracker getReplayDrawTracker() {
+        return replayDrawTracker;
+    }
+
+    public void setReplayDrawTracker(forge.game.log.ReplayDrawTracker tracker) {
+        this.replayDrawTracker = tracker;
     }
 }

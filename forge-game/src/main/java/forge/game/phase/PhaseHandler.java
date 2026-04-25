@@ -82,6 +82,8 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
 
     private transient Player playerTurn = null;
     private transient Player playerPreviousTurn = null;
+    // The last player who had a regular (non-extra) turn; used to resume normal turn order after extra turns
+    private transient Player lastRegularTurnPlayer = null;
 
     // priority player
 
@@ -359,6 +361,8 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
                     break;
 
                 case END_OF_TURN:
+                    System.out.println("[PhaseHandler] BEGIN END_OF_TURN for " + playerTurn
+                            + " — stack size before phase triggers: " + game.getStack().size());
                     nEndOfTurnsThisTurn++;
                     game.getEndOfTurn().executeUntil(playerTurn);
                     if (playerTurn.getController().isAI()) {
@@ -366,6 +370,20 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
                     }
 
                     game.getEndOfTurn().executeAt();
+
+                    // for analytics add Land statistics
+                    // count lands
+                    CardCollectionView permantens = playerTurn.getCardsIn(ZoneType.Battlefield);
+                    int amountManacard = playerTurn.countManaLandRampsIn(permantens);
+                    String producalbeMana = Player.listManaCreatableIn(permantens);
+
+                    playerTurn.setManacurveData(producalbeMana, playerTurn.getTurn());
+
+                    CardCollection cardswithManaAbilities = Player.getCardswithManaAbilities(permantens);
+
+                    System.out.println("Player " + playerTurn.getName() + " in Turn " + playerTurn.getTurn() +
+                        " can produce with card " + cardswithManaAbilities + "(" + amountManacard + ") mana: " + producalbeMana);
+                    // add them to turn index list
                     break;
 
                 case CLEANUP:
@@ -829,6 +847,7 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
     public void restart() {
         extraPhases.clear();
         extraTurns.clear();
+        lastRegularTurnPlayer = null;
         turn = 0;
     }
 
@@ -863,9 +882,20 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
 
     private Player getNextActivePlayer() {
         ExtraTurn extraTurn = !extraTurns.isEmpty() ? extraTurns.pop() : null;
-        Player nextPlayer = extraTurn != null ? extraTurn.getPlayer() : game.getNextPlayerAfter(playerTurn);
-        // The bottom of the extra turn stack is the normal turn
-        boolean isExtraTurn = !extraTurns.isEmpty();
+        Player nextPlayer;
+        if (extraTurn != null) {
+            // Entering or continuing extra turns — record who had the last regular turn
+            if (lastRegularTurnPlayer == null) {
+                lastRegularTurnPlayer = playerTurn;
+            }
+            nextPlayer = extraTurn.getPlayer();
+        } else {
+            // Extra turns exhausted — resume normal order from after the last regular-turn player
+            Player basePlayer = lastRegularTurnPlayer != null ? lastRegularTurnPlayer : playerTurn;
+            nextPlayer = game.getNextPlayerAfter(basePlayer);
+            lastRegularTurnPlayer = null;
+        }
+        boolean isExtraTurn = extraTurn != null;
 
         // update ExtraTurn Count
         nextPlayer.setExtraTurnCount(getExtraTurnForPlayer(nextPlayer));
@@ -911,40 +941,25 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
     }
 
     public final ExtraTurn addExtraTurn(final Player player) {
-        Player previous = null;
-        // use a stack to handle extra turns, make sure the bottom of the stack
-        // restores original turn order
-        if (extraTurns.isEmpty()) {
-            extraTurns.push(new ExtraTurn(game.getNextPlayerAfter(playerTurn)));
-        } else {
-            previous = extraTurns.peek().getPlayer();
-        }
-
-        ExtraTurn result = extraTurns.push(new ExtraTurn(player));
-        // update Extra Turn for all players
-        for (final Player p : game.getPlayers()) {
-            p.setExtraTurnCount(getExtraTurnForPlayer(p));
-        }
-
-        // get all players where the view should be updated
-        List<Player> toUpdate = Lists.newArrayList(player);
-        if (previous != null) {
-            toUpdate.add(previous);
-        }
-
-        // fireEvent to update the Details
-        game.fireEvent(new GameEventPlayerStatsChanged(toUpdate, false));
-
-        return result;
+        ExtraTurn extraTurn = new ExtraTurn(player);
+        extraTurn.setTurnOrderPosition(extraTurns.size()); // Track turn order position
+        extraTurns.push(extraTurn);
+        System.out.println("[PhaseHandler] addExtraTurn: player=" + player
+                + " turnOrderPosition=" + extraTurn.getTurnOrderPosition()
+                + " extraTurns stack size now=" + extraTurns.size());
+        return extraTurn;
     }
 
-    /**
-     * Add an extra phase between afterPhase and nextPhase
-     * @param afterPhase The phase to add extra phase after
-     * @param extraPhaseList The list of extra phase(s) to be added
-     * @param nextPhase The original next phase following afterPhase, after extra phase the flow will return to this phase
-     * @return returns the added ExtraPhase object
-     */
+    public void processExtraTurns() {
+        while (!extraTurns.isEmpty()) {
+            ExtraTurn extraTurn = extraTurns.pop();
+            Player player = extraTurn.getPlayer();
+            if (player.isInGame()) {
+                game.getPhaseHandler().addExtraTurn(player);
+            }
+        }
+    }
+
     public final ExtraPhase addExtraPhase(final PhaseType afterPhase, final List<PhaseType> extraPhaseList, PhaseType nextPhase) {
         // 500.8. Some effects can add phases to a turn. They do this by adding the phases directly after the specified phase.
         // If multiple extra phases are created after the same phase, the most recently created phase will occur first.
