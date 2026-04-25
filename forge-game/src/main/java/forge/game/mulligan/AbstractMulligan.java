@@ -4,6 +4,7 @@ import forge.game.GameLogEntryType;
 import forge.game.event.GameEventAddLog;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
+import forge.game.log.ReplayDrawTracker;
 import forge.game.player.Player;
 import forge.game.zone.ZoneType;
 import forge.util.Localizer;
@@ -42,6 +43,15 @@ public abstract class AbstractMulligan {
             e.printStackTrace();
         }
         player.shuffle(null);
+
+        // Replay mode: re-order the library so the next hand matches the recorded game.
+        // The tracker advances the draw-pointer by the number of cards just returned,
+        // then re-applies ReplayLibraryReorderer from that new offset.
+        ReplayDrawTracker replayTracker = player.getGame().getReplayDrawTracker();
+        if (replayTracker != null) {
+            replayTracker.onMulliganShuffle(player, toMulligan.size());
+        }
+
         timesMulliganed++;
         mulliganDraw();
         player.onMulliganned();

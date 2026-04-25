@@ -26,6 +26,7 @@ import forge.card.CardType;
 import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.card.mana.ManaAtom;
+import forge.deck.Deck;
 import forge.game.*;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.AbilityUtils;
@@ -2154,7 +2155,30 @@ public class ComputerUtil {
     // Computer mulligans if there are no cards with converted mana cost of 0 in its hand
     public static boolean wantMulligan(Player ai, int cardsToReturn) {
         final CardCollectionView handList = ai.getCardsIn(ZoneType.Hand);
-        return !handList.isEmpty() && scoreHand(handList, ai, cardsToReturn) <= 0;
+        if (handList.isEmpty()) return false;
+
+        // Try deck-rules-based mulligan evaluation (from Commander Decklist Notation)
+        try {
+            Deck deck = ai.getRegisteredPlayer() != null ? ai.getRegisteredPlayer().getDeck() : null;
+            if (deck != null) {
+                forge.deck.DeckRulesConfig rulesConfig = deck.getDeckRulesConfig();
+                if (rulesConfig != null && rulesConfig.hasMulligan()) {
+                    forge.ai.mulligan.DecklistMulliganEvaluator evaluator =
+                            forge.ai.mulligan.DecklistMulliganEvaluator.fromDeckRules(rulesConfig.getMulligan());
+                    if (evaluator != null) {
+                        // mulliganRound = 7 - currentHandSize (approximation)
+                        int mulliganRound = 7 - handList.size() + cardsToReturn;
+                        if (mulliganRound < 0) mulliganRound = 0;
+                        boolean keep = evaluator.shouldKeep(handList, mulliganRound);
+                        return !keep;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Fallback to standard logic on any error
+        }
+
+        return scoreHand(handList, ai, cardsToReturn) <= 0;
     }
 
     public static CardCollection getPartialParisCandidates(Player ai) {

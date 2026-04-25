@@ -3,6 +3,7 @@ package forge.deck;
 import forge.card.CardEdition;
 import forge.card.CardRules;
 import forge.card.CardRulesPredicates;
+import forge.card.ColorSet;
 import forge.deck.generation.DeckGeneratorBase;
 import forge.item.PaperCard;
 import forge.item.PaperCardPredicates;
@@ -109,6 +110,12 @@ public class CommanderDeckGenerator extends DeckProxy implements Comparable<Comm
     @Override
     public boolean isGeneratedDeck() {
         return true;
+    }
+
+    @Override
+    public ColorSet getColor() {
+        // Return the color identity of the commander
+        return legend.getRules().getColorIdentity();
     }
 
     public String getImageKey(boolean altState) {

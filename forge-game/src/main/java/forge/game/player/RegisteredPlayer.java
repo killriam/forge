@@ -249,4 +249,13 @@ public class RegisteredPlayer {
     public void setRandomFoil(boolean useRandomFoil) {
         randomFoil = useRandomFoil;
     }
+
+    private String decklistConfigPath = null;
+
+    public String getDecklistConfigPath() {
+        return decklistConfigPath;
+    }
+    public void setDecklistConfigPath(String path) {
+        this.decklistConfigPath = path;
+    }
 }

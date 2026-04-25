@@ -62,6 +62,12 @@ public class DeckSerializer {
         if (!d.getKeyCards().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.KEY_CARDS, "=", StringUtils.join(d.getKeyCards(), ";")));
         }
+        if (d.getDeckUrl() != null && !d.getDeckUrl().isEmpty()) {
+            out.add(TextUtil.concatNoSpace(DeckFileHeader.DECK_URL, "=", d.getDeckUrl()));
+        }
+        if (d.getEvalScenarioIds() != null && !d.getEvalScenarioIds().isEmpty()) {
+            out.add(TextUtil.concatNoSpace(DeckFileHeader.EVAL_SCENARIO, "=", d.getEvalScenarioIds()));
+        }
 
         for (Entry<DeckSection, CardPool> s : d) {
             if(s.getValue().isEmpty())
@@ -106,6 +112,8 @@ public class DeckSerializer {
         for (String keyCard : dh.getKeyCards()) {
             d.addKeyCard(keyCard);
         }
+        if (dh.getDeckUrl() != null)       d.setDeckUrl(dh.getDeckUrl());
+        if (dh.getEvalScenario() != null)  d.setEvalScenarioIds(dh.getEvalScenario());
         d.setDeferredSections(sections);
         return d;
     }
