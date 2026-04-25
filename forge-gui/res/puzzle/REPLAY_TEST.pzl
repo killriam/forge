@@ -1,0 +1,20 @@
+[metadata]
+Name:Replay Test - Turn 3 Burn vs Control
+URL:Generated from example_replay.json
+Goal:Win
+Turns:99
+Difficulty:Medium
+Description:Turn 3 scenario. You are playing Burn against Control. You have a Goblin Guide and 2 Mountains. Lightning Bolt is in your graveyard. Opponent has 1 Island and counters in hand. Deal 17 damage to win!
+
+[state]
+turn=3
+ActivePlayer=Human
+ActivePhase=Main1
+HumanLife=20
+HumanPlay=Mountain; Mountain; Goblin Guide
+HumanHand=Monastery Swiftspear; Lava Spike; Rift Bolt; Searing Blaze
+HumanGraveyard=Lightning Bolt
+AILife=17
+AIPlay=Island
+AIHand=Island; Counterspell; Snapcaster Mage; Brainstorm; Force of Will
+

@@ -25,11 +25,14 @@ import forge.util.Localizer;
 import forge.util.MyRandom;
 import forge.util.collect.FCollectionView;
 import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.Map.Entry;
 
 public class Match {
+    private static final Logger LOG = LoggerFactory.getLogger(Match.class);
     private static List<PaperCard> removedCards = Lists.newArrayList();
     private final List<RegisteredPlayer> players;
     private final GameRules rules;
@@ -70,7 +73,24 @@ public class Match {
     }
 
     public Game createGame() {
-        return new Game(players, rules, this);
+        Game game = new Game(players, rules, this);
+
+        // Auto-enable replay notation logging for all games (unless explicitly disabled).
+        // GameLogSaver is in forge-gui, so we use reflection to avoid a cyclic module dependency.
+        if (rules.isAutoSaveReplay()) {
+            try {
+                Class<?> saverClass = Class.forName("forge.game.GameLogSaver");
+                java.lang.reflect.Method method = saverClass.getMethod("enableReplayNotation", Game.class);
+                method.invoke(null, game);
+            } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+                // forge-gui module not on classpath (e.g. unit tests) — safe to skip
+            } catch (Exception e) {
+                // Non-fatal: replay notation won't be saved but the game can proceed
+                LOG.warn("Failed to enable replay notation: {}", e.getMessage());
+            }
+        }
+
+        return game;
     }
 
     public void startGame(final Game game) {
@@ -293,7 +313,7 @@ public class Match {
             Deck toCheck = psc.getDeck();
             if (toCheck == null) {
                 try {
-                    System.err.println(psc.getPlayer().getName() + " Deck is NULL...");
+                    LOG.warn("{} deck is null — substituting empty deck", psc.getPlayer().getName());
                     int val = rules.getGameType().getDeckFormat().getMainRange().getMinimum();
                     toCheck = new Deck("NULL");
                     if (val > 0)
