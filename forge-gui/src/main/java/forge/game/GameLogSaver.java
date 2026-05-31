@@ -4,8 +4,9 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import forge.game.log.ReplayNotationExporter;
@@ -22,7 +23,10 @@ import org.slf4j.LoggerFactory;
 public class GameLogSaver {
 
     private static final Logger LOG = LoggerFactory.getLogger(GameLogSaver.class);
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+    private static final DateTimeFormatter FILENAME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter HEADER_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC);
 
     /**
      * Enable replay notation logging for a game.
@@ -73,7 +77,7 @@ public class GameLogSaver {
             logDir.mkdirs();
         }
 
-        String timestamp = DATE_FORMAT.format(new Date());
+        String timestamp = FILENAME_FORMAT.format(Instant.now());
         String gameType = game.getRules() != null && game.getRules().getGameType() != null ?
                           game.getRules().getGameType().toString() : "Game";
         String filename = String.format("gamelog_%s_%s.txt", gameType, timestamp);
@@ -82,7 +86,7 @@ public class GameLogSaver {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFile))) {
             writer.write("Game Type: " + gameType);
             writer.newLine();
-            writer.write("Date: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+            writer.write("Date: " + HEADER_FORMAT.format(Instant.now()));
             writer.newLine();
             writer.write("======================================");
             writer.newLine();
@@ -100,7 +104,7 @@ public class GameLogSaver {
             ReplayNotationExporter replayExporter = gameLog.getReplayExporter();
             if (replayExporter != null) {
                 try {
-                    File jsonFile = replayExporter.exportToFile(logDir);
+                    File jsonFile = replayExporter.exportToFile(logDir, timestamp);
                     if (jsonFile != null) {
                         LOG.info("JSON replay saved: {}", jsonFile.getAbsolutePath());
                     } else {
@@ -141,7 +145,7 @@ public class GameLogSaver {
             logDir.mkdirs();
         }
 
-        String timestamp = DATE_FORMAT.format(new Date());
+        String timestamp = FILENAME_FORMAT.format(Instant.now());
         String gameType = gameView.getGameType() != null ? gameView.getGameType().toString() : "Game";
         String filename = String.format("gamelog_%s_%s.txt", gameType, timestamp);
         File logFile = new File(logDir, filename);
@@ -153,7 +157,7 @@ public class GameLogSaver {
             writer.newLine();
             writer.write("Game Type: " + gameType);
             writer.newLine();
-            writer.write("Date: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+            writer.write("Date: " + HEADER_FORMAT.format(Instant.now()));
             writer.newLine();
             writer.write("======================================");
             writer.newLine();
@@ -171,7 +175,7 @@ public class GameLogSaver {
             ReplayNotationExporter replayExporter = gameLog.getReplayExporter();
             if (replayExporter != null) {
                 try {
-                    File jsonFile = replayExporter.exportToFile(logDir);
+                    File jsonFile = replayExporter.exportToFile(logDir, timestamp);
                     if (jsonFile != null) {
                         LOG.info("JSON replay saved: {}", jsonFile.getAbsolutePath());
                     } else {

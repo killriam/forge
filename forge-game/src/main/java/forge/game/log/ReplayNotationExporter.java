@@ -1954,14 +1954,17 @@ public class ReplayNotationExporter {
      * </ul>
      */
     public File exportToFile(File outputDir) throws IOException {
+        String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
+                .withZone(ZoneOffset.UTC).format(Instant.now());
+        return exportToFile(outputDir, timestamp);
+    }
+
+    public File exportToFile(File outputDir, String timestamp) throws IOException {
         if (!outputDir.exists()) {
             if (!outputDir.mkdirs()) {
                 throw new IOException("Failed to create output directory: " + outputDir);
             }
         }
-
-        String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
-                .withZone(ZoneOffset.UTC).format(Instant.now());
 
         boolean isSimulation = game.getRules() != null && game.getRules().isSimulationMode();
         String prefix = isSimulation ? "sim_" : "replay_";
