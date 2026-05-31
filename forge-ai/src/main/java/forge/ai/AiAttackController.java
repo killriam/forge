@@ -1337,6 +1337,29 @@ public class AiAttackController {
             }
         }
 
+        // Log the attack decision
+        if (!combat.getAttackers().isEmpty()) {
+            StringBuilder attackLog = new StringBuilder();
+            attackLog.append("Attacking with ").append(combat.getAttackers().size()).append(" creature(s): ");
+            boolean first = true;
+            for (Card attacker : combat.getAttackers()) {
+                if (!first) attackLog.append(", ");
+                attackLog.append(attacker.getName());
+                GameEntity attackDef = combat.getDefenderByAttacker(attacker);
+                if (attackDef != null) {
+                    attackLog.append(" -> ");
+                    if (attackDef instanceof Player) {
+                        attackLog.append(((Player) attackDef).getName());
+                    } else if (attackDef instanceof Card) {
+                        attackLog.append(((Card) attackDef).getName());
+                    }
+                }
+                first = false;
+            }
+            attackLog.append(" | Aggression level: ").append(aiAggression);
+            AiDecisionLogger.logCombatDecision(ai, attackLog.toString());
+        }
+
         return aiAggression;
     }
 

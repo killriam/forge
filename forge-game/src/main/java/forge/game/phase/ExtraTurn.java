@@ -36,10 +36,12 @@ import forge.game.trigger.Trigger;
  */
 public class ExtraTurn {
 
-    private Player player = null;
-    private List<Trigger> delTrig = Collections.synchronizedList(new ArrayList<>());
+    private Player player;
+    private final List<Trigger> delTrig = Collections.synchronizedList(new ArrayList<>());
     private SpellAbility skipUntapSA;
     private SpellAbility cantSetSchemesInMotionSA;
+    private int turnOrderPosition;
+
     /**
      * TODO: Write javadoc for Constructor.
      * @param player the player
@@ -107,6 +109,14 @@ public class ExtraTurn {
 
     public void setCantSetSchemesInMotionSA(SpellAbility cantSetSchemesInMotionSA) {
         this.cantSetSchemesInMotionSA = cantSetSchemesInMotionSA;
+    }
+
+    public int getTurnOrderPosition() {
+        return turnOrderPosition;
+    }
+
+    public void setTurnOrderPosition(int turnOrderPosition) {
+        this.turnOrderPosition = turnOrderPosition;
     }
 
 }

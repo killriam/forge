@@ -94,6 +94,7 @@ import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.localinstance.skin.FSkinProp;
 import forge.menus.IMenuProvider;
 import forge.model.FModel;
+import forge.player.PlayerControllerHuman;
 import forge.player.PlayerZoneUpdate;
 import forge.player.PlayerZoneUpdates;
 import forge.screens.match.controllers.CAntes;
@@ -316,6 +317,40 @@ public final class CMatchUI
         final Deck deck = getGameView().getDeck(getCurrentPlayer());
         if (deck != null) {
             FDeckViewer.show(deck);
+        }
+    }
+
+    /**
+     * Prompts the human player for a short note, then places a learning marker
+     * (bookmark) at the current game state. The marker is written to:
+     * <ul>
+     *   <li>the visible in-game Log panel (as an INFORMATION entry)</li>
+     *   <li>the MTG Replay Notation JSON log as a {@code LEARNING_MARKER} event
+     *       (only when Replay Notation logging is active)</li>
+     * </ul>
+     * Cancelling the input dialog does nothing.
+     */
+    public void placeLearningMarker() {
+        if (!isInGame()) {
+            return;
+        }
+        final String label = SOptionPane.showInputDialog(
+                Localizer.getInstance().getMessage("lblBookmarkPrompt"),
+                Localizer.getInstance().getMessage("lblBookmarkTitle"),
+                SOptionPane.INFORMATION_ICON,
+                "");
+        if (label == null) {
+            return; // user cancelled
+        }
+        for (final forge.interfaces.IGameController c : getOriginalGameControllers()) {
+            if (c instanceof PlayerControllerHuman) {
+                final PlayerControllerHuman pch = (PlayerControllerHuman) c;
+                if (pch.getPlayer() != null) {
+                    pch.getPlayer().getGame().getGameLog()
+                            .logLearningMarker(pch.getPlayer(), label.trim(), "general");
+                }
+                break; // bookmark for first local human player only
+            }
         }
     }
 

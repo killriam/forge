@@ -170,6 +170,11 @@ public class Player extends GameEntity implements Comparable<Player> {
 
     private int teamNumber = -1;
 
+    //analytic purpose
+    private CardCollectionView cardsInStartingHand = new CardCollection();
+    private static final int manacurveDataturnCount = 8;
+    private String[] manacurveData = new String[manacurveDataturnCount];
+
     private PlayerController controller;
     private final Game game;
 
@@ -1620,6 +1625,20 @@ public class Player extends GameEntity implements Comparable<Player> {
 
         getZone(ZoneType.Library).setCards(getController().cheatShuffle(list));
 
+        // In Replay Mode, silently restore the forced library draw order after every shuffle
+        // so the player draws the same cards as in the original game.
+        if (game.getRules().isReplayMode()
+                && "always".equals(game.getRules().getShuffleRestore())
+                && game.getRules().getForcedLibraryOrder() != null) {
+            int idx = game.getPlayers().indexOf(this);
+            if (idx >= 0) {
+                java.util.List<String> forced = game.getRules().getForcedLibraryOrder().get("P" + (idx + 1));
+                if (forced != null) {
+                    forge.game.log.ReplayLibraryReorderer.reorderLibrary(this, forced);
+                }
+            }
+        }
+
         // Always Run triggers (701.20e)
         final Map<AbilityKey, Object> runParams = AbilityKey.mapFromPlayer(this);
         runParams.put(AbilityKey.Source, sa);
@@ -2656,7 +2675,6 @@ public class Player extends GameEntity implements Comparable<Player> {
      * Then runs triggers.
      */
     public void planeswalkTo(SpellAbility sa, final CardCollectionView destinations) {
-        System.out.println(getName() + " planeswalks to " + destinations.toString());
         game.getView().updatePlanarPlayer(getView());
 
         for (Card c : destinations) {
@@ -4058,5 +4076,77 @@ public class Player extends GameEntity implements Comparable<Player> {
 
     public boolean hasAllElementBend() {
         return elementalBendThisTurn.size() >= 4;
+    }
+
+    //for statistics
+    public void setCardsInStartingHand(CardCollectionView cardsIn) {
+        cardsInStartingHand = cardsIn;
+    }
+
+    public CardCollectionView getCardsInStartingHand() {
+        return cardsInStartingHand;
+    }
+
+    public int countManaLandAndRampsInStartingHand() {
+        return countManaLandRampsIn(cardsInStartingHand);
+    }
+
+    public int countManaLandRampsIn(CardCollectionView cards) {
+        CardCollection cardsSelection = getCardswithManaAbilities(cards);
+        return cardsSelection.size();
+    }
+
+    public static CardCollection getCardswithManaAbilities(CardCollectionView cards) {
+        CardCollection cardsSelection = new CardCollection();
+        for (Card c : cards) {
+            if (c.isLand() && !c.getManaAbilities().isEmpty()) {
+                cardsSelection.add(c);
+            } else if (c.isPermanent() && c.getCMC() <= 2 && !c.getManaAbilities().isEmpty()) {
+                cardsSelection.add(c);
+            }
+        }
+        return cardsSelection;
+    }
+
+    public static String listManaCreatableIn(CardCollectionView cards) {
+        StringBuilder combinedManas = new StringBuilder();
+        for (Card c : cards) {
+            if ((c.isLand() && !c.getManaAbilities().isEmpty()) ||
+                (c.isPermanent() && c.getCMC() <= 3 && !c.getManaAbilities().isEmpty())) {
+                int countmanaAbilities = 0;
+                for (final SpellAbility mana : c.getManaAbilities()) {
+                    if (mana.getApi() == ApiType.ManaReflected) {
+                        String collect = CardUtil.getReflectableManaColors(mana).stream()
+                                .collect(Collectors.joining(""));
+                        if (countmanaAbilities >= 1) {
+                            combinedManas.append("|" + collect);
+                        } else {
+                            combinedManas.append(collect);
+                        }
+                    } else if (mana.getManaPart() != null) {
+                        if (mana.getManaPart().mana(mana) != null) {
+                            String mana1 = mana.getManaPart().mana(mana);
+                            if (countmanaAbilities >= 1) {
+                                combinedManas.append("|" + mana1);
+                            } else {
+                                combinedManas.append(mana1);
+                            }
+                        }
+                    }
+                    countmanaAbilities++;
+                }
+            }
+        }
+        return combinedManas.toString();
+    }
+
+    public String[] getManacurveData() {
+        return manacurveData;
+    }
+
+    public void setManacurveData(String manacurveData, int turn) {
+        if (turn < manacurveDataturnCount) {
+            this.manacurveData[turn] = manacurveData;
+        }
     }
 }

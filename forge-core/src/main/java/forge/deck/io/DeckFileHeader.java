@@ -50,6 +50,10 @@ public class DeckFileHeader {
     private static final String CSTM_POOL = "Custom Pool";
     private static final String PLAYER_TYPE = "PlayerType";
     public static final String AI_HINTS = "AiHints";
+    /** Source URL the deck was imported from (e.g. Moxfield link). */
+    public static final String DECK_URL = "DeckURL";
+    /** Comma-separated eval_sequence scenario IDs from the companion decklist JSON. */
+    public static final String EVAL_SCENARIO = "EvalScenario";
 
     private final DeckFormat deckType;
     private final boolean customPool;
@@ -63,6 +67,8 @@ public class DeckFileHeader {
 
     private final boolean intendedForAi;
     private final String aiHints;
+    private final String deckUrl;
+    private final String evalScenario;
 
     public boolean isIntendedForAi() {
         return intendedForAi;
@@ -79,6 +85,8 @@ public class DeckFileHeader {
         this.customPool = kvPairs.getBoolean(DeckFileHeader.CSTM_POOL);
         this.intendedForAi = "computer".equalsIgnoreCase(kvPairs.get(DeckFileHeader.PLAYER)) || "ai".equalsIgnoreCase(kvPairs.get(DeckFileHeader.PLAYER_TYPE));
         this.aiHints = kvPairs.get(DeckFileHeader.AI_HINTS);
+        this.deckUrl = kvPairs.get(DeckFileHeader.DECK_URL);
+        this.evalScenario = kvPairs.get(DeckFileHeader.EVAL_SCENARIO);
 
         this.tags = new TreeSet<>();
         
@@ -146,5 +154,13 @@ public class DeckFileHeader {
 
     public final List<String> getKeyCards() {
         return keyCards;
+    }
+
+    public final String getDeckUrl() {
+        return deckUrl;
+    }
+
+    public final String getEvalScenario() {
+        return evalScenario;
     }
 }

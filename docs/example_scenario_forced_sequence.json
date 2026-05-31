@@ -1,0 +1,88 @@
+{
+  "format": "mtg-replay",
+  "version": "1.8.0",
+  "mode": "scenario",
+  "meta": {
+    "game_id": "example-scenario-forced-sequence",
+    "timestamp": "2026-05-02T21:30:00Z",
+    "game_type": "commander",
+    "players": {
+      "P1": {
+        "name": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+        "deck_name": "Horror: Dead is not an end",
+        "is_ai": true
+      },
+      "P2": {
+        "name": "Ai(2)-Aggro",
+        "deck_name": "Aggro",
+        "is_ai": true
+      }
+    }
+  },
+  "scenario": {
+    "type": "opening_hand_test",
+    "title": "Horror — Erzwungene T1-T3 Sequenz",
+    "description": "Testet exakte Spielreihenfolge: T1 Land, T2 Land + Spell, T3 Commander.\n\nDieses Scenario kombiniert:\n- Definierte Starthand (7 Karten)\n- Definierte First-Draws (3 Karten)\n- Erzwungene Spielreihenfolge (3 Events)\n\nDie AI folgt automatisch der Sequenz — perfekt für reproduzierbare Tests.",
+    "question": "Befolge die vorgegebene Spielreihenfolge — führt sie zum Erfolg?",
+    "answer": "Ja: T2 Command Tower, T2 Breeding Pool + Energy Tap cast.\nDie Sequenz zeigt optimalen Mana-Ramp für frühen Commander.",
+    "tags": ["forced_sequence", "commander", "turn3", "ramp"],
+    "ruling_references": [],
+    "player_count": 2,
+    "players": {
+      "P1": {
+        "commanders": ["The Pride of Hull Clade"],
+        "starting_hand": [
+          "Command Tower",
+          "Breeding Pool",
+          "Energy Tap",
+          "Beast Within",
+          "Tropical Island",
+          "City of Brass",
+          "Crashing Drawbridge"
+        ],
+        "first_draws": [
+          "Cactus Preserve",
+          "Cyclonic Rift",
+          "Ancient Adamantoise"
+        ],
+        "starting_life": 40
+      },
+      "P2": {
+        "commanders": [],
+        "starting_hand": [],
+        "first_draws": [],
+        "starting_life": 40
+      }
+    }
+  },
+  "events": [
+    {
+      "i": 1,
+      "t": "T2.MP1:1",
+      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "type": "PLAY_LAND",
+      "data": {
+        "card_name": "Command Tower"
+      }
+    },
+    {
+      "i": 2,
+      "t": "T2.MP1:2",
+      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "type": "PLAY_LAND",
+      "data": {
+        "card_name": "Breeding Pool"
+      }
+    },
+    {
+      "i": 3,
+      "t": "T2.MP1:3",
+      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "type": "CAST",
+      "data": {
+        "card_name": "Energy Tap"
+      }
+    }
+  ]
+}
+

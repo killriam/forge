@@ -1,6 +1,8 @@
 package forge.deck;
 
 import forge.card.CardEdition;
+import forge.card.ColorSet;
+import forge.card.MagicColor;
 import forge.item.PaperCard;
 import forge.itemmanager.IItemManager;
 
@@ -68,5 +70,25 @@ public class ColorDeckGenerator extends DeckProxy implements Comparable<ColorDec
     @Override
     public boolean isGeneratedDeck() {
         return true;
+    }
+
+    @Override
+    public ColorSet getColor() {
+        // Map deck name to color
+        switch (name) {
+            case "White":
+                return ColorSet.fromMask(MagicColor.WHITE);
+            case "Blue":
+                return ColorSet.fromMask(MagicColor.BLUE);
+            case "Black":
+                return ColorSet.fromMask(MagicColor.BLACK);
+            case "Red":
+                return ColorSet.fromMask(MagicColor.RED);
+            case "Green":
+                return ColorSet.fromMask(MagicColor.GREEN);
+            default:
+                // For "Random 1", "Random 2", "Random 3" - return null
+                return null;
+        }
     }
 }

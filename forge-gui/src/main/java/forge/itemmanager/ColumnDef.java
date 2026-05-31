@@ -49,7 +49,7 @@ public enum ColumnDef {
      * The column containing the inventory item name.
      */
     STRING("", "", 0, false, SortState.ASC,
-            from -> from.getKey() instanceof Comparable<?> ? (Comparable<?>) from.getKey() : from.getKey().getName(),
+            from -> from.getKey().getName(),
             from -> from.getKey().toString()),
     /**
      * The name column.
@@ -274,7 +274,10 @@ public enum ColumnDef {
      * The deck color column.
      */
     DECK_COLOR("lblColor", "ttColor", 70, true, SortState.ASC,
-            from -> toDeckColor(from.getKey()).getOrderWeight(),
+            from -> {
+                ColorSet cs = toDeckColor(from.getKey());
+                return cs != null ? cs.getOrderWeight() : 0;
+            },
             from -> toDeckColor(from.getKey())),
     /**
      * The deck format column.

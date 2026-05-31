@@ -189,6 +189,8 @@ public class ExceptionHandler implements UncaughtExceptionHandler {
     /** {@inheritDoc} */
     @Override
     public final void uncaughtException(final Thread t, final Throwable ex) {
+        System.out.println("[DEBUG][ExceptionHandler] uncaughtException in Thread: " + t.getName());
+        ex.printStackTrace();
         BugReporter.reportException(ex);
     }
 

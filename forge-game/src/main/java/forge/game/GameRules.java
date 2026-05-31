@@ -1,6 +1,8 @@
 package forge.game;
 
 import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class GameRules {
@@ -148,5 +150,186 @@ public class GameRules {
 
     public void setSimTimeout(final int duration) {
         this.simTimeout = duration;
+    }
+
+    private String replayLogPath = null;
+
+    public String getReplayLogPath() {
+        return replayLogPath;
+    }
+
+    public void setReplayLogPath(final String path) {
+        this.replayLogPath = path;
+    }
+
+    /**
+     * When true: this game was started by the headless AI simulator (CLI "sim" command).
+     * The replay JSON file will be saved with a "sim_" filename prefix instead of "replay_"
+     * so it can be distinguished from human-played games in the Game Recap list.
+     */
+    private boolean simulationMode = false;
+
+    public boolean isSimulationMode() {
+        return simulationMode;
+    }
+
+    public void setSimulationMode(final boolean simulationMode) {
+        this.simulationMode = simulationMode;
+    }
+
+    /** When true: skip game-log saving and achievement checks at end of game. */
+    private boolean scenarioMode = false;
+
+    public boolean isScenarioMode() {
+        return scenarioMode;
+    }
+
+    public void setScenarioMode(final boolean scenarioMode) {
+        this.scenarioMode = scenarioMode;
+    }
+
+    /** When true: auto-save a replay JSON file at end of every game. */
+    private boolean autoSaveReplay = true;
+
+    public boolean isAutoSaveReplay() {
+        return autoSaveReplay;
+    }
+
+    public void setAutoSaveReplay(final boolean autoSaveReplay) {
+        this.autoSaveReplay = autoSaveReplay;
+    }
+
+    /**
+     * When true: this game is a Replay — forces library order to match original game.
+     * The player replays from turn 1 with the same draw sequence to test alternate decisions.
+     */
+    private boolean replayMode = false;
+
+    public boolean isReplayMode() {
+        return replayMode;
+    }
+
+    public void setReplayMode(final boolean replayMode) {
+        this.replayMode = replayMode;
+    }
+
+    /**
+     * Forced library order for Replay Mode: maps player lobby-name to ordered list of card names.
+     * Index 0 = top of library (next draw).
+     */
+    private Map<String, List<String>> forcedLibraryOrder = null;
+
+    public Map<String, List<String>> getForcedLibraryOrder() {
+        return forcedLibraryOrder;
+    }
+
+    public void setForcedLibraryOrder(final Map<String, List<String>> forcedLibraryOrder) {
+        this.forcedLibraryOrder = forcedLibraryOrder;
+    }
+
+    /**
+     * Controls whether the forced library order is restored after any shuffle in Replay Mode.
+     * "always" = re-apply after every shuffle (default); "never" = only enforce initial order.
+     */
+    private String shuffleRestore = "always";
+
+    public String getShuffleRestore() {
+        return shuffleRestore;
+    }
+
+    public void setShuffleRestore(final String shuffleRestore) {
+        this.shuffleRestore = shuffleRestore;
+    }
+
+    // -------------------------------------------------------------------------
+    // Replay Mode — branch & comparison data
+    // -------------------------------------------------------------------------
+
+    /** Path to the source replay JSON file being replayed. */
+    private String originalReplayFile = null;
+
+    public String getOriginalReplayFile() { return originalReplayFile; }
+    public void setOriginalReplayFile(final String path) { this.originalReplayFile = path; }
+
+    /** Turn number from which the replay branches (1 = full replay from start). */
+    private int replayBranchTurn = 1;
+
+    public int getReplayBranchTurn() { return replayBranchTurn; }
+    public void setReplayBranchTurn(final int turn) { this.replayBranchTurn = turn; }
+
+    /** Pre-computed per-turn summary of the original game for post-replay comparison. */
+    private OriginalGameSummary originalGameSummary = null;
+
+    public OriginalGameSummary getOriginalGameSummary() { return originalGameSummary; }
+    public void setOriginalGameSummary(final OriginalGameSummary summary) { this.originalGameSummary = summary; }
+
+    /** 0-based index of the player who goes first in a replay (from original game_start). */
+    private int replayStartingPlayerIndex = 0;
+
+    public int getReplayStartingPlayerIndex() { return replayStartingPlayerIndex; }
+    public void setReplayStartingPlayerIndex(final int idx) { this.replayStartingPlayerIndex = idx; }
+
+    // -------------------------------------------------------------------------
+    // Scenario: defined starting hand + first draws
+    // -------------------------------------------------------------------------
+
+    /**
+     * Per-player starting hand cards for scenario mode (type {@code opening_hand_test}).
+     * Key = "P1", "P2", … — value = ordered card names placed at the front of the library
+     * so they are drawn as the opening hand.
+     * {@code null} means no scenario hand override.
+     */
+    private Map<String, List<String>> scenarioStartingHands = null;
+
+    public Map<String, List<String>> getScenarioStartingHands() { return scenarioStartingHands; }
+    public void setScenarioStartingHands(final Map<String, List<String>> hands) {
+        this.scenarioStartingHands = hands;
+    }
+
+    /**
+     * Per-player first-N draw cards for scenario mode.
+     * Key = "P1", "P2", … — value = ordered card names placed directly after the starting hand
+     * in the library so they are drawn in turns 1..N.
+     * {@code null} means no override.
+     */
+    private Map<String, List<String>> scenarioFirstDraws = null;
+
+    public Map<String, List<String>> getScenarioFirstDraws() { return scenarioFirstDraws; }
+    public void setScenarioFirstDraws(final Map<String, List<String>> draws) {
+        this.scenarioFirstDraws = draws;
+    }
+
+    /**
+     * When {@code true}: AI players skip the mulligan (keep hand automatically).
+     * The human player is unaffected and may still mulligan freely.
+     * Used for {@code opening_hand_test} scenarios where the AI hand is predefined.
+     */
+    private boolean scenarioSkipMulligan = false;
+
+    public boolean isScenarioSkipMulligan() { return scenarioSkipMulligan; }
+    public void setScenarioSkipMulligan(final boolean skip) { this.scenarioSkipMulligan = skip; }
+
+    // -------------------------------------------------------------------------
+    // Replay Mode — forced play sequence
+    // -------------------------------------------------------------------------
+
+    /**
+     * Forced play sequence for Replay AI mode: maps player lobby-name to an ordered list
+     * of card names to cast/activate. Populated from CAST/ACTIVATE events in the replay JSON.
+     *
+     * <p>The AI checks this queue at each decision point (before normal heuristics).
+     * Soft enforcement: if the next card is not castable, the AI falls back to normal logic
+     * and keeps the entry in the queue for retrying next priority window.
+     *
+     * {@code null} means no forced sequence (normal AI behaviour).
+     */
+    private Map<String, List<String>> forcedPlaySequence = null;
+
+    public Map<String, List<String>> getForcedPlaySequence() {
+        return forcedPlaySequence;
+    }
+
+    public void setForcedPlaySequence(final Map<String, List<String>> seq) {
+        this.forcedPlaySequence = seq;
     }
 }

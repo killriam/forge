@@ -14,6 +14,7 @@ import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityStackInstance;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.PlayerZoneBattlefield;
+import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 
 import java.util.Collections;
@@ -305,6 +306,13 @@ public class GameSnapshot {
                 // If the card is in an ordered zone, we need to find its position in the zone
                 // and set it in the new game.
                 zonePosition = fromCard.getZone().getCards().indexOf(fromCard);
+
+                // Clamp zone position to valid range to prevent IndexOutOfBoundsException
+                Zone targetZone = fromType.equals(ZoneType.Stack)
+                    ? toGame.getStackZone()
+                    : toPlayer.getZone(fromType);
+                int targetZoneSize = targetZone.size();
+                zonePosition = Math.min(zonePosition, targetZoneSize);
             }
 
             if (newCard == null) {

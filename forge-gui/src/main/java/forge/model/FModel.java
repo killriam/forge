@@ -151,8 +151,6 @@ public final class FModel {
             ForgeConstants.CACHE_BOOSTERBOX_PICS_DIR, ForgeConstants.CACHE_PRECON_PICS_DIR,
             ForgeConstants.CACHE_TOURNAMENTPACK_PICS_DIR);
 
-        // Instantiate preferences: quest and regular
-        // Preferences are initialized first so that the splash screen can be translated.
         try {
             if (adjustPrefs != null) {
                 adjustPrefs.apply(getPreferences());
@@ -188,12 +186,8 @@ public final class FModel {
             }
         };
 
-        // if (new AutoUpdater(true).attemptToUpdate()) {}
-        // Load types before loading cards
         loadDynamicGamedata();
 
-        // Load card database
-        // Lazy loading currently disabled
         reader = new CardStorageReader(ForgeConstants.CARD_DATA_DIR, progressBarBridge,
                 false);
         tokenReader = new CardStorageReader(ForgeConstants.TOKEN_DATA_DIR, progressBarBridge,
@@ -214,11 +208,9 @@ public final class FModel {
         // Do this first so PaperCards see the real preference
         CardTranslation.preloadTranslation(getPreferences().getPref(FPref.UI_LANGUAGE), ForgeConstants.LANG_DIR);
 
-        // Create profile dirs if they don't already exist
         for (final String dname : ForgeConstants.PROFILE_DIRS) {
             final File path = new File(dname);
             if (path.isDirectory()) {
-                // Already exists
                 continue;
             }
             if (!path.mkdirs()) {
@@ -252,11 +244,9 @@ public final class FModel {
         DeckPreferences.load();
         ItemManagerConfig.load();
 
-        // Preload AI profiles
         AiProfileUtil.loadAllProfiles(ForgeConstants.AI_PROFILE_DIR);
         AiProfileUtil.setAiSideboardingMode(AiProfileUtil.AISideboardingMode.normalizedValueOf(getPreferences().getPref(FPref.MATCH_AI_SIDEBOARDING_MODE)));
 
-        // Generate Deck Gen matrix
         if(getPreferences().getPrefBoolean(FPref.DECKGEN_CARDBASED)) {
             boolean commanderDeckGenMatrixLoaded=CardRelationMatrixGenerator.initialize();
             deckGenMatrixLoaded=CardArchetypeLDAGenerator.initialize();

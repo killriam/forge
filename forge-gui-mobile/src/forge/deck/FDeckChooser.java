@@ -1264,7 +1264,8 @@ public class FDeckChooser extends FScreen {
 
     public void saveState() {
         if (stateSetting == null) {
-            throw new NullPointerException("State setting missing. Specify first using the initialize() method.");
+            // Not yet initialized, skip saving
+            return;
         }
         prefs.setPref(stateSetting, getState());
         prefs.save();
@@ -1272,13 +1273,14 @@ public class FDeckChooser extends FScreen {
 
     private String getState() {
         StringBuilder state = new StringBuilder();
-        if (cmbDeckTypes.getSelectedItem() == null || cmbDeckTypes.getSelectedItem() == DeckType.NET_DECK) {
+        DeckType currentDeckType = cmbDeckTypes != null ? cmbDeckTypes.getSelectedItem() : selectedDeckType;
+        if (currentDeckType == null || currentDeckType == DeckType.NET_DECK || currentDeckType == DeckType.NET_COMMANDER_DECK) {
             //handle special case of net decks
             if (netDeckCategory == null) { return ""; }
             state.append(NetDeckCategory.PREFIX).append(netDeckCategory.getName());
         }
         else {
-            state.append(cmbDeckTypes.getSelectedItem().name());
+            state.append(currentDeckType.name());
         }
         state.append(";");
         joinSelectedDecks(state, SELECTED_DECK_DELIMITER);
@@ -1302,18 +1304,19 @@ public class FDeckChooser extends FScreen {
     }
 
     private void restoreSavedState() {
-        DeckType oldDeckType = selectedDeckType;
         if (stateSetting == null) {
             //if can't restore saved state, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+            refreshDecksList(selectedDeckType, true, null);
             return;
         }
 
         String savedState = prefs.getPref(stateSetting);
         refreshDecksList(getDeckTypeFromSavedState(savedState), true, null);
         if (!lstDecks.setSelectedStrings(getSelectedDecksFromSavedState(savedState))) {
-            //if can't select old decks, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+            // Just select the first item instead of refreshing with a different deck type
+            if (lstDecks.getItemCount() > 0) {
+                lstDecks.setSelectedIndex(0);
+            }
         }
     }
 

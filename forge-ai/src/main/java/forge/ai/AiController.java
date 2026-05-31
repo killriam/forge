@@ -76,6 +76,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static forge.ai.ComputerUtilMana.getAvailableManaEstimate;
 import static java.lang.Math.max;
 
@@ -88,6 +91,8 @@ import static java.lang.Math.max;
  * @version $Id$
  */
 public class AiController {
+    private static final Logger LOG = LoggerFactory.getLogger(AiController.class);
+
     private final Player player;
     private final Game game;
     private final AiCardMemory memory;
@@ -99,6 +104,8 @@ public class AiController {
     private boolean useLivingEnd;
     private List<SpellAbility> skipped;
     private boolean timeoutReached;
+    /** Tracks combo assembly and anti-synergy awareness from DeckRulesConfig. */
+    private ComboTracker comboTracker;
 
     public AiController(final Player computerPlayer, final Game game0) {
         player = computerPlayer;
@@ -133,6 +140,26 @@ public class AiController {
 
     public AiCardMemory getCardMemory() {
         return memory;
+    }
+
+    /** @return the combo/anti-synergy tracker, or null if not initialized. */
+    public ComboTracker getComboTracker() {
+        return comboTracker;
+    }
+
+    /**
+     * Initialize the ComboTracker from the player's deck rules.
+     * Should be called once at game start (e.g., from game setup or first AI action).
+     */
+    public void initComboTracker(Deck deck) {
+        if (deck != null) {
+            // Try loading external spec if present
+            DeckRulesLoader.loadIfNeeded(deck);
+            forge.deck.DeckRulesConfig config = deck.getDeckRulesConfig();
+            if (config != null && !config.isEmpty()) {
+                this.comboTracker = new ComboTracker(config);
+            }
+        }
     }
 
     public Combat getPredictedCombat() {
@@ -712,6 +739,12 @@ public class AiController {
 
         // TODO - "Look" at Targeted SA and "calculate" the threshold
         // if (bestRestriction < targetedThreshold) return false;
+
+        // Log the counterspell decision
+        if (bestSA != null) {
+            AiDecisionLogger.logDecision(player, bestSA, AiPlayDecision.WillPlay);
+        }
+
         return bestSA;
     }
 
@@ -1351,6 +1384,30 @@ public class AiController {
         // Reset priority mana reservation that's meant to work for one spell only
         memory.clearMemorySet(AiCardMemory.MemorySet.HELD_MANA_SOURCES_FOR_NEXT_SPELL);
 
+        // ── Forced play sequence from replay (Case 1) ─────────────────────
+        // When a replay JSON was loaded via -r, the AI follows the original play
+        // sequence before falling back to heuristic decisions.
+        final Map<String, List<String>> forcedSeq = game.getRules().getForcedPlaySequence();
+        if (forcedSeq != null) {
+            final String lobbyName = player.getLobbyPlayer().getName();
+            final List<String> seq = forcedSeq.get(lobbyName);
+            if (seq != null && !seq.isEmpty()) {
+                final String nextCardName = seq.get(0);
+                final List<SpellAbility> handAbilities = ComputerUtilAbility.getSpellAbilities(
+                        player.getCardsIn(ZoneType.Hand), player);
+                for (final SpellAbility sa : handAbilities) {
+                    if (sa.getHostCard().getName().equals(nextCardName) && sa.canPlay()) {
+                        seq.remove(0);
+                        LOG.debug("Forced play: '{}' for {}", nextCardName, lobbyName);
+                        return singleSpellAbilityList(sa);
+                    }
+                }
+                // Card not castable this priority window — soft enforcement: keep entry in queue
+                LOG.debug("Forced play deferred (not castable): '{}' for {}", nextCardName, lobbyName);
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         if (useSimulation) {
             return singleSpellAbilityList(simPicker.chooseSpellAbilityToPlay(null));
         }
@@ -1594,6 +1651,10 @@ public class AiController {
         FutureTask<SpellAbility> future = new FutureTask<>(() -> {
             //avoid ComputerUtil.aiLifeInDanger in loops as it slows down a lot.. call this outside loops will generally be fast...
             boolean isLifeInDanger = useLivingEnd && ComputerUtil.aiLifeInDanger(player, true, 0);
+
+            // Collect playable alternatives for logging (up to 4: 1 chosen + 3 alternatives)
+            List<SpellAbility> playableOptions = new ArrayList<>();
+
             for (final SpellAbility sa : ComputerUtilAbility.getOriginalAndAltCostAbilities(all, player)) {
                 // Don't add Counterspells to the "normal" playcard lookups
                 if (skipCounter && sa.getApi() == ApiType.Counter) {
@@ -1668,7 +1729,31 @@ public class AiController {
                 if (opinion != AiPlayDecision.WillPlay)
                     continue;
 
-                return sa;
+                // Collect playable options (up to 4 total)
+                if (playableOptions.size() < 4) {
+                    playableOptions.add(sa);
+                }
+
+                // First playable option is the chosen one
+                if (playableOptions.size() == 1) {
+                    // Log the AI's decision to play this spell/ability with alternatives
+                    // We'll continue collecting a few more alternatives before returning
+                    continue;
+                }
+
+                // Once we have 4 options (or checked all), log and return the first one
+                if (playableOptions.size() >= 4) {
+                    SpellAbility chosen = playableOptions.get(0);
+                    AiDecisionLogger.logDecisionWithAlternatives(player, chosen, AiPlayDecision.WillPlay, playableOptions);
+                    return chosen;
+                }
+            }
+
+            // If we found any playable options, return the first one
+            if (!playableOptions.isEmpty()) {
+                SpellAbility chosen = playableOptions.get(0);
+                AiDecisionLogger.logDecisionWithAlternatives(player, chosen, AiPlayDecision.WillPlay, playableOptions);
+                return chosen;
             }
 
             return null;

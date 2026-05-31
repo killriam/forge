@@ -1,0 +1,71 @@
+{
+  "format": "mtg-replay",
+  "version": "1.0.0",
+  "meta": {
+    "game_id": "test-game-001",
+    "timestamp": "2025-12-26T12:00:00Z",
+    "game_type": "Constructed",
+    "players": {
+      "P1": { "name": "Human", "deck_hash": "abc123" },
+      "P2": { "name": "AI", "deck_hash": "def456" }
+    },
+    "winner": null,
+    "turns": 3
+  },
+  "seed": 1234567890,
+  "card_index": {
+    "c1": { "name": "Lightning Bolt", "cost": "R", "type": "Instant" },
+    "c2": { "name": "Mountain", "cost": "", "type": "Basic Land — Mountain" },
+    "c3": { "name": "Mountain", "cost": "", "type": "Basic Land — Mountain" },
+    "c4": { "name": "Goblin Guide", "cost": "R", "type": "Creature — Goblin Scout" },
+    "c5": { "name": "Monastery Swiftspear", "cost": "R", "type": "Creature — Human Monk" },
+    "c6": { "name": "Lava Spike", "cost": "R", "type": "Sorcery" },
+    "c7": { "name": "Rift Bolt", "cost": "2R", "type": "Sorcery" },
+    "c8": { "name": "Searing Blaze", "cost": "RR", "type": "Instant" },
+    "c10": { "name": "Island", "cost": "", "type": "Basic Land — Island" },
+    "c11": { "name": "Island", "cost": "", "type": "Basic Land — Island" },
+    "c12": { "name": "Counterspell", "cost": "UU", "type": "Instant" },
+    "c13": { "name": "Snapcaster Mage", "cost": "1U", "type": "Creature — Human Wizard" },
+    "c14": { "name": "Brainstorm", "cost": "U", "type": "Instant" },
+    "c15": { "name": "Force of Will", "cost": "3UU", "type": "Instant" }
+  },
+  "initial_state": {
+    "turn": 1,
+    "phase": "MAIN1",
+    "activePlayer": "P1",
+    "players": {
+      "P1": { "life": 20, "landsPlayedThisTurn": 0 },
+      "P2": { "life": 20, "landsPlayedThisTurn": 0 }
+    },
+    "zones": {
+      "P1:hand": ["c1", "c2", "c4", "c5", "c6", "c7", "c8"],
+      "P1:library": ["c3"],
+      "P1:battlefield": [],
+      "P1:graveyard": [],
+      "P2:hand": ["c10", "c12", "c13", "c14", "c15"],
+      "P2:library": ["c11"],
+      "P2:battlefield": [],
+      "P2:graveyard": []
+    }
+  },
+  "log_l1": [
+    { "i": 1, "t": "T1.MP1:0", "a": "P1", "type": "MOVE", "data": { "card": "c2", "from": "P1:hand", "to": "P1:battlefield" } },
+    { "i": 2, "t": "T1.MP1:1", "a": "P1", "type": "CAST", "data": { "card": "c4", "from": "P1:hand" } },
+    { "i": 3, "t": "T1.MP1:2", "a": "P1", "type": "MOVE", "data": { "card": "c4", "from": "stack", "to": "P1:battlefield" } },
+    { "i": 4, "t": "T1.END:0", "a": "SYS", "type": "PHASE_CHANGE", "data": { "phase": "END" } },
+
+    { "i": 5, "t": "T2.UP:0", "a": "SYS", "type": "TURN_START", "data": { "turn": 2, "player": "P2" } },
+    { "i": 6, "t": "T2.DRAW:0", "a": "P2", "type": "DRAW", "data": { "card": "c11", "from": "P2:library", "to": "P2:hand" } },
+    { "i": 7, "t": "T2.MP1:0", "a": "P2", "type": "MOVE", "data": { "card": "c10", "from": "P2:hand", "to": "P2:battlefield" } },
+    { "i": 8, "t": "T2.END:0", "a": "SYS", "type": "PHASE_CHANGE", "data": { "phase": "END" } },
+
+    { "i": 9, "t": "T3.UP:0", "a": "SYS", "type": "TURN_START", "data": { "turn": 3, "player": "P1" } },
+    { "i": 10, "t": "T3.DRAW:0", "a": "P1", "type": "DRAW", "data": { "card": "c3", "from": "P1:library", "to": "P1:hand" } },
+    { "i": 11, "t": "T3.MP1:0", "a": "P1", "type": "MOVE", "data": { "card": "c3", "from": "P1:hand", "to": "P1:battlefield" } },
+    { "i": 12, "t": "T3.MP1:1", "a": "P1", "type": "CAST", "data": { "card": "c1", "from": "P1:hand", "target": "P2" } },
+    { "i": 13, "t": "T3.MP1:2", "a": "SYS", "type": "DAMAGE", "data": { "source": "c1", "target": "P2", "amount": 3 } },
+    { "i": 14, "t": "T3.MP1:3", "a": "SYS", "type": "LIFE_CHANGE", "data": { "player": "P2", "delta": -3, "new": 17 } },
+    { "i": 15, "t": "T3.MP1:4", "a": "P1", "type": "MOVE", "data": { "card": "c1", "from": "stack", "to": "P1:graveyard" } }
+  ]
+}
+

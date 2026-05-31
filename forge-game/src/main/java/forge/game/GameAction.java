@@ -2335,13 +2335,63 @@ public class GameAction {
 
             runPreOpeningHandActions(first);
 
+            // Replay mode: reorder libraries to match recorded draw order
+            String replayLogPath = game.getRules().getReplayLogPath();
+            if (replayLogPath != null) {
+                forge.game.log.ReplayLibraryReorderer.reorderLibraries(game, replayLogPath);
+                // Initialize per-mulligan draw tracker so that each mulligan shuffle
+                // is followed by a deterministic re-reorder from the correct position.
+                try {
+                    java.util.Map<String, java.util.List<String>> drawOrder =
+                            forge.game.log.ReplayLibraryReorderer.parseDrawOrder(replayLogPath);
+                    game.setReplayDrawTracker(new forge.game.log.ReplayDrawTracker(drawOrder));
+                } catch (java.io.IOException e) {
+                    // Non-fatal: mulligans will be non-deterministic but the game still runs
+                    org.slf4j.LoggerFactory.getLogger(GameAction.class)
+                            .warn("Could not initialise ReplayDrawTracker from {}: {}", replayLogPath, e.getMessage());
+                }
+            }
+
+            // Scenario mode: reorder libraries to enforce defined starting hand + first draws.
+            // Only active when starting hands are explicitly configured in GameRules.
+            // first_draws alone (without starting_hand) is intentionally not supported.
+            java.util.Map<String, java.util.List<String>> scenStartingHands = game.getRules().getScenarioStartingHands();
+            System.out.println("[GameAction] Checking scenario starting hands: " +
+                    (scenStartingHands != null ? scenStartingHands.keySet() : "null"));
+            if (scenStartingHands != null && !scenStartingHands.isEmpty()) {
+                System.out.println("[GameAction] ScenarioLibrarySetup.reorderLibraries() will be called for " + scenStartingHands.keySet());
+                java.util.Map<String, java.util.List<String>> scenFirstDraws = game.getRules().getScenarioFirstDraws();
+                forge.game.log.ScenarioLibrarySetup.reorderLibraries(
+                        game,
+                        scenStartingHands,
+                        scenFirstDraws != null ? scenFirstDraws : java.util.Collections.emptyMap());
+            } else {
+                System.out.println("[GameAction] ScenarioLibrarySetup will NOT be called (no starting hands in rules)");
+            }
+
             game.setAge(GameStage.Mulligan);
             for (final Player p1 : game.getPlayers()) {
+                // FIX: In scenario mode, draw the number of cards defined in scenario starting_hand
+                int handSize = p1.getStartingHandSize();  // default: 7
+
+                if (scenStartingHands != null && !scenStartingHands.isEmpty()) {
+                    // Map player to scenario ID ("P1", "P2", etc.)
+                    int playerIndex = game.getPlayers().indexOf(p1);
+                    String playerId = "P" + (playerIndex + 1);
+                    java.util.List<String> scenHand = scenStartingHands.get(playerId);
+
+                    if (scenHand != null && !scenHand.isEmpty()) {
+                        handSize = scenHand.size();
+                        System.out.println("[GameAction] " + p1.getName() + " (" + playerId +
+                                ") will draw " + handSize + " cards (scenario starting hand size)");
+                    }
+                }
+
                 // Choose starting hand for each player with multiple hands
                 if (StaticData.instance().getFilteredHandsEnabled() ) {
                     drawStartingHand(p1);
                 } else {
-                    p1.drawCards(p1.getStartingHandSize());
+                    p1.drawCards(handSize);  // ← Now draws correct number of cards!
                 }
 
                 BackupPlanService backupPlans = new BackupPlanService(p1);

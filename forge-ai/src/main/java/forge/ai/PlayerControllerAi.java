@@ -1403,6 +1403,9 @@ public class PlayerControllerAi extends PlayerController {
         // TODO check if profile detection set to Auto
         setupAutoProfile(myDeck);
 
+        // Initialize combo/anti-synergy tracker from deck rules (Commander Decklist Notation)
+        brains.initComboTracker(myDeck);
+
         return brains.complainCardsCantPlayWell(myDeck);
     }
 

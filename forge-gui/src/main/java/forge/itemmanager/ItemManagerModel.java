@@ -1,4 +1,5 @@
 /*
+
  * Forge: Play Magic: the Gathering.
  * Copyright (C) 2011
  *
@@ -123,10 +124,16 @@ public final class ItemManagerModel<T extends InventoryItem> {
 
     public void refreshSort() {
         final List<Entry<T, Integer>> list = getOrderedList();
-        if (list.isEmpty()) { return; }
-        try { list.sort(new MyComparator()); }
+        if (list.isEmpty()) {
+            return;
+        }
+        try {
+            list.sort(new MyComparator());
+        }
         //fix NewDeck editor not loading on Android if a user deleted unwanted sets on edition folder
-        catch (IllegalArgumentException ex) {}
+        catch (IllegalArgumentException ex) {
+            System.err.println("Sort error in ItemManagerModel: " + ex.getMessage());
+        }
     }
 
     //Manages sorting orders for multiple depths of sorting

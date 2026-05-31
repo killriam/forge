@@ -60,6 +60,17 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
     private boolean includeCardsFromUnspecifiedSet = false;
     private transient UnplayableAICards unplayableAI = null;
 
+    /** Path to an external Commander Decklist Notation JSON file (set via AiHints DecklistSpec$ key). */
+    private String decklistSpecPath = null;
+    /** Deck-level behavioral rules parsed from the decklist spec or inline AiHints. Lazy-loaded. */
+    private transient DeckRulesConfig deckRulesConfig = null;
+    private transient boolean deckRulesResolved = false;
+
+    /** Source URL of the external deck page this list was imported from (e.g. Moxfield). */
+    private String deckUrl = null;
+    /** Comma-separated eval_sequence scenario IDs from the companion decklist JSON. */
+    private String evalScenarioIds = null;
+
     public Deck() {
         this("");
     }
@@ -253,6 +264,11 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
         }
         result.setAiHints(StringUtils.join(aiHints, " | "));
         result.setDraftNotes(draftNotes);
+        result.decklistSpecPath = this.decklistSpecPath;
+        result.deckRulesConfig = this.deckRulesConfig;
+        result.deckRulesResolved = this.deckRulesResolved;
+        result.deckUrl = this.deckUrl;
+        result.evalScenarioIds = this.evalScenarioIds;
         //noinspection ConstantValue
         if(tags != null) //Can happen deserializing old Decks.
             result.tags.addAll(this.tags);
@@ -619,8 +635,16 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
         }
         String[] hints = aiHintsInfo.split("\\|");
         for (String hint : hints) {
-            aiHints.add(hint.trim());
+            String trimmed = hint.trim();
+            aiHints.add(trimmed);
+            // Extract DecklistSpec path if present
+            if (trimmed.toLowerCase().startsWith("decklistspec$")) {
+                this.decklistSpecPath = trimmed.substring(trimmed.indexOf('$') + 1).trim();
+            }
         }
+        // Invalidate cached rules so they get re-resolved
+        this.deckRulesConfig = null;
+        this.deckRulesResolved = false;
     }
 
     public Set<String> getAiHints() {
@@ -634,6 +658,53 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
             }
         }
         return "";
+    }
+
+    // ---- Decklist Spec / Deck Rules ----
+
+    /** @return Path to the external Commander Decklist Notation JSON, or null. */
+    public String getDecklistSpecPath() {
+        return decklistSpecPath;
+    }
+
+    /** @return Source URL this deck was imported from (e.g. Moxfield link), or null. */
+    public String getDeckUrl() { return deckUrl; }
+    public void setDeckUrl(String deckUrl) { this.deckUrl = deckUrl; }
+
+    /** @return Comma-separated eval_sequence scenario IDs, or null. */
+    public String getEvalScenarioIds() { return evalScenarioIds; }
+    public void setEvalScenarioIds(String evalScenarioIds) { this.evalScenarioIds = evalScenarioIds; }
+
+    public void setDecklistSpecPath(String path) {
+        this.decklistSpecPath = path;
+        // Invalidate cached rules when spec path changes
+        this.deckRulesConfig = null;
+        this.deckRulesResolved = false;
+    }
+
+    /**
+     * Get deck-level behavioral rules. Returns the externally-set config, or
+     * attempts to build one from inline AiHints, or an empty default.
+     * This method does NOT load from external JSON (that is done by forge-ai's
+     * DeckRulesLoader which calls {@link #setDeckRulesConfig(DeckRulesConfig)}).
+     */
+    public DeckRulesConfig getDeckRulesConfig() {
+        if (!deckRulesResolved) {
+            deckRulesResolved = true;
+            if (deckRulesConfig == null) {
+                // Try to build from inline AiHints
+                deckRulesConfig = DeckRulesConfig.fromInlineHints(aiHints);
+            }
+        }
+        return deckRulesConfig != null ? deckRulesConfig : DeckRulesConfig.empty();
+    }
+
+    /**
+     * Set deck rules config (typically called by DeckRulesLoader after parsing JSON).
+     */
+    public void setDeckRulesConfig(DeckRulesConfig config) {
+        this.deckRulesConfig = config;
+        this.deckRulesResolved = true;
     }
 
     public void setAiHint(String hintType, String hintValue) {

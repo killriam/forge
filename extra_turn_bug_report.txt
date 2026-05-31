@@ -1,0 +1,31 @@
+**Describe the bug**
+In multiplayer games, adding extra turns (e.g., via Lighthouse Chronologist) was not handled correctly. The method `getCurrentTurnPosition()` was mistakenly used, but it does not exist and is not suitable for managing turn order. Inserting and managing extra turns happened at the wrong place in the turn sequence.
+
+**To Reproduce**
+Steps to reproduce the bug:
+1. Start a multiplayer game with a card that grants extra turns (e.g., Lighthouse Chronologist).
+2. Activate the ability to gain an extra turn.
+3. Observe the turn order and the behavior of extra turns.
+4. Bug: Extra turns are not inserted correctly or cause compilation errors.
+
+**Expected behavior**
+Extra turns should be correctly inserted into the turn order so that the player who receives the extra turn can take it at the appropriate time. No compilation errors should occur.
+
+**Screenshots**
+Not applicable / None available.
+
+**Desktop (please complete the following information):**
+ - OS: [e.g. Windows 10]
+ - Browser: [not applicable]
+ - Version: [Forge build before 2026-04-01]
+
+**Smartphone (please complete the following information):**
+ - Device: [not applicable]
+ - OS: [not applicable]
+ - Version: [not applicable]
+
+**Additional context**
+- Turn order is managed via the order of players in the `PlayerCollection` (`ingamePlayers`) and a stack of `ExtraTurn` objects in `PhaseHandler`.
+- The incorrect use of `getCurrentTurnPosition()` led to compilation errors and faulty logic.
+- The fix was to set the position of the extra turn directly in `PhaseHandler.addExtraTurn()` based on the stack size and to adjust the tests accordingly.
+- After the fix, handling of extra turns is robust and compatible with multiplayer scenarios.

@@ -84,6 +84,37 @@ public class BuildInfo {
         return "Forge/" + getVersionString();
     }
 
+    /**
+     * Get the git short commit hash from the JAR manifest.
+     * Returns "unknown" if not available (e.g. running from IDE without build).
+     */
+    public static String getGitCommit() {
+        try {
+            java.util.jar.Manifest mf = getManifest();
+            if (mf != null) {
+                String commit = mf.getMainAttributes().getValue("Git-Commit");
+                if (commit != null && !commit.isEmpty() && !"${git.short.hash}".equals(commit)) {
+                    return commit;
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return "unknown";
+    }
+
+    private static java.util.jar.Manifest getManifest() {
+        try {
+            java.io.InputStream is = BuildInfo.class.getResourceAsStream("/META-INF/MANIFEST.MF");
+            if (is != null) {
+                return new java.util.jar.Manifest(is);
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
+    }
+
     private static String readFromInputStream(InputStream inputStream) throws IOException {
         StringBuilder resultStringBuilder = new StringBuilder();
         try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream))) {

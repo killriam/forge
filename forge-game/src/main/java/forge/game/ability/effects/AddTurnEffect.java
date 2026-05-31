@@ -38,13 +38,22 @@ public class AddTurnEffect extends SpellAbilityEffect {
     @Override
     public void resolve(SpellAbility sa) {
         final int numTurns = AbilityUtils.calculateAmount(sa.getHostCard(), sa.getParam("NumTurns"), sa);
+        System.out.println("[AddTurnEffect] resolve() called: numTurns=" + numTurns
+                + " activatingPlayer=" + sa.getActivatingPlayer()
+                + " hostCard=" + sa.getHostCard());
 
-        for (final Player p : getTargetPlayers(sa)) {
+        java.util.List<Player> targets = getTargetPlayers(sa);
+        System.out.println("[AddTurnEffect] getTargetPlayers() returned: " + targets);
+
+        for (final Player p : targets) {
             if (!p.isInGame()) {
+                System.out.println("[AddTurnEffect] Skipping " + p + " — not in game");
                 continue;
             }
             for (int i = 0; i < numTurns; i++) {
                 ExtraTurn extra = p.getGame().getPhaseHandler().addExtraTurn(p);
+                System.out.println("[AddTurnEffect] addExtraTurn(" + p + ") called → extraTurn=" + extra);
+                // Die TurnOrderPosition wird bereits in addExtraTurn gesetzt (extraTurns.size())
                 if (sa.hasParam("ExtraTurnDelayedTrigger")) {
                     final Trigger delTrig = TriggerHandler.parseTrigger(sa.getSVar(sa.getParam("ExtraTurnDelayedTrigger")), sa.getHostCard(), true);
                     SpellAbility overridingSA = AbilityFactory.getAbility(sa.getSVar(sa.getParam("ExtraTurnDelayedTriggerExcute")), sa.getHostCard());

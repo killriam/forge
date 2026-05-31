@@ -1,0 +1,270 @@
+{
+  "format": "mtg-commander-decklist",
+  "version": "1.0.0",
+  "meta": {
+    "deck_id": "test-deck-v1",
+    "deck_name": "Test Commander Deck",
+    "format": "Commander",
+    "colors": ["R"],
+    "created": "2026-04-07",
+    "updated": "2026-04-07",
+    "author": "Test",
+    "description": "Simple test deck for validation"
+  },
+  "commander": [
+    {
+      "quantity": 1,
+      "name": "Krenko, Mob Boss",
+      "edition": "M13",
+      "collector_number": "138",
+      "primary_mechanic": "token"
+    }
+  ],
+  "main": [
+    {
+      "quantity": 1,
+      "name": "Sol Ring",
+      "edition": "C21",
+      "collector_number": "263",
+      "primary_mechanic": "ramp"
+    },
+    {
+      "quantity": 1,
+      "name": "Mana Crypt",
+      "edition": "EMA",
+      "collector_number": "225",
+      "primary_mechanic": "ramp"
+    },
+    {
+      "quantity": 1,
+      "name": "Lightning Bolt",
+      "edition": "A25",
+      "collector_number": "141",
+      "primary_mechanic": "removal"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Guide",
+      "edition": "ZEN",
+      "collector_number": "126",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Arid Mesa",
+      "edition": "ZEN",
+      "collector_number": "206",
+      "primary_mechanic": "fixing"
+    },
+    {
+      "quantity": 1,
+      "name": "Scalding Tarn",
+      "edition": "ZEN",
+      "collector_number": "211",
+      "primary_mechanic": "fixing"
+    },
+    {
+      "quantity": 1,
+      "name": "Mountain",
+      "edition": "UNH",
+      "collector_number": "94",
+      "primary_mechanic": "land"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Warchief",
+      "edition": "DOM",
+      "collector_number": "130",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Spikeshot Goblin",
+      "edition": "TMP",
+      "collector_number": "189",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Ringleader",
+      "edition": "EVE",
+      "collector_number": "93",
+      "primary_mechanic": "card-draw"
+    },
+    {
+      "quantity": 1,
+      "name": "Warstorm Surge",
+      "edition": "ORI",
+      "collector_number": "153",
+      "primary_mechanic": "win-condition"
+    },
+    {
+      "quantity": 1,
+      "name": "Impact Tremors",
+      "edition": "DTK",
+      "collector_number": "139",
+      "primary_mechanic": "win-condition"
+    },
+    {
+      "quantity": 1,
+      "name": "Gamble",
+      "edition": "UDS",
+      "collector_number": "102",
+      "primary_mechanic": "card-draw"
+    },
+    {
+      "quantity": 1,
+      "name": "Faithless Looting",
+      "edition": "SOM",
+      "collector_number": "86",
+      "primary_mechanic": "looting"
+    },
+    {
+      "quantity": 1,
+      "name": "Shattering Blow",
+      "edition": "ORI",
+      "collector_number": "158",
+      "primary_mechanic": "removal"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Tunnel Digger",
+      "edition": "WTH",
+      "collector_number": "91",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Torch Courier",
+      "edition": "GRN",
+      "collector_number": "117",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Sledder",
+      "edition": "EXO",
+      "collector_number": "103",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Matron",
+      "edition": "ULG",
+      "collector_number": "87",
+      "primary_mechanic": "tutor"
+    },
+    {
+      "quantity": 1,
+      "name": "Pashalik Mons",
+      "edition": "BBD",
+      "collector_number": "97",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Conspicuous Snoop",
+      "edition": "M21",
+      "collector_number": "139",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Anointed Procession",
+      "edition": "AKH",
+      "collector_number": "2",
+      "primary_mechanic": "synergy"
+    },
+    {
+      "quantity": 1,
+      "name": "Doubling Season",
+      "edition": "BBD",
+      "collector_number": "183",
+      "primary_mechanic": "synergy"
+    },
+    {
+      "quantity": 1,
+      "name": "Haze of Rage",
+      "edition": "TSB",
+      "collector_number": "94",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin King",
+      "edition": "ME4",
+      "collector_number": "81",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Contested Cliffs",
+      "edition": "LGN",
+      "collector_number": "235",
+      "primary_mechanic": "fixing"
+    },
+    {
+      "quantity": 1,
+      "name": "Siege-Gang Commander",
+      "edition": "TSR",
+      "collector_number": "181",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Warpickaxe",
+      "edition": "WTH",
+      "collector_number": "93",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Goblin Anarchomancer",
+      "edition": "MH2",
+      "collector_number": "99",
+      "primary_mechanic": "threat"
+    },
+    {
+      "quantity": 1,
+      "name": "Legion Warboss",
+      "edition": "GRN",
+      "collector_number": "109",
+      "primary_mechanic": "threat"
+    }
+  ],
+  "deck_rules": {
+    "mulligan": {
+      "card_values": {
+        "land": 1.0,
+        "cmc_0_to_2": 0.8,
+        "cmc_3": 0.5,
+        "other": 0.3
+      },
+      "card_overrides": [
+        {
+          "name": "Sol Ring",
+          "value": 1.2,
+          "reason": "Best turn-1 play"
+        },
+        {
+          "name": "Mana Crypt",
+          "value": 1.1,
+          "reason": "Excellent fast mana"
+        }
+      ],
+      "thresholds": [
+        {
+          "round": 0,
+          "hand_size": 7,
+          "min_value": 3.5
+        },
+        {
+          "round": 1,
+          "hand_size": 6,
+          "min_value": 3.0
+        }
+      ]
+    }
+  }
+}
+

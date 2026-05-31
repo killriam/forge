@@ -212,6 +212,11 @@ public abstract class LobbyScreen extends LaunchScreen implements ILobbyView {
                     }
                     updateVariantSelection();
                     updateLayoutForVariants();
+                } else {
+                    // Default to Commander if no variants are saved
+                    lobby.applyVariant(GameType.Commander);
+                    updateVariantSelection();
+                    updateLayoutForVariants();
                 }
             });
         });

@@ -229,6 +229,8 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         SUBMENU_GAUNTLET ("false"),
         SUBMENU_QUEST ("false"),
         SUBMENU_PUZZLE("false"),
+        SUBMENU_REPLAY("false"),
+        GAME_RECAP_DAYS("2"),
         SUBMENU_SETTINGS ("false"),
         SUBMENU_UTILITIES ("false"),
 
@@ -329,6 +331,7 @@ public class ForgePreferences extends PreferencesStore<ForgePreferences.FPref> {
         SHORTCUT_SHOWHOTKEYS("72"),
         SHORTCUT_PANELTABS("17 84"),
         SHORTCUT_CARDOVERLAYS("17 79"),
+        SHORTCUT_LEARNING_MARKER("17 77"),
 
         LAST_IMPORTED_CUBE_ID(""),
 

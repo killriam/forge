@@ -12,6 +12,7 @@ public enum EMenuGroup {
     ONLINE ("lblOnlineMultiplayer"),
     QUEST ("lblQuestMode"),
     PUZZLE ("lblPuzzleMode"),
+    REPLAY ("lblReplayMode"),
     GAUNTLET ("lblGauntlets"),
     SETTINGS ("lblGameSettings");
 

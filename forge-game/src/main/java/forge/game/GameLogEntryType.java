@@ -19,8 +19,10 @@ public enum GameLogEntryType {
     STACK_ADD("Add To Stack"),
     EFFECT_REPLACED("Replacement Effect"),
     MANA("Mana"),
-    PHASE("Phase");
-    
+    PHASE("Phase"),
+    ANALYSIS("Analysis"),
+    AI_DECISION("AI Decision");
+
     private final String caption; 
     GameLogEntryType(String name) {
         this.caption = name;

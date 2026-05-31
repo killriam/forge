@@ -36,7 +36,7 @@
                         </goals>
                         <configuration>
                             <name>month.date</name>
-                            <pattern>MM.dd</pattern>
+                            <pattern>MM.dd-HHmm</pattern>
                         </configuration>
                     </execution>
                     <execution>
@@ -167,6 +167,7 @@
                             <Implementation-Title>${project.name}</Implementation-Title>
                             <Implementation-Version>${snapshot-version}</Implementation-Version>
                             <Implementation-Vendor>${project.organization.name}</Implementation-Vendor>
+                            <Git-Commit>${git.short.hash}</Git-Commit>
                             <Add-Opens>
 <![CDATA[
   java.desktop/java.beans
@@ -242,9 +243,19 @@ try {
         project.properties['changelog.from.tag'] = tag
         println "Using changelog from tag: ${tag}"
     }
+
+    // Determine git short hash for build identification
+    def gitHash = "git rev-parse --short HEAD".execute().text.trim()
+    if (gitHash) {
+        project.properties['git.short.hash'] = gitHash
+        println "Git short hash: ${gitHash}"
+    } else {
+        project.properties['git.short.hash'] = 'unknown'
+    }
 } catch (Exception e) {
     println "WARNING: Could not determine changelog tag: ${e.message}"
     project.properties['changelog.from.tag'] = 'HEAD'
+    project.properties['git.short.hash'] = 'unknown'
 }
 ]]>
                             </source>

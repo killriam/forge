@@ -23,6 +23,9 @@ import java.util.List;
 import java.util.Observable;
 import java.util.Set;
 
+import forge.game.log.ReplayNotationExporter;
+import forge.game.player.Player;
+
 /**
  * <p>
  * GameLog class.
@@ -43,6 +46,7 @@ public class GameLog extends Observable implements Serializable {
      * 3 - Poison Counters
      * 4 - Mana abilities
      * 6 - All Phase information
+     * 7 - Analysis (includes zone changes and board state deltas)
      */
 
     public GameLog() {
@@ -105,5 +109,42 @@ public class GameLog extends Observable implements Serializable {
 
     public GameLogFormatter getEventVisitor() {
         return formatter;
+    }
+
+    /**
+     * Enable JSON Replay Notation logging alongside text logging.
+     * @param exporter The replay notation exporter to use
+     */
+    public void enableReplayNotation(ReplayNotationExporter exporter) {
+        formatter.setReplayExporter(exporter);
+    }
+
+    /**
+     * Get the replay notation exporter if enabled.
+     * @return The exporter, or null if not enabled
+     */
+    public ReplayNotationExporter getReplayExporter() {
+        return formatter.getReplayExporter();
+    }
+
+    /**
+     * Place a player-defined learning marker / bookmark at the current game state.
+     * <p>
+     * Adds a visible {@link GameLogEntryType#INFORMATION} entry to the in-game log so
+     * the player can see the bookmark in the Log panel, and — when Replay Notation
+     * logging is active — also writes a {@code LEARNING_MARKER} event to the JSON log.
+     *
+     * @param player   The player placing the bookmark
+     * @param label    Short description (may be empty but not null)
+     * @param category One of the LEARNING_MARKER categories, e.g. {@code "general"}
+     */
+    public void logLearningMarker(final Player player, final String label, final String category) {
+        final String displayLabel = (label == null || label.isEmpty()) ? "(no label)" : label;
+        add(GameLogEntryType.INFORMATION,
+                "[Bookmark] " + displayLabel + " \u2013 " + player.getName());
+        final ReplayNotationExporter exporter = getReplayExporter();
+        if (exporter != null) {
+            exporter.logLearningMarker(player, label != null ? label : "", category);
+        }
     }
 }

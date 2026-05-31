@@ -31,9 +31,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @SuppressWarnings("serial")
 public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
+    // Guard to avoid starting multiple concurrent background loads
+    private final AtomicBoolean loadingDecks = new AtomicBoolean(false);
+
+    /**
+     * Deck name(s) to select once the asynchronous deck list load completes.
+     * Set by restoreSavedState() so that the selection survives the background load race.
+     */
+    private List<String> pendingDeckSelection = null;
     private DecksComboBox decksComboBox;
     private DeckType selectedDeckType;
     private ItemManagerContainer lstDecksContainer;
@@ -119,60 +128,104 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
     private void updateDecks(final Iterable<DeckProxy> decks, final ItemManagerConfig config) {
         lstDecks.setAllowMultipleSelections(false);
-
         lstDecks.setPool(decks);
         lstDecks.setup(config);
-
         btnRandom.setText(localizer.getMessage("lblRandomDeck"));
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
 
-        lstDecks.setSelectedIndex(0);
+        // Apply any pending selection set by restoreSavedState() before the async load finished
+        if (pendingDeckSelection != null) {
+            final List<String> toSelect = pendingDeckSelection;
+            pendingDeckSelection = null;
+            boolean selected = lstDecks.setSelectedStrings(toSelect);
+            if (!selected && !toSelect.isEmpty()) {
+                // Fall back to partial-name matching
+                final String target = toSelect.get(0);
+                for (DeckProxy deck : lstDecks.getFilteredItems().toFlatList()) {
+                    final String name = deck.toString();
+                    if (name.equalsIgnoreCase(target) || name.contains(target) || target.contains(name)) {
+                        lstDecks.setSelectedString(name);
+                        selected = true;
+                        break;
+                    }
+                }
+            }
+            if (!selected) {
+                lstDecks.setSelectedIndex(0);
+            }
+        } else {
+            lstDecks.setSelectedIndex(0);
+        }
     }
 
+
     private void updateCustom() {
-        DeckFormat deckFormat = lstDecks.getGameType().getDeckFormat();
-        switch (deckFormat) {
-        case Commander:
-            updateDecks(DeckProxy.getAllCommanderDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        case Oathbreaker:
-            updateDecks(DeckProxy.getAllOathbreakerDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        case Brawl:
-            updateDecks(DeckProxy.getAllBrawlDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        case TinyLeaders:
-            updateDecks(DeckProxy.getAllTinyLeadersDecks(), ItemManagerConfig.COMMANDER_DECKS);
-            break;
-        default:
-            updateDecks(DeckProxy.getAllConstructedDecks(), ItemManagerConfig.CONSTRUCTED_DECKS);
-            break;
+        if (!loadingDecks.compareAndSet(false, true)) {
+            return;
         }
+
+        DeckFormat deckFormat = lstDecks.getGameType().getDeckFormat();
+
+        FThreads.invokeInBackgroundThread(() -> {
+            try {
+                final Iterable<DeckProxy> decks;
+                final ItemManagerConfig config;
+
+                switch (deckFormat) {
+                case Commander:
+                    decks = DeckProxy.getAllCommanderDecks();
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                case Oathbreaker:
+                    decks = DeckProxy.getAllOathbreakerDecks();
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                case Brawl:
+                    decks = DeckProxy.getAllBrawlDecks();
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                case TinyLeaders:
+                    decks = DeckProxy.getAllTinyLeadersDecks();
+                    config = ItemManagerConfig.COMMANDER_DECKS;
+                    break;
+                default:
+                    decks = DeckProxy.getAllConstructedDecks();
+                    config = ItemManagerConfig.CONSTRUCTED_DECKS;
+                    break;
+                }
+
+                FThreads.invokeInEdtLater(() -> {
+                    updateDecks(decks, config);
+                    loadingDecks.set(false);
+                });
+            } catch (Exception e) {
+                FThreads.invokeInEdtLater(() -> {
+                    System.err.println("[DECK-PRESELECT] updateCustom: ERROR loading decks: " + e.getMessage());
+                    e.printStackTrace();
+                    loadingDecks.set(false);
+                });
+            }
+        });
     }
 
     private void updateColors(Predicate<PaperCard> formatFilter) {
         lstDecks.setAllowMultipleSelections(true);
-
-        lstDecks.setPool(ColorDeckGenerator.getColorDecks(lstDecks, formatFilter, isAi));
+        Iterable<DeckProxy> colorDecks = ColorDeckGenerator.getColorDecks(lstDecks, formatFilter, isAi);
+        lstDecks.setPool(colorDecks);
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
-
         btnRandom.setText(localizer.getMessage("lblRandomColors"));
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelectColors(lstDecks));
-
         // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0, 1});
     }
 
     private void updateMatrix(GameFormat format) {
         lstDecks.setAllowMultipleSelections(false);
-
-        lstDecks.setPool(ArchetypeDeckGenerator.getMatrixDecks(format, isAi));
+        Iterable<DeckProxy> decks = ArchetypeDeckGenerator.getMatrixDecks(format, isAi);
+        lstDecks.setPool(decks);
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
-
         btnRandom.setText("Random");
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
-
-        // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0});
     }
 
@@ -181,15 +234,12 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
         if (!deckFormat.hasCommander()) {
             return;
         }
-
         lstDecks.setAllowMultipleSelections(false);
-        lstDecks.setPool(CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, false));
+        Iterable<DeckProxy> decks = CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, false);
+        lstDecks.setPool(decks);
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
-
         btnRandom.setText("Random");
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
-
-        // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0});
     }
 
@@ -198,15 +248,12 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
         if (!deckFormat.hasCommander()) {
             return;
         }
-
         lstDecks.setAllowMultipleSelections(false);
-        lstDecks.setPool(CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, true));
+        List<DeckProxy> decks = (List<DeckProxy>) CommanderDeckGenerator.getCommanderDecks(deckFormat, isAi, true);
+        lstDecks.setPool(decks);
         lstDecks.setup(ItemManagerConfig.STRING_ONLY);
-
         btnRandom.setText("Random");
         btnRandom.setCommand((UiCommand) () -> DeckgenUtil.randomSelect(lstDecks));
-
-        // default selection = basic two color deck
         lstDecks.setSelectedIndices(new Integer[]{0});
     }
 
@@ -538,8 +585,12 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
     }
 
     private void refreshDecksList(final DeckType deckType, final boolean forceRefresh, final DecksComboBoxEvent ev) {
-        if (decksComboBox == null) { return; } // Not yet populated
-        if (selectedDeckType == deckType && !forceRefresh) { return; }
+        if (decksComboBox == null) {
+            return;
+        }
+        if (selectedDeckType == deckType && !forceRefresh) {
+            return;
+        }
         selectedDeckType = deckType;
 
         if (ev == null) {
@@ -547,6 +598,7 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
             decksComboBox.refresh(deckType, isForCommander);
             refreshingDeckType = false;
         }
+
         lstDecks.setCaption(deckType.toString());
 
         switch (deckType) {
@@ -665,9 +717,14 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
     public void saveState() {
         if (stateSetting == null) {
-            throw new NullPointerException("State setting missing. Specify first using the initialize() method.");
+            return;
         }
-        prefs.setPref(stateSetting, getState());
+        // Don't save while async deck loading is in progress
+        if (pendingDeckSelection != null && !pendingDeckSelection.isEmpty()) {
+            return;
+        }
+        final String stateValue = getState();
+        prefs.setPref(stateSetting, stateValue);
         prefs.save();
     }
 
@@ -724,18 +781,64 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
     }
 
     public void restoreSavedState() {
-        final DeckType oldDeckType = selectedDeckType;
         if (stateSetting == null) {
             //if can't restore saved state, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+            refreshDecksList(selectedDeckType, true, null);
             return;
         }
 
         final String savedState = prefs.getPref(stateSetting);
-        refreshDecksList(getDeckTypeFromSavedState(savedState), true, null);
-        if (!lstDecks.setSelectedStrings(getSelectedDecksFromSavedState(savedState))) {
-            //if can't select old decks, just refresh deck list
-            refreshDecksList(oldDeckType, true, null);
+        DeckType deckTypeFromState = getDeckTypeFromSavedState(savedState);
+
+        // Try to select the saved deck
+        List<String> savedDeckNames = getSelectedDecksFromSavedState(savedState);
+
+        // GUARD: If we're already showing the correct deck type and have the right deck selected,
+        // don't trigger a refresh that might clear the selection
+        if (selectedDeckType == deckTypeFromState && lstDecks != null && lstDecks.getItemCount() > 0) {
+            final List<String> currentlySelected = new ArrayList<>();
+            for (DeckProxy deck : lstDecks.getSelectedItems()) {
+                currentlySelected.add(deck.toString());
+            }
+            if (!currentlySelected.isEmpty() && savedDeckNames.equals(currentlySelected)) {
+                return;
+            }
+        }
+
+        if (!savedDeckNames.isEmpty()) {
+            // Store the desired selection so updateDecks() can apply it after the async load
+            pendingDeckSelection = savedDeckNames;
+        }
+
+        // This triggers updateCustom() which is async — pendingDeckSelection is consumed there
+        refreshDecksList(deckTypeFromState, true, null);
+
+        // If the deck type doesn't use an async load (e.g. color/theme decks), apply selection now
+        // For async types (COMMANDER_DECK, CUSTOM_DECK), updateDecks() will consume pendingDeckSelection
+        final boolean isAsyncDeckType = (deckTypeFromState == DeckType.COMMANDER_DECK ||
+                                          deckTypeFromState == DeckType.CUSTOM_DECK ||
+                                          deckTypeFromState == DeckType.OATHBREAKER_DECK ||
+                                          deckTypeFromState == DeckType.TINY_LEADERS_DECK ||
+                                          deckTypeFromState == DeckType.BRAWL_DECK);
+
+        if (!isAsyncDeckType && pendingDeckSelection != null) {
+            final List<String> toSelect = pendingDeckSelection;
+            pendingDeckSelection = null;
+            boolean selected = lstDecks.setSelectedStrings(toSelect);
+            if (!selected && lstDecks.getItemCount() > 0) {
+                final String target = toSelect.get(0);
+                for (DeckProxy deck : lstDecks.getFilteredItems().toFlatList()) {
+                    final String name = deck.toString();
+                    if (name.equalsIgnoreCase(target) || name.contains(target) || target.contains(name)) {
+                        lstDecks.setSelectedString(name);
+                        selected = true;
+                        break;
+                    }
+                }
+                if (!selected) {
+                    lstDecks.setSelectedIndex(0);
+                }
+            }
         }
     }
 

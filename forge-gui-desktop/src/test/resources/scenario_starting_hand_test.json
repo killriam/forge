@@ -1,0 +1,38 @@
+{
+  "format": "mtg-replay",
+  "version": "1.8.0",
+  "mode": "scenario",
+  "scenario": {
+    "type": "opening_hand_test",
+    "title": "Test: Basic Land Starting Hand Verification",
+    "description": "Verify that ScenarioLibrarySetup correctly places the specified cards at the front of each player's library so they are drawn as the opening hand.",
+    "question": "Does P1 start with exactly 3 Mountains, 2 Forests, 1 Island, and 1 Plains?",
+    "answer": "Yes — the library reorder places these 7 cards at the front before drawCards() is called.",
+    "tags": ["test", "opening_hand_test", "basic_lands"],
+    "players": {
+      "P1": {
+        "starting_hand": [
+          "Mountain",
+          "Mountain",
+          "Mountain",
+          "Forest",
+          "Forest",
+          "Island",
+          "Plains"
+        ],
+        "first_draws": [
+          "Swamp",
+          "Mountain",
+          "Forest"
+        ],
+        "starting_life": 20
+      },
+      "P2": {
+        "starting_hand": [],
+        "first_draws": [],
+        "starting_life": 20
+      }
+    }
+  }
+}
+

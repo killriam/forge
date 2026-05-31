@@ -52,7 +52,9 @@ public enum CHomeUI implements ICDoc, IMenuProvider {
         id0.getDoc().populate();
         id0.getDoc().getLayoutControl().update();
         lblSelected = VHomeUI.SINGLETON_INSTANCE.getAllSubmenuLabels().get(id0);
-        lblSelected.setSelected(true);
+        if (lblSelected != null) {
+            lblSelected.setSelected(true);
+        }
 
         prefs.setPref(FPref.SUBMENU_CURRENTMENU, id0.toString());
         prefs.save();

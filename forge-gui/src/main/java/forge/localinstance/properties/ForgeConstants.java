@@ -248,6 +248,7 @@ public final class ForgeConstants {
     public static final String USER_PUZZLE_DIR            = USER_DIR + "puzzle" + PATH_SEPARATOR;
     public static final String LOG_FILE                   = USER_DIR + "forge.log";
     public static final String NETWORK_LOGS_DIR           = USER_DIR + "networklogs" + PATH_SEPARATOR;
+    public static final String GAME_LOG_DIR               = USER_GAMES_DIR + "gamelogs" + PATH_SEPARATOR;
     public static final String ACHIEVEMENTS_DIR           = USER_DIR + "achievements" + PATH_SEPARATOR;
     public static final String USER_CUSTOM_DIR            = USER_DIR + "custom" + PATH_SEPARATOR;
     public static final String USER_CUSTOM_EDITIONS_DIR   = USER_CUSTOM_DIR + "editions" + PATH_SEPARATOR;
@@ -290,6 +291,7 @@ public final class ForgeConstants {
     public static final FileLocation MATCH_LAYOUT_FILE       = new FileLocation(_DEFAULTS_DIR, USER_PREFS_DIR, "match.xml");
     public static final FileLocation WORKSHOP_LAYOUT_FILE    = new FileLocation(_DEFAULTS_DIR, USER_PREFS_DIR, "workshop.xml");
     public static final FileLocation EDITOR_LAYOUT_FILE      = new FileLocation(_DEFAULTS_DIR, USER_PREFS_DIR, "editor.xml");
+    public static final FileLocation GAME_LEARNING_LAYOUT_FILE = new FileLocation(_DEFAULTS_DIR, USER_PREFS_DIR, "gamelearning.xml");
     public static final FileLocation GAUNTLET_DIR            = new FileLocation(_DEFAULTS_DIR, USER_DIR,       "gauntlet" + PATH_SEPARATOR);
     public static final FileLocation TOURNAMENT_DIR          = new FileLocation(_DEFAULTS_DIR, USER_DIR,       "tournament" + PATH_SEPARATOR);
 
