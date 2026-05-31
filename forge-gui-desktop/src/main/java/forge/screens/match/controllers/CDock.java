@@ -94,17 +94,18 @@ public class CDock implements ICDoc {
 
     @Override
     public void initialize() {
-        final Map<DockButtonId, UiCommand> commands = Map.of(
-                DockButtonId.CONCEDE,        matchUI::concede,
-                DockButtonId.YIELD_SETTINGS, () -> new VYieldSettings(matchUI).showDialog(),
-                DockButtonId.END_TURN,       () -> YieldController.endTurn(matchUI.getGameController(), matchUI.getCurrentPlayer()),
-                DockButtonId.AUTO_PASS,      this::toggleAutoPass,
-                DockButtonId.MACRO_RECORD,   this::toggleMacroRecording,
-                DockButtonId.MACRO_PLAY,     this::playMacro,
-                DockButtonId.VIEW_DECK_LIST, matchUI::viewDeckList,
-                DockButtonId.ALPHA_STRIKE,   () -> matchUI.getGameController().alphaStrike(),
-                DockButtonId.TARGETING,      this::toggleTargeting,
-                DockButtonId.AUTO_YIELDS,    () -> new VAutoYieldsAndTriggers(matchUI).showDialog());
+        final Map<DockButtonId, UiCommand> commands = Map.ofEntries(
+                Map.entry(DockButtonId.CONCEDE,          matchUI::concede),
+                Map.entry(DockButtonId.YIELD_SETTINGS,   () -> new VYieldSettings(matchUI).showDialog()),
+                Map.entry(DockButtonId.END_TURN,         () -> YieldController.endTurn(matchUI.getGameController(), matchUI.getCurrentPlayer())),
+                Map.entry(DockButtonId.AUTO_PASS,        this::toggleAutoPass),
+                Map.entry(DockButtonId.MACRO_RECORD,     this::toggleMacroRecording),
+                Map.entry(DockButtonId.MACRO_PLAY,       this::playMacro),
+                Map.entry(DockButtonId.VIEW_DECK_LIST,   matchUI::viewDeckList),
+                Map.entry(DockButtonId.ALPHA_STRIKE,     () -> matchUI.getGameController().alphaStrike()),
+                Map.entry(DockButtonId.TARGETING,        this::toggleTargeting),
+                Map.entry(DockButtonId.AUTO_YIELDS,      () -> new VAutoYieldsAndTriggers(matchUI).showDialog()),
+                Map.entry(DockButtonId.LEARNING_MARKER,  matchUI::placeLearningMarker));
         commands.forEach((id, cmd) -> view.getButton(id).setCommand(cmd));
 
         update();

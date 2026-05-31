@@ -310,8 +310,9 @@ public class VDock implements IVDoc<CDock> {
         ALPHA_STRIKE   (FSkinProp.ICO_DOCK_ALPHASTRIKE, "lblAlphaStrike",             true),
         TARGETING      (FSkinProp.ICO_ARCSOFF,          "lblTargetingArcs",           true),
         AUTO_YIELDS    (FSkinProp.ICO_AUTOYIELDS,       "lblAutoYieldsAndTriggers",   true),
-        VIEW_DECK_LIST (FSkinProp.ICO_DOCK_DECKLIST,    "lblViewDeckList",            true),
-        CONCEDE        (FSkinProp.ICO_DOCK_CONCEDE,     "lblConcedeGame",             false);
+        VIEW_DECK_LIST   (FSkinProp.ICO_DOCK_DECKLIST,    "lblViewDeckList",            true),
+        LEARNING_MARKER  (FSkinProp.ICO_QUEST_BOOK,      "lblBookmarkTitle",            true),
+        CONCEDE          (FSkinProp.ICO_DOCK_CONCEDE,    "lblConcedeGame",             false);
 
         final FSkinProp icon;
         final String labelKey;
