@@ -14,34 +14,34 @@ Join the **Forge community** on [Discord](https://discord.gg/HcPJNyD66a)!
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 
-- **🌐 Cross-Platform Support:** Play on **Windows, Mac, Linux,** and **Android**.
-- **🔧 Extensible Architecture:** Built in **Java**, Forge encourages developers to contribute by adding features and cards.
-- **🎮 Versatile Gameplay:** Dive into single-player modes or challenge opponents online!
+- ** Cross-Platform Support:** Play on **Windows, Mac, Linux,** and **Android**.
+- ** Extensible Architecture:** Built in **Java**, Forge encourages developers to contribute by adding features and cards.
+- ** Versatile Gameplay:** Dive into single-player modes or challenge opponents online!
 
 ---
 
-## 🛠️ Installation Guide
+## ️ Installation Guide
 
-### 📥 Desktop Installation
+###  Desktop Installation
 1. **Latest Releases:** Download the latest version [here](https://github.com/Card-Forge/forge/releases/latest).
 2. **Snapshot Build:** For the latest development version, grab the `forge-gui-desktop` tarball from our [Snapshot Build](https://github.com/Card-Forge/forge/releases/tag/daily-snapshots).
    - **Tip:** Extract to a new folder to prevent version conflicts.
 3. **User Data Management:** Previous players’ data is preserved during upgrades.
 4. **Java Requirement:** Ensure you have **Java 17 or later** installed.
 
-### 📱 Android Installation
+###  Android Installation
 - _(Note: **Android 11** is the minimum requirement with at least **6GB RAM** to run smoothly. You need to enable **"Install unknown apps"** for Forge to initialize and update itself)_
 - Download the **APK** from the [Snapshot Build](https://github.com/Card-Forge/forge/releases/tag/daily-snapshots). On the first launch, Forge will automatically download all necessary assets.
 
 ---
 
-## 🎮 Modes of Play
+##  Modes of Play
 
 Forge offers various exciting gameplay options:
 
-### 🌍 Adventure Mode
+###  Adventure Mode
 Embark on a thrilling single-player journey where you can:
 - Explore an overworld map.
 - Challenge diverse AI opponents.
@@ -49,12 +49,12 @@ Embark on a thrilling single-player journey where you can:
 
 <img width="1282" height="752" alt="Shandalar World" src="https://github.com/user-attachments/assets/9af31471-d688-442f-9418-9807d8635b72" />
 
-### 🔍 Quest Modes
+###  Quest Modes
 Engage in focused gameplay without the overworld exploration—perfect for quick sessions!
 
 <img width="1282" height="752" alt="Quest Duels" src="https://github.com/user-attachments/assets/b9613b1c-e8c3-4320-8044-6922c519aad4" />
 
-### 🤖 AI Formats
+###  AI Formats
 Test your skills against AI in multiple formats:
 - **Sealed**
 - **Draft**
@@ -67,15 +67,39 @@ For comprehensive gameplay instructions, visit our [User Guide](https://github.c
 
 ---
 
-## 💬 Support & Community
+## ️ Command Line Interface (CLI)
+
+Forge can be run headless from the command line for:
+- **AI Simulations** - Test decks against AI without GUI
+- **Replay Analysis** - Replay saved games interactively
+- **Card Validation** - Validate card definitions
+
+### Quick Start Examples
+
+```bash
+# Run 10 AI vs AI games
+java -jar forge-gui-desktop-*.jar sim -d deck1 deck2 -n 10 -q
+
+# Commander 4-player game
+java -jar forge-gui-desktop-*.jar sim -d deckA deckB deckC deckD -f Commander
+
+# Replay a saved game
+java -jar forge-gui-desktop-*.jar replay replay_log.json
+```
+
+ **Full Documentation:** [CLI.md](docs/CLI.md)
+
+---
+
+##  Support & Community
 
 Need help? Join our vibrant Discord community! 
-- 📜 Read the **#rules** and explore the **FAQ**.
+-  Read the **#rules** and explore the **FAQ**.
 - ❓ Ask your questions in the **#help** channel for assistance.
 
 ---
 
-## 🤝 Contributing to Forge
+##  Contributing to Forge
 
 We love community contributions! Interested in helping? Check out our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
 
@@ -85,17 +109,17 @@ We love community contributions! Interested in helping? Check out our [Contribut
 
 Forge aims to deliver an immersive and customizable Magic: The Gathering experience for fans around the world. 
 
-### 📊 Repository Statistics
+###  Repository Statistics
 
 | Metric         | Count                                                       |
 |----------------|-------------------------------------------------------------|
 | **⭐ Stars:**   | [![GitHub stars](https://img.shields.io/github/stars/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/stargazers) |
-| **🍴 Forks:**   | [![GitHub forks](https://img.shields.io/github/forks/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/network) |
-| **👥 Contributors:** | [![GitHub contributors](https://img.shields.io/github/contributors/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/graphs/contributors) |
+| ** Forks:**   | [![GitHub forks](https://img.shields.io/github/forks/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/network) |
+| ** Contributors:** | [![GitHub contributors](https://img.shields.io/github/contributors/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/graphs/contributors) |
 
 ---
 
-**📄 License:** [GPL-3.0](LICENSE)
+** License:** [GPL-3.0](LICENSE)
 <div align="center" style="display: flex; align-items: center; justify-content: center;">
     <div style="margin-left: auto;">
         <a href="#top">

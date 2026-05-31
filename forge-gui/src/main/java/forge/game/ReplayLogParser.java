@@ -118,6 +118,10 @@ public class ReplayLogParser {
                             info.startingLife = pObj.has("starting_life") && !pObj.get("starting_life").isJsonNull()
                                     ? pObj.get("starting_life").getAsInt() : 20;
                             info.playerType = getStringField(pObj, "player_type");
+                            // v1.9.0: parse team number for team games
+                            if (pObj.has("team") && !pObj.get("team").isJsonNull()) {
+                                info.team = pObj.get("team").getAsInt();
+                            }
                             players.put(playerId, info);
                         }
                     }
@@ -155,6 +159,47 @@ public class ReplayLogParser {
                 if (sc.has("game_state") && sc.get("game_state").isJsonArray()) {
                     for (JsonElement el : sc.getAsJsonArray("game_state")) {
                         si.gameState.add(el.getAsString());
+                    }
+                }
+                // v1.8.0 (fork): parse "players" block for structured starting hand / draws / commanders
+                if (sc.has("players") && sc.get("players").isJsonObject()) {
+                    JsonObject playersObj = sc.getAsJsonObject("players");
+                    for (Map.Entry<String, JsonElement> pe : playersObj.entrySet()) {
+                        String playerId = pe.getKey(); // "P1", "P2", …
+                        if (!pe.getValue().isJsonObject()) continue;
+                        JsonObject pp = pe.getValue().getAsJsonObject();
+
+                        if (pp.has("starting_hand") && pp.get("starting_hand").isJsonArray()) {
+                            List<String> hand = new ArrayList<>();
+                            for (JsonElement el : pp.getAsJsonArray("starting_hand")) {
+                                hand.add(el.getAsString());
+                            }
+                            si.playerStartingHands.put(playerId, hand);
+                        }
+                        if (pp.has("first_draws") && pp.get("first_draws").isJsonArray()) {
+                            List<String> draws = new ArrayList<>();
+                            for (JsonElement el : pp.getAsJsonArray("first_draws")) {
+                                draws.add(el.getAsString());
+                            }
+                            si.playerFirstDraws.put(playerId, draws);
+                        }
+                        if (pp.has("commanders") && pp.get("commanders").isJsonArray()) {
+                            List<String> cmds = new ArrayList<>();
+                            for (JsonElement el : pp.getAsJsonArray("commanders")) {
+                                cmds.add(el.getAsString());
+                            }
+                            si.playerCommanders.put(playerId, cmds);
+                        }
+                        if (pp.has("battlefield") && pp.get("battlefield").isJsonArray()) {
+                            List<String> bf = new ArrayList<>();
+                            for (JsonElement el : pp.getAsJsonArray("battlefield")) {
+                                bf.add(el.getAsString());
+                            }
+                            si.playerBattlefield.put(playerId, bf);
+                        }
+                        if (pp.has("starting_life") && !pp.get("starting_life").isJsonNull()) {
+                            si.playerStartingLife.put(playerId, pp.get("starting_life").getAsInt());
+                        }
                     }
                 }
                 this.scenarioInfo = si;
@@ -352,17 +397,25 @@ public class ReplayLogParser {
         CardPool mainPool = deck.getOrCreate(DeckSection.Main);
 
         for (String cardName : mainCardNames) {
-            PaperCard pc = findCard(cardName);
-            if (pc != null) {
-                mainPool.add(pc);
-            } else {
-                LOG.warn("Card not found in database: '{}' — skipping", cardName);
+                if (isSystemCard(cardName)) {
+                    LOG.debug("Skipping system/internal card in main deck: '{}'", cardName);
+                    continue;
+                }
+                PaperCard pc = findCard(cardName);
+                if (pc != null) {
+                    mainPool.add(pc);
+                } else {
+                    LOG.warn("Card not found in database: '{}' — skipping", cardName);
+                }
             }
-        }
 
         if (!commandCardNames.isEmpty()) {
             CardPool commandPool = deck.getOrCreate(DeckSection.Commander);
             for (String cardName : commandCardNames) {
+                if (isSystemCard(cardName)) {
+                    LOG.debug("Skipping system/internal card in command zone: '{}'", cardName);
+                    continue;
+                }
                 PaperCard pc = findCard(cardName);
                 if (pc != null) {
                     commandPool.add(pc);
@@ -373,6 +426,18 @@ public class ReplayLogParser {
         }
 
         return deck;
+    }
+
+    /**
+     * Returns true for internal game-engine cards that don't exist in the card database
+     * (e.g. Commander Effect, Emblem tokens, Companion Effect placeholders).
+     */
+    private static boolean isSystemCard(String cardName) {
+        if (cardName == null) return true;
+        return cardName.equals("Commander Effect")
+                || cardName.endsWith("'s Companion Effect")
+                || cardName.equals("Puzzle Goal")
+                || cardName.startsWith("Emblem -");
     }
 
     /**
@@ -556,6 +621,90 @@ public class ReplayLogParser {
         public int playerCount = 2;
         /** Puzzle-format key=value lines to set up the initial game state. */
         public final List<String> gameState = new ArrayList<>();
+
+        // ---------------------------------------------------------------
+        // v1.8.0 (fork): per-player structured starting configuration
+        // ---------------------------------------------------------------
+
+        /** Per-player starting hand cards (ordered). Key = "P1", "P2", … */
+        public final Map<String, List<String>> playerStartingHands = new LinkedHashMap<>();
+        /** Per-player first-N draw cards (ordered, top of library). Key = "P1", "P2", … */
+        public final Map<String, List<String>> playerFirstDraws = new LinkedHashMap<>();
+        /** Per-player commander names. Key = "P1", "P2", … */
+        public final Map<String, List<String>> playerCommanders = new LinkedHashMap<>();
+        /** Per-player battlefield cards (names). Key = "P1", "P2", … */
+        public final Map<String, List<String>> playerBattlefield = new LinkedHashMap<>();
+        /** Per-player starting life override. Key = "P1", "P2", … */
+        public final Map<String, Integer> playerStartingLife = new LinkedHashMap<>();
+
+        /**
+         * Returns true when at least one player in this scenario has a structured
+         * starting configuration (hand or draws).
+         */
+        public boolean hasPlayerSetup() {
+            return !playerStartingHands.isEmpty() || !playerFirstDraws.isEmpty();
+        }
+
+        /**
+         * Builds puzzle-format game_state lines from the structured player setup
+         * fields.  Returned lines are merged with existing {@link #gameState} in
+         * {@code CSubmenuScenario}.
+         *
+         * <p>Player index mapping: P1 = human (index 0), P2 = AI-1 (index 1), …</p>
+         */
+        public List<String> buildGameStateFromPlayerSetup() {
+            List<String> lines = new ArrayList<>();
+
+            // Helper: "human" for P1, "ai" for P2, "p2" for P3, etc.
+            // The GameState engine recognises "human"/"ai" for two-player, and "pN" for N-player.
+            for (Map.Entry<String, List<String>> e : playerStartingHands.entrySet()) {
+                String prefix = playerIdToPrefix(e.getKey(), playerCount);
+                if (!e.getValue().isEmpty()) {
+                    lines.add(prefix + "hand=" + String.join(";", e.getValue()));
+                }
+            }
+            for (Map.Entry<String, List<String>> e : playerFirstDraws.entrySet()) {
+                String prefix = playerIdToPrefix(e.getKey(), playerCount);
+                if (!e.getValue().isEmpty()) {
+                    lines.add(prefix + "library=" + String.join(";", e.getValue()));
+                }
+            }
+            for (Map.Entry<String, List<String>> e : playerCommanders.entrySet()) {
+                String prefix = playerIdToPrefix(e.getKey(), playerCount);
+                if (!e.getValue().isEmpty()) {
+                    // The |IsCommander flag makes GameState call player.addCommander()
+                    List<String> flagged = new ArrayList<>();
+                    for (String name : e.getValue()) {
+                        flagged.add(name + "|IsCommander");
+                    }
+                    lines.add(prefix + "command=" + String.join(";", flagged));
+                }
+            }
+            for (Map.Entry<String, List<String>> e : playerBattlefield.entrySet()) {
+                String prefix = playerIdToPrefix(e.getKey(), playerCount);
+                if (!e.getValue().isEmpty()) {
+                    lines.add(prefix + "battlefield=" + String.join(";", e.getValue()));
+                }
+            }
+            for (Map.Entry<String, Integer> e : playerStartingLife.entrySet()) {
+                String prefix = playerIdToPrefix(e.getKey(), playerCount);
+                lines.add(prefix + "life=" + e.getValue());
+            }
+            return lines;
+        }
+
+        /** Map player ID ("P1", "P2", …) to puzzle-format prefix ("human", "ai", "p2", …). */
+        private static String playerIdToPrefix(String playerId, int playerCount) {
+            if ("P1".equals(playerId)) return "human";
+            if ("P2".equals(playerId)) return playerCount == 2 ? "ai" : "p1";
+            // P3 → "p2", P4 → "p3", …
+            try {
+                int idx = Integer.parseInt(playerId.substring(1));
+                return "p" + (idx - 1);
+            } catch (NumberFormatException e) {
+                return playerId.toLowerCase();
+            }
+        }
     }
 
     /**
@@ -570,6 +719,8 @@ public class ReplayLogParser {
         public int startingLife = 20;
         public String playerType;
         public Deck deck;
+        /** v1.9.0: Team number for multiplayer team games. Null for non-team games. */
+        public Integer team;
 
         @Override
         public String toString() {

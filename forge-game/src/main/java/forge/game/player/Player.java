@@ -1266,8 +1266,6 @@ public class Player extends GameEntity implements Comparable<Player> {
             }
         }
         else { // Lose by milling is always on. Give AI many cards it cannot play if you want it not to undertake actions
-            System.out.println("[DEBUG drawCard] " + getName() + " tried to draw from empty library!");
-            new Exception("[DEBUG drawCard stacktrace]").printStackTrace(System.out);
             triedToDrawFromEmptyLibrary = true;
         }
         return drawn;
@@ -2064,7 +2062,6 @@ public class Player extends GameEntity implements Comparable<Player> {
         //               since the last time state-based actions were checked, he or she loses the game.
         if (triedToDrawFromEmptyLibrary) {
             triedToDrawFromEmptyLibrary = false; // one-shot check
-            System.out.println("[DEBUG checkLoseCondition] " + getName() + " triedToDrawFromEmptyLibrary=true → Milled loss");
             // Mine, Mine, Mine! prevents decking
             if (loseConditionMet(GameLossReason.Milled, null)) {
                 return true;
@@ -2688,7 +2685,6 @@ public class Player extends GameEntity implements Comparable<Player> {
      * Then runs triggers.
      */
     public void planeswalkTo(SpellAbility sa, final CardCollectionView destinations) {
-        System.out.println(getName() + " planeswalks to " + destinations.toString());
         game.getView().updatePlanarPlayer(getView());
 
         for (Card c : destinations) {

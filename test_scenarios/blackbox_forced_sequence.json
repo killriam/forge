@@ -1,0 +1,88 @@
+{
+  "format": "mtg-replay",
+  "version": "1.8.0",
+  "mode": "scenario",
+  "meta": {
+    "game_id": "blackbox-test-forced-sequence",
+    "timestamp": "2026-05-03T12:00:00Z",
+    "game_type": "commander",
+    "players": {
+      "P1": {
+        "name": "Blackbox-Test-Player-1",
+        "deck_name": "Blackbox Test Deck",
+        "is_ai": true
+      },
+      "P2": {
+        "name": "Blackbox-Test-Player-2",
+        "deck_name": "Opponent Deck",
+        "is_ai": true
+      }
+    }
+  },
+  "scenario": {
+    "type": "opening_hand_test",
+    "title": "Blackbox Test — Forced Sequence",
+    "description": "Scenario mit erzwungener Spielreihenfolge für Blackbox-Testing.\n\nDieses Scenario testet:\n- Forced Play Sequence Enforcement\n- AI-Compliance mit vorgegebener Reihenfolge\n- Event-Logging (PLAY_LAND, CAST)\n\nErwartete Sequenz:\n1. T1: Play Mountain\n2. T2: Play Forest\n3. T2: Cast Lightning Bolt",
+    "question": "Folgt die AI der vorgegebenen Spielreihenfolge?",
+    "answer": "Ja, wenn die Events in der richtigen Reihenfolge im Replay-Log erscheinen.",
+    "tags": ["blackbox", "test", "forced_sequence", "validation"],
+    "ruling_references": [],
+    "player_count": 2,
+    "players": {
+      "P1": {
+        "commanders": ["Sol Ring"],
+        "starting_hand": [
+          "Mountain",
+          "Forest",
+          "Lightning Bolt",
+          "Shock",
+          "Plains",
+          "Island",
+          "Swamp"
+        ],
+        "first_draws": [
+          "Command Tower",
+          "Sol Ring",
+          "Mana Vault"
+        ],
+        "starting_life": 40
+      },
+      "P2": {
+        "commanders": [],
+        "starting_hand": [],
+        "first_draws": [],
+        "starting_life": 40
+      }
+    }
+  },
+  "events": [
+    {
+      "i": 1,
+      "t": "T1.MP1:1",
+      "a": "Blackbox-Test-Player-1",
+      "type": "PLAY_LAND",
+      "data": {
+        "card_name": "Mountain"
+      }
+    },
+    {
+      "i": 2,
+      "t": "T2.MP1:1",
+      "a": "Blackbox-Test-Player-1",
+      "type": "PLAY_LAND",
+      "data": {
+        "card_name": "Forest"
+      }
+    },
+    {
+      "i": 3,
+      "t": "T2.MP1:2",
+      "a": "Blackbox-Test-Player-1",
+      "type": "CAST",
+      "data": {
+        "card_name": "Lightning Bolt"
+      }
+    }
+  ]
+}
+

@@ -35,8 +35,23 @@ public class MulliganService {
         }
 
         boolean firstMullFree = game.getPlayers().size() > 2 || game.getRules().hasAppliedVariant(GameType.Brawl);
+        // Scenario mode: AI players with a predefined hand skip mulligan entirely.
+        boolean skipAiMulligan = game.getRules().isScenarioSkipMulligan();
+
+        // DEBUG: Log scenario mulligan status
+        if (skipAiMulligan) {
+            System.out.println("[MulliganService] Scenario skip mulligan is ENABLED - AI players will keep hands");
+        }
 
         for (Player player : whoCanMulligan) {
+            // In opening_hand_test scenarios the AI's hand is deterministically set by
+            // ScenarioLibrarySetup — let it keep its hand without any mulligan prompt.
+            if (skipAiMulligan && player.isAI()) {
+                System.out.println("[MulliganService] " + player.getName() + " is AI in scenario mode - using ScenarioKeepMulligan");
+                mulligans.add(new ScenarioKeepMulligan(player));
+                continue;
+            }
+
             MulliganDefs.MulliganRule rule = StaticData.instance().getMulliganRule();
             AbstractMulligan mulligan;
             switch (rule) {

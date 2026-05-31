@@ -20,11 +20,12 @@ import java.util.Map;
  * - 1.5.0 (spec 1.5.0): Renamed log_l1→events, added spec_version, ACTIVATE, TRIGGER, RESOLVE,
  *                        DECLARE_ATTACKERS, DECLARE_BLOCKERS, COUNTERS events; enriched card_index
  * - 1.7.0 (spec 1.7.0): Added mode field and scenario object; rules_clarification marker category
+ * - 1.9.0: Added team field in player metadata for multiplayer team games
  */
 public class ReplayLog {
     private String format = "mtg-replay";
-    private String version = "1.5.0";
-    private String specVersion = "1.5.0";
+    private String version = "1.9.0";
+    private String specVersion = "1.9.0";
     private ReplayMeta meta;
     private long seed;
     private GameStartInfo gameStart;

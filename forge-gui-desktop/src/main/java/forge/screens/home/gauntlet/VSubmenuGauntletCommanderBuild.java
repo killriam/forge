@@ -185,6 +185,7 @@ public enum VSubmenuGauntletCommanderBuild implements IVSubmenu<CSubmenuGauntlet
         VHomeUI.SINGLETON_INSTANCE.getPnlDisplay().setLayout(new MigLayout("insets 0, gap 0, wrap 3"));
 
         lstLeft.populate();
+        lstLeft.restoreSavedState(); // Restore saved deck selections
 
         VHomeUI.SINGLETON_INSTANCE.getPnlDisplay().add(lblTitle, "w 98%!, h 30px!, gap 1% 0 15px 15px, span 3");
         VHomeUI.SINGLETON_INSTANCE.getPnlDisplay().add(pnlFileHandling, "w 98%!, gap 1% 0 1% 5px, span 3");

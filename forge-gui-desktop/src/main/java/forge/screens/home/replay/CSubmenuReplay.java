@@ -1,6 +1,7 @@
 package forge.screens.home.replay;
 
 import java.io.File;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -12,6 +13,7 @@ import java.util.Set;
 import javax.swing.JMenu;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 
 import forge.deck.Deck;
 import forge.deck.DeckSection;
@@ -65,6 +67,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
     private final VSubmenuReplay view = VSubmenuReplay.SINGLETON_INSTANCE;
     private final Map<String, ReplayLogParser> replayParsers = new LinkedHashMap<>();
 
+    /** Background worker for async file scanning – cancelled if the screen is re-entered. */
+    private SwingWorker<List<Map.Entry<String, ReplayLogParser>>, Void> loadWorker;
+
     @Override
     public void register() {
     }
@@ -99,74 +104,110 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             }
         });
 
-        updateData();
+        // Do NOT call updateData() here — lazy-load only when the screen is opened.
     }
 
     /**
-     * Scan the game log directory for replay JSON files and populate the list.
-     * Only shows games from the last N days (configurable via GAME_RECAP_DAYS preference, 0 = all).
+     * Scan the game log directory asynchronously and populate the replay list.
+     * Shows an indeterminate progress bar while loading; only runs when the screen is visible.
      */
     private void updateData() {
+        // Cancel any in-progress load so we don't double-populate
+        if (loadWorker != null && !loadWorker.isDone()) {
+            loadWorker.cancel(true);
+        }
+
         replayParsers.clear();
         view.getModel().clear();
+        view.getLblCount().setText("Loading…");
+        view.getBtnStart().setEnabled(false);
+        view.getBtnView().setEnabled(false);
+        view.getProgressBar().setVisible(true);
 
-        File logDir = new File(ForgeConstants.GAME_LOG_DIR);
-        if (!logDir.exists() || !logDir.isDirectory()) {
-            LOG.info("Game log directory does not exist: {}", ForgeConstants.GAME_LOG_DIR);
-            return;
-        }
-
-        // Find all JSON files
-        File[] jsonFiles = logDir.listFiles((dir, name) -> name.endsWith(".json"));
-
-        if (jsonFiles == null || jsonFiles.length == 0) {
-            LOG.info("No replay JSON files found in: {}", ForgeConstants.GAME_LOG_DIR);
-            return;
-        }
-
-        // Read configurable recap days filter (0 = show all)
-        int recapDays = 2;
+        // Read configurable recap days filter (0 = show all) once before background thread
+        final int recapDays;
+        int tmpDays = 2;
         try {
-            recapDays = Integer.parseInt(FModel.getPreferences().getPref(FPref.GAME_RECAP_DAYS));
+            tmpDays = Integer.parseInt(FModel.getPreferences().getPref(FPref.GAME_RECAP_DAYS));
         } catch (NumberFormatException ignored) { }
-        long cutoffMs = recapDays > 0
+        recapDays = tmpDays;
+        final long cutoffMs = recapDays > 0
                 ? System.currentTimeMillis() - (recapDays * 86_400_000L)
                 : 0;
 
-        // Sort by modification time (newest first)
-        Arrays.sort(jsonFiles, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+        loadWorker = new SwingWorker<>() {
+            @Override
+            protected List<Map.Entry<String, ReplayLogParser>> doInBackground() {
+                List<Map.Entry<String, ReplayLogParser>> result = new ArrayList<>();
 
-        for (File jsonFile : jsonFiles) {
-            // Apply time filter
-            if (cutoffMs > 0 && jsonFile.lastModified() < cutoffMs) {
-                continue;
-            }
-            // Simulation files (sim_*.json) are AI-only runs — exclude from Game Recap
-            if (jsonFile.getName().startsWith("sim_")) {
-                continue;
-            }
-            ReplayLogParser parser = new ReplayLogParser(jsonFile);
-            // Only show full-game replays; scenarios are listed under Investigate Scenarios.
-            // NOTE: isReplayed() is intentionally NOT filtered here — "Game Recap" is a
-            // history view and should show all human-played games regardless of whether
-            // they were previously replayed.
-            if (parser.parse() && !parser.isScenario()) {
-                String display = buildRecapDisplayString(parser);
-                replayParsers.put(display, parser);
-                view.getModel().addElement(display);
-            }
-        }
+                File logDir = new File(ForgeConstants.GAME_LOG_DIR);
+                if (!logDir.exists() || !logDir.isDirectory()) {
+                    LOG.info("Game log directory does not exist: {}", ForgeConstants.GAME_LOG_DIR);
+                    return result;
+                }
 
-        // Count replayed games and update the counter label
-        int replayedCount = 0;
-        for (ReplayLogParser p : replayParsers.values()) {
-            if (p.isReplayed()) replayedCount++;
-        }
-        int total = replayParsers.size();
-        view.getLblCount().setText(total + " game" + (total != 1 ? "s" : "")
-                + "  |  " + replayedCount + " replayed");
+                File[] jsonFiles = logDir.listFiles((dir, name) -> name.endsWith(".json"));
+                if (jsonFiles == null || jsonFiles.length == 0) {
+                    LOG.info("No replay JSON files found in: {}", ForgeConstants.GAME_LOG_DIR);
+                    return result;
+                }
 
-        LOG.info("Found {} valid replay files ({} replayed, recap days: {})", total, replayedCount, recapDays);
+                // Sort by modification time (newest first)
+                Arrays.sort(jsonFiles, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+
+                for (File jsonFile : jsonFiles) {
+                    if (isCancelled()) break;
+
+                    // Apply time filter
+                    if (cutoffMs > 0 && jsonFile.lastModified() < cutoffMs) {
+                        continue;
+                    }
+                    // Simulation files (sim_*.json) are AI-only runs — exclude from Game Recap
+                    if (jsonFile.getName().startsWith("sim_")) {
+                        continue;
+                    }
+
+                    ReplayLogParser parser = new ReplayLogParser(jsonFile);
+                    if (parser.parse() && !parser.isScenario()) {
+                        String display = buildRecapDisplayString(parser);
+                        result.add(new AbstractMap.SimpleEntry<>(display, parser));
+                    }
+                }
+                return result;
+            }
+
+            @Override
+            protected void done() {
+                if (isCancelled()) {
+                    view.getProgressBar().setVisible(false);
+                    return;
+                }
+                try {
+                    List<Map.Entry<String, ReplayLogParser>> result = get();
+                    for (Map.Entry<String, ReplayLogParser> entry : result) {
+                        replayParsers.put(entry.getKey(), entry.getValue());
+                        view.getModel().addElement(entry.getKey());
+                    }
+
+                    // Count replayed games and update the counter label
+                    int replayedCount = 0;
+                    for (ReplayLogParser p : replayParsers.values()) {
+                        if (p.isReplayed()) replayedCount++;
+                    }
+                    int total = replayParsers.size();
+                    view.getLblCount().setText(total + " game" + (total != 1 ? "s" : "")
+                            + "  |  " + replayedCount + " replayed");
+
+                    LOG.info("Found {} valid replay files ({} replayed, recap days: {})", total, replayedCount, recapDays);
+                } catch (Exception e) {
+                    LOG.error("Failed to load replay files", e);
+                    view.getLblCount().setText("Error loading replays");
+                } finally {
+                    view.getProgressBar().setVisible(false);
+                }
+            }
+        };
+        loadWorker.execute();
     }
 
     /**

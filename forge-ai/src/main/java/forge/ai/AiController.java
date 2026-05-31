@@ -76,6 +76,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static forge.ai.ComputerUtilMana.getAvailableManaEstimate;
 import static java.lang.Math.max;
 
@@ -88,6 +91,8 @@ import static java.lang.Math.max;
  * @version $Id$
  */
 public class AiController {
+    private static final Logger LOG = LoggerFactory.getLogger(AiController.class);
+
     private final Player player;
     private final Game game;
     private final AiCardMemory memory;
@@ -1386,6 +1391,30 @@ public class AiController {
 
         // Reset priority mana reservation that's meant to work for one spell only
         memory.clearMemorySet(AiCardMemory.MemorySet.HELD_MANA_SOURCES_FOR_NEXT_SPELL);
+
+        // ── Forced play sequence from replay (Case 1) ─────────────────────
+        // When a replay JSON was loaded via -r, the AI follows the original play
+        // sequence before falling back to heuristic decisions.
+        final Map<String, List<String>> forcedSeq = game.getRules().getForcedPlaySequence();
+        if (forcedSeq != null) {
+            final String lobbyName = player.getLobbyPlayer().getName();
+            final List<String> seq = forcedSeq.get(lobbyName);
+            if (seq != null && !seq.isEmpty()) {
+                final String nextCardName = seq.get(0);
+                final List<SpellAbility> handAbilities = ComputerUtilAbility.getSpellAbilities(
+                        player.getCardsIn(ZoneType.Hand), player);
+                for (final SpellAbility sa : handAbilities) {
+                    if (sa.getHostCard().getName().equals(nextCardName) && sa.canPlay()) {
+                        seq.remove(0);
+                        LOG.debug("Forced play: '{}' for {}", nextCardName, lobbyName);
+                        return singleSpellAbilityList(sa);
+                    }
+                }
+                // Card not castable this priority window — soft enforcement: keep entry in queue
+                LOG.debug("Forced play deferred (not castable): '{}' for {}", nextCardName, lobbyName);
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────
 
         if (useSimulation) {
             return singleSpellAbilityList(simPicker.chooseSpellAbilityToPlay(null));

@@ -361,8 +361,6 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
                     break;
 
                 case END_OF_TURN:
-                    System.out.println("[PhaseHandler] BEGIN END_OF_TURN for " + playerTurn
-                            + " — stack size before phase triggers: " + game.getStack().size());
                     nEndOfTurnsThisTurn++;
                     game.getEndOfTurn().executeUntil(playerTurn);
                     if (playerTurn.getController().isAI()) {
@@ -378,12 +376,6 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
                     String producalbeMana = Player.listManaCreatableIn(permantens);
 
                     playerTurn.setManacurveData(producalbeMana, playerTurn.getTurn());
-
-                    CardCollection cardswithManaAbilities = Player.getCardswithManaAbilities(permantens);
-
-                    System.out.println("Player " + playerTurn.getName() + " in Turn " + playerTurn.getTurn() +
-                        " can produce with card " + cardswithManaAbilities + "(" + amountManacard + ") mana: " + producalbeMana);
-                    // add them to turn index list
                     break;
 
                 case CLEANUP:
@@ -944,9 +936,6 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
         ExtraTurn extraTurn = new ExtraTurn(player);
         extraTurn.setTurnOrderPosition(extraTurns.size()); // Track turn order position
         extraTurns.push(extraTurn);
-        System.out.println("[PhaseHandler] addExtraTurn: player=" + player
-                + " turnOrderPosition=" + extraTurn.getTurnOrderPosition()
-                + " extraTurns stack size now=" + extraTurns.size());
         return extraTurn;
     }
 
@@ -1077,7 +1066,6 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
                 // this needs to come after chosenSa so it sees you conceding on own turn
                 if (playerTurn.hasLost() && pPlayerPriority.equals(playerTurn) && pFirstPriority.equals(playerTurn)) {
                     // If the active player has lost, and they have priority, set the next player to have priority
-                    System.out.println("Active player is no longer in the game...");
                     pPlayerPriority = game.getNextPlayerAfter(getPriorityPlayer());
                     pFirstPriority = pPlayerPriority;
                 }

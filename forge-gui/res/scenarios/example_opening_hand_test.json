@@ -1,0 +1,86 @@
+{
+    "format": "mtg-replay",
+    "version": "1.8.0",
+    "spec_version": "1.7.0",
+    "mode": "scenario",
+    "scenario": {
+        "type": "opening_hand_test",
+        "title": "Turn-1 Lightning Bolt Hand Test",
+        "description": "Tests a predefined opening hand with Lightning Bolt and a specific draw sequence for the first 5 turns.",
+        "question": "Can the human player consistently apply pressure with this hand?",
+        "player_count": 2,
+        "players": {
+            "P1": {
+                "starting_hand": [
+                    "Lightning Bolt",
+                    "Lightning Bolt",
+                    "Mountain",
+                    "Mountain",
+                    "Goblin Guide",
+                    "Eidolon of the Great Revel",
+                    "Monastery Swiftspear"
+                ],
+                "first_draws": [
+                    "Shard Volley",
+                    "Skullcrack",
+                    "Searing Blaze",
+                    "Rift Bolt",
+                    "Inspiring Vantage"
+                ],
+                "starting_life": 20
+            },
+            "P2": {
+                "starting_hand": [
+                    "Island",
+                    "Island",
+                    "Island",
+                    "Snapcaster Mage",
+                    "Counterspell",
+                    "Brainstorm",
+                    "Ponder"
+                ],
+                "first_draws": [
+                    "Force of Will",
+                    "Daze",
+                    "Island",
+                    "Jace, the Mind Sculptor",
+                    "Brainstorm"
+                ],
+                "starting_life": 20
+            }
+        }
+    },
+    "meta": {
+        "game_id": "scenario-opening-hand-bolt-001",
+        "timestamp": "2026-05-01T12:00:00Z",
+        "game_type": "Scenario",
+        "players": {
+            "P1": {
+                "name": "Human",
+                "is_ai": false,
+                "player_type": "Human",
+                "starting_life": 20
+            },
+            "P2": {
+                "name": "AI",
+                "is_ai": true,
+                "player_type": "AI",
+                "starting_life": 20
+            }
+        }
+    },
+    "seed": 0,
+    "card_index": {},
+    "initial_state": {
+        "turn": 0,
+        "phase": "UNTAP",
+        "active_player": "P1",
+        "players": {
+            "P1": { "life": 20 },
+            "P2": { "life": 20 }
+        },
+        "zones": {},
+        "objects": {}
+    }
+}
+

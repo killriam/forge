@@ -174,6 +174,13 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
      * The game state (cards on battlefield, life totals, active player/phase)
      * is applied via the startGameHook using the puzzle key=value format
      * stored in the scenario's game_state array.
+     *
+     * When the scenario's ScenarioInfo contains structured player setup data
+     * (starting_hand / first_draws / commanders), those are auto-converted to
+     * puzzle-format game_state lines and merged with any explicit game_state entries.
+     *
+     * Scenarios with commanders use GameType.Commander rules instead of Puzzle
+     * so that command-zone casting and commander tax function correctly.
      */
     private boolean launchScenario(ReplayLogParser parser) {
         final ScenarioInfo si = parser.getScenarioInfo();
@@ -187,8 +194,21 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         try {
             final HostedMatch hostedMatch = GuiBase.getInterface().hostMatch();
 
-            // Build start-game hook: apply game state, then show description dialog
+            // Merge explicit game_state lines with auto-generated lines from player setup
             final List<String> gameStateLines = si != null ? new ArrayList<>(si.gameState) : new ArrayList<>();
+            if (si != null && si.hasPlayerSetup()) {
+                // Prepend structured lines so explicit game_state overrides them if needed
+                List<String> structuredLines = si.buildGameStateFromPlayerSetup();
+                structuredLines.addAll(gameStateLines);
+                gameStateLines.clear();
+                gameStateLines.addAll(structuredLines);
+                LOG.info("Scenario: merged {} structured player-setup lines with {} explicit game_state lines",
+                        structuredLines.size() - si.gameState.size(), si.gameState.size());
+            }
+
+            // Detect Commander scenarios (any player has commanders defined)
+            final boolean hasCommanders = si != null && !si.playerCommanders.isEmpty();
+
             final String dialogTitle = si != null && si.title != null ? si.title : "Scenario";
             final String dialogText = buildGameStartDialog(si);
 
@@ -207,20 +227,52 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             final List<RegisteredPlayer> players = new ArrayList<>();
             final RegisteredPlayer human = new RegisteredPlayer(new Deck())
                     .setPlayer(GamePlayerUtil.getGuiPlayer());
-            human.setStartingHand(0);
+            // Apply commander from player setup if present (for Commander game type support)
+            if (si != null && si.playerCommanders.containsKey("P1")) {
+                for (String cmdName : si.playerCommanders.get("P1")) {
+                    forge.item.PaperCard cmdCard = FModel.getMagicDb().getCommonCards().getCard(cmdName);
+                    if (cmdCard != null) {
+                        human.getCommanders().add(cmdCard);
+                    }
+                }
+            }
             players.add(human);
 
             // AI players (indices 1..playerCount-1)
             for (int i = 1; i < playerCount; i++) {
                 final RegisteredPlayer ai = new RegisteredPlayer(new Deck())
                         .setPlayer(GamePlayerUtil.createAiPlayer("AI " + i));
-                ai.setStartingHand(0);
+                String aiPlayerId = "P" + (i + 1);
+                if (si != null && si.playerCommanders.containsKey(aiPlayerId)) {
+                    for (String cmdName : si.playerCommanders.get(aiPlayerId)) {
+                        forge.item.PaperCard cmdCard = FModel.getMagicDb().getCommonCards().getCard(cmdName);
+                        if (cmdCard != null) {
+                            ai.getCommanders().add(cmdCard);
+                        }
+                    }
+                }
                 players.add(ai);
             }
 
-            GameRules rules = new GameRules(GameType.Puzzle);
+            // Use Commander game type when commanders are present, otherwise Puzzle
+            GameRules rules = new GameRules(hasCommanders ? GameType.Commander : GameType.Puzzle);
             rules.setGamesPerMatch(1);
             rules.setScenarioMode(true);  // disables achievement tracking and game log saving
+
+            // Scenario library setup: pass defined starting hand + first draws to GameRules.
+            // ScenarioLibrarySetup (called from GameAction) will reorder each player's library
+            // so that the named cards appear at the front and are drawn normally.
+            if (si != null && !si.playerStartingHands.isEmpty()) {
+                rules.setScenarioStartingHands(si.playerStartingHands);
+                if (!si.playerFirstDraws.isEmpty()) {
+                    rules.setScenarioFirstDraws(si.playerFirstDraws);
+                }
+            }
+            // For opening_hand_test: AI keeps its predefined hand — no mulligan dialog.
+            // The human player may still mulligan freely.
+            if (si != null && "opening_hand_test".equals(si.type)) {
+                rules.setScenarioSkipMulligan(true);
+            }
             hostedMatch.startMatch(rules, null, players, human, GuiBase.getInterface().getNewGuiGame());
 
             SwingUtilities.invokeLater(SOverlayUtils::hideOverlay);

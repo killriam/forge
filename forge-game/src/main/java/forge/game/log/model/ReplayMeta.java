@@ -74,6 +74,12 @@ public class ReplayMeta {
         private int startingLife;
         /** Player type description, e.g. "Human", "AI". */
         private String playerType;
+        /**
+         * v1.9.0: Team number for multiplayer team games.
+         * Null for non-team games (e.g., 1v1, free-for-all).
+         * Team numbers start at 0.
+         */
+        private Integer team;
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
@@ -95,5 +101,8 @@ public class ReplayMeta {
 
         public String getPlayerType() { return playerType; }
         public void setPlayerType(String playerType) { this.playerType = playerType; }
+
+        public Integer getTeam() { return team; }
+        public void setTeam(Integer team) { this.team = team; }
     }
 }

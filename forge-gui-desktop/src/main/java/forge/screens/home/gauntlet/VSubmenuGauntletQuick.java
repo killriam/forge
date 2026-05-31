@@ -185,6 +185,7 @@ public enum VSubmenuGauntletQuick implements IVSubmenu<CSubmenuGauntletQuick> {
         VHomeUI.SINGLETON_INSTANCE.getPnlDisplay().add(btnStart, "w 98%!, ax center, gap 1% 0 20px 20px, span 2");
 
         getLstDecks().populate();
+        getLstDecks().restoreSavedState(); // Restore saved deck selections
         
         VHomeUI.SINGLETON_INSTANCE.getPnlDisplay().repaintSelf();
         VHomeUI.SINGLETON_INSTANCE.getPnlDisplay().revalidate();

@@ -102,6 +102,7 @@ public enum VSubmenuOnlineLobby implements IVSubmenu<CSubmenuOnlineLobby>, IOnli
 
         for (final FDeckChooser fdc : lobby.getDeckChoosers()) {
             fdc.populate();
+            fdc.restoreSavedState(); // Restore saved deck selections every time
             fdc.getDecksComboBox().addListener(ev -> lobby.focusOnAvatar());
         }
 

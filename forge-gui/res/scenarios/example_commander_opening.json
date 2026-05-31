@@ -1,0 +1,88 @@
+{
+    "format": "mtg-replay",
+    "version": "1.8.0",
+    "spec_version": "1.7.0",
+    "mode": "scenario",
+    "scenario": {
+        "type": "opening_hand_test",
+        "title": "Commander Combo Opening Test",
+        "description": "Tests a predefined Commander opening with Atraxa and a ramp-heavy hand leading to first 5 draws.",
+        "question": "Can Atraxa proliferate immediately on turn 4 with this sequence?",
+        "player_count": 2,
+        "players": {
+            "P1": {
+                "commanders": ["Atraxa, Praetors' Voice"],
+                "starting_hand": [
+                    "Forest",
+                    "Swamp",
+                    "Plains",
+                    "Island",
+                    "Sol Ring",
+                    "Chromatic Lantern",
+                    "Arcane Signet"
+                ],
+                "first_draws": [
+                    "Command Tower",
+                    "Doubling Season",
+                    "Winding Constrictor",
+                    "Astral Cornucopia",
+                    "Darksteel Ingot"
+                ],
+                "starting_life": 40
+            },
+            "P2": {
+                "commanders": ["Korvold, Fae-Cursed King"],
+                "starting_hand": [
+                    "Swamp",
+                    "Mountain",
+                    "Forest",
+                    "Dockside Extortionist",
+                    "Sol Ring",
+                    "Treasure Map",
+                    "Mayhem Devil"
+                ],
+                "first_draws": [
+                    "Command Tower",
+                    "Blood Artist",
+                    "Falkenrath Aristocrat",
+                    "Goblin Bombardment",
+                    "Animate Dead"
+                ],
+                "starting_life": 40
+            }
+        }
+    },
+    "meta": {
+        "game_id": "scenario-commander-atraxa-001",
+        "timestamp": "2026-05-01T12:00:00Z",
+        "game_type": "Scenario",
+        "players": {
+            "P1": {
+                "name": "Human",
+                "is_ai": false,
+                "player_type": "Human",
+                "starting_life": 40
+            },
+            "P2": {
+                "name": "AI",
+                "is_ai": true,
+                "player_type": "AI",
+                "starting_life": 40
+            }
+        }
+    },
+    "seed": 0,
+    "card_index": {},
+    "initial_state": {
+        "turn": 0,
+        "phase": "UNTAP",
+        "active_player": "P1",
+        "players": {
+            "P1": { "life": 40 },
+            "P2": { "life": 40 }
+        },
+        "zones": {},
+        "objects": {}
+    }
+}
+

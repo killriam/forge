@@ -123,6 +123,7 @@ public enum VSubmenuConstructed implements IVSubmenu<CSubmenuConstructed> {
 
         for (final FDeckChooser fdc : vLobby.getDeckChoosers()) {
             fdc.populate();
+            fdc.restoreSavedState(); // Restore saved deck selections every time
         }
 
         container.add(vLobby.getConstructedFrame(), "gap 20px 20px 20px 0px, push, grow");

@@ -268,4 +268,68 @@ public class GameRules {
 
     public int getReplayStartingPlayerIndex() { return replayStartingPlayerIndex; }
     public void setReplayStartingPlayerIndex(final int idx) { this.replayStartingPlayerIndex = idx; }
+
+    // -------------------------------------------------------------------------
+    // Scenario: defined starting hand + first draws
+    // -------------------------------------------------------------------------
+
+    /**
+     * Per-player starting hand cards for scenario mode (type {@code opening_hand_test}).
+     * Key = "P1", "P2", … — value = ordered card names placed at the front of the library
+     * so they are drawn as the opening hand.
+     * {@code null} means no scenario hand override.
+     */
+    private Map<String, List<String>> scenarioStartingHands = null;
+
+    public Map<String, List<String>> getScenarioStartingHands() { return scenarioStartingHands; }
+    public void setScenarioStartingHands(final Map<String, List<String>> hands) {
+        this.scenarioStartingHands = hands;
+    }
+
+    /**
+     * Per-player first-N draw cards for scenario mode.
+     * Key = "P1", "P2", … — value = ordered card names placed directly after the starting hand
+     * in the library so they are drawn in turns 1..N.
+     * {@code null} means no override.
+     */
+    private Map<String, List<String>> scenarioFirstDraws = null;
+
+    public Map<String, List<String>> getScenarioFirstDraws() { return scenarioFirstDraws; }
+    public void setScenarioFirstDraws(final Map<String, List<String>> draws) {
+        this.scenarioFirstDraws = draws;
+    }
+
+    /**
+     * When {@code true}: AI players skip the mulligan (keep hand automatically).
+     * The human player is unaffected and may still mulligan freely.
+     * Used for {@code opening_hand_test} scenarios where the AI hand is predefined.
+     */
+    private boolean scenarioSkipMulligan = false;
+
+    public boolean isScenarioSkipMulligan() { return scenarioSkipMulligan; }
+    public void setScenarioSkipMulligan(final boolean skip) { this.scenarioSkipMulligan = skip; }
+
+    // -------------------------------------------------------------------------
+    // Replay Mode — forced play sequence
+    // -------------------------------------------------------------------------
+
+    /**
+     * Forced play sequence for Replay AI mode: maps player lobby-name to an ordered list
+     * of card names to cast/activate. Populated from CAST/ACTIVATE events in the replay JSON.
+     *
+     * <p>The AI checks this queue at each decision point (before normal heuristics).
+     * Soft enforcement: if the next card is not castable, the AI falls back to normal logic
+     * and keeps the entry in the queue for retrying next priority window.
+     *
+     * {@code null} means no forced sequence (normal AI behaviour).
+     */
+    private Map<String, List<String>> forcedPlaySequence = null;
+
+    public Map<String, List<String>> getForcedPlaySequence() {
+        return forcedPlaySequence;
+    }
+
+    public void setForcedPlaySequence(final Map<String, List<String>> seq) {
+        this.forcedPlaySequence = seq;
+    }
 }

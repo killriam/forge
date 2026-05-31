@@ -327,6 +327,17 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
         l1.addData("card_name", card.getName());
         l1.addData("from", from);
         l1.addData("to", to);
+        
+        // FIX P2: Add controller to MOVE events
+        if (card.getController() != null) {
+            l1.addData("controller", playerStr(card.getController()));
+        }
+        
+        // FIX P3: Add owner to MOVE events  
+        if (card.getOwner() != null) {
+            l1.addData("owner", playerStr(card.getOwner()));
+        }
+        
         replayLog.addL1Event(l1);
 
         // Accumulate draw / land stats

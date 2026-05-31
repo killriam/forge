@@ -463,20 +463,11 @@ public abstract class ItemManager<T extends InventoryItem> extends JPanel implem
      * @param infinite
      */
     private void setPoolImpl(final ItemPool<T> pool0, final boolean infinite) {
-        System.out.println("[DECK LOADING DEBUG] setPoolImpl() - ENTRY, pool size: " + (pool0 == null ? "null" : pool0.countDistinct()));
-        long start = System.currentTimeMillis();
         this.model.clear();
-        System.out.println("[DECK LOADING DEBUG] setPoolImpl() - model.clear(): " + (System.currentTimeMillis() - start) + "ms");
         this.pool = pool0;
-        long addStart = System.currentTimeMillis();
         this.model.addItems(this.pool);
-        System.out.println("[DECK LOADING DEBUG] setPoolImpl() - model.addItems(): " + (System.currentTimeMillis() - addStart) + "ms");
         this.model.setInfinite(infinite);
-        long viewStart = System.currentTimeMillis();
-        System.out.println("[DECK LOADING DEBUG] setPoolImpl() - calling updateView()...");
         this.updateView(true, null);
-        System.out.println("[DECK LOADING DEBUG] setPoolImpl() - updateView(): " + (System.currentTimeMillis() - viewStart) + "ms");
-        System.out.println("[DECK LOADING DEBUG] setPoolImpl() - EXIT, total: " + (System.currentTimeMillis() - start) + "ms");
     }
 
     public ItemView<T> getCurrentView() {
@@ -1004,10 +995,7 @@ public abstract class ItemManager<T extends InventoryItem> extends JPanel implem
      * updateView
      */
     public void updateView(final boolean forceFilter, final Iterable<T> itemsToSelect) {
-        System.out.println("[DECK LOADING DEBUG] updateView() - ENTRY, forceFilter=" + forceFilter);
-        long start = System.currentTimeMillis();
         final boolean useFilter = (forceFilter && (this.filterPredicate != null)) || !isUnfiltered();
-        System.out.println("[DECK LOADING DEBUG] updateView() - useFilter=" + useFilter + ", wantUnique=" + this.wantUnique);
 
         if (useFilter || this.wantUnique || forceFilter) {
             this.model.clear();
@@ -1029,12 +1017,8 @@ public abstract class ItemManager<T extends InventoryItem> extends JPanel implem
         else if (!useFilter && forceFilter) {
             this.model.addItems(this.pool);
         }
-        System.out.println("[DECK LOADING DEBUG] updateView() - model populated: " + (System.currentTimeMillis() - start) + "ms");
 
-        long refreshStart = System.currentTimeMillis();
-        System.out.println("[DECK LOADING DEBUG] updateView() - calling currentView.refresh()...");
         this.currentView.refresh(itemsToSelect, this.getSelectedIndex(), forceFilter ? 0 : this.currentView.getScrollValue());
-        System.out.println("[DECK LOADING DEBUG] updateView() - currentView.refresh(): " + (System.currentTimeMillis() - refreshStart) + "ms");
 
         for (final ItemFilter<? extends T> filter : this.orderedFilters) {
             filter.afterFiltersApplied();

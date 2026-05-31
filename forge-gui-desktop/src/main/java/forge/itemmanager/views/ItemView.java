@@ -161,20 +161,10 @@ public abstract class ItemView<T extends InventoryItem> {
     }
 
     public void refresh(final Iterable<T> itemsToSelect, final int backupIndexToSelect, final int scrollValueToRestore) {
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - ENTRY");
-        long start = System.currentTimeMillis();
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - calling model.refreshSort()...");
         this.model.refreshSort();
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - model.refreshSort(): " + (System.currentTimeMillis() - start) + "ms");
-        long onRefreshStart = System.currentTimeMillis();
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - calling onRefresh()...");
         onRefresh();
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - onRefresh(): " + (System.currentTimeMillis() - onRefreshStart) + "ms");
-        long fixSelStart = System.currentTimeMillis();
         fixSelection(itemsToSelect, backupIndexToSelect, scrollValueToRestore);
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - fixSelection(): " + (System.currentTimeMillis() - fixSelStart) + "ms");
         this.uniqueCardsOnlyChkBox.setSelected(this.itemManager.getWantUnique());
-        System.out.println("[DECK LOADING DEBUG] ItemView.refresh() - EXIT, total: " + (System.currentTimeMillis() - start) + "ms");
     }
     protected abstract void onResize();
     protected abstract void onRefresh();

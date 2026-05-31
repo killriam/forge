@@ -5,6 +5,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JTextArea;
 
 import forge.gui.framework.DragCell;
@@ -35,6 +36,9 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
     /** Shows total-game and replayed counts next to the title. */
     private final JLabel lblCount = new JLabel();
 
+    /** Indeterminate progress bar shown while replay files are being loaded. */
+    private final JProgressBar progressBar;
+
     final DefaultListModel<String> model = new DefaultListModel<>();
 
     private final StartButton btnStart = new StartButton();
@@ -58,6 +62,12 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         replayInfo.setOpaque(false);
         replayInfoPane = new FScrollPane(replayInfo, true);
         btnView.setText(localizer.getMessage("lblViewReplay"));
+
+        progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Loading replays…");
+        progressBar.setStringPainted(true);
+        progressBar.setVisible(false);
     }
 
     @Override
@@ -128,6 +138,10 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         return lblCount;
     }
 
+    public JProgressBar getProgressBar() {
+        return progressBar;
+    }
+
     @Override
     public void populate() {
         final JPanel container = VHomeUI.SINGLETON_INSTANCE.getPnlDisplay();
@@ -148,6 +162,7 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         titlePanel.add(lblCount, "gapleft 20, pushx");
 
         container.add(titlePanel, "w 96%!, gap 2% 2% 5px 5px");
+        container.add(progressBar, "w 96%!, h 6!, gap 2% 2% 0 0");
         replayList.setModel(model);
         container.add(replayListPane, "w 96%!, h 45%, gap 2% 2% 0 0");
         container.add(replayInfoPane, "w 96%!, h 25%, gap 2% 2% 0 0");
@@ -165,4 +180,3 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         }
     }
 }
-

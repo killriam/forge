@@ -20,15 +20,66 @@ package forge.view;
 import forge.GuiDesktop;
 import forge.Singletons;
 import forge.error.ExceptionHandler;
+import forge.game.GameType;
 import forge.gui.GuiBase;
 import forge.gui.card.CardReaderExperiments;
+import forge.localinstance.properties.ForgePreferences;
+import forge.localinstance.properties.ForgePreferences.FPref;
+import forge.model.FModel;
 import forge.util.BuildInfo;
 import io.sentry.Sentry;
+
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Main class for Forge's swing application view.
  */
 public final class Main {
+    private static final class GuiLaunchOptions {
+        private String playerOneDeck;
+        private String playerTwoDeck;
+        private GuiDeckFormat format = GuiDeckFormat.COMMANDER;
+    }
+
+    /**
+     * Stores all format metadata as plain strings to avoid triggering
+     * DeckType / GameType static initializers (which need Localizer)
+     * before the GUI has set it up.
+     */
+    private enum GuiDeckFormat {
+        COMMANDER("commander", "COMMANDER_DECK", FPref.COMMANDER_DECK_STATES, "Commander"),
+        OATHBREAKER("oathbreaker", "OATHBREAKER_DECK", FPref.OATHBREAKER_DECK_STATES, "Oathbreaker"),
+        TINYLEADERS("tinyleaders", "TINY_LEADERS_DECK", FPref.TINY_LEADER_DECK_STATES, "TinyLeaders"),
+        BRAWL("brawl", "BRAWL_DECK", FPref.BRAWL_DECK_STATES, "Brawl"),
+        CONSTRUCTED("constructed", "CUSTOM_DECK", FPref.CONSTRUCTED_DECK_STATES, null);
+
+        private final String cliName;
+        private final String deckTypeName;
+        private final FPref[] prefKeys;
+        /** GameType enum constant name, resolved lazily after Localizer is ready. */
+        private final String variantName;
+
+        GuiDeckFormat(final String cliName, final String deckTypeName, final FPref[] prefKeys, final String variantName) {
+            this.cliName = cliName;
+            this.deckTypeName = deckTypeName;
+            this.prefKeys = prefKeys;
+            this.variantName = variantName;
+        }
+
+        private static GuiDeckFormat fromCliValue(final String value) {
+            final String normalized = value.trim().toLowerCase(Locale.ROOT).replace("_", "").replace("-", "");
+            for (final GuiDeckFormat format : values()) {
+                if (format.cliName.equals(normalized)) {
+                    return format;
+                }
+            }
+            return null;
+        }
+    }
+
     /**
      * Main entry point for Forge
      */
@@ -62,15 +113,25 @@ public final class Main {
 
         // Start splash screen first, then data models, then controller.
         if (args.length == 0) {
-            Singletons.initializeOnce(true);
-
-            // Controller can now step in and take over.
-            Singletons.getControl().initialize();
+            startGui();
             return;
         }
 
         // command line startup here
-        String mode = args[0].toLowerCase();
+        String mode = args[0].toLowerCase(Locale.ROOT);
+
+        if ("gui".equals(mode) || mode.startsWith("--")) {
+            final String[] guiArgs = "gui".equals(mode) ? Arrays.copyOfRange(args, 1, args.length) : args;
+            try {
+                final GuiLaunchOptions options = parseGuiLaunchOptions(guiArgs);
+                startGui(options);
+            } catch (IllegalArgumentException ex) {
+                System.out.println(ex.getMessage());
+                printGuiUsage();
+                System.exit(1);
+            }
+            return;
+        }
 
         switch (mode) {
             case "sim":
@@ -86,11 +147,108 @@ public final class Main {
                 break;
 
             default:
-                System.out.println("Unknown mode.\nKnown mode is 'sim', 'parse' ");
+                System.out.println("Unknown mode.\nKnown modes are 'sim', 'parse', 'gui'.");
                 break;
         }
 
         System.exit(0);
+    }
+
+    private static void startGui() {
+        startGui(null);
+    }
+
+    private static void startGui(final GuiLaunchOptions options) {
+        Singletons.initializeOnce(true);
+
+        // Apply CLI deck preselection after FModel/preferences are ready
+        if (options != null) {
+            applyGuiLaunchOptions(options);
+        }
+
+        // Controller can now step in and take over.
+        Singletons.getControl().initialize();
+    }
+
+    private static GuiLaunchOptions parseGuiLaunchOptions(final String[] args) {
+        final GuiLaunchOptions options = new GuiLaunchOptions();
+
+        for (int i = 0; i < args.length; i++) {
+            final String arg = args[i];
+            switch (arg) {
+                case "--deck":
+                case "--deck1":
+                    options.playerOneDeck = requireOptionValue(args, ++i, arg);
+                    break;
+                case "--deck2":
+                    options.playerTwoDeck = requireOptionValue(args, ++i, arg);
+                    break;
+                case "--format":
+                    final String formatValue = requireOptionValue(args, ++i, arg);
+                    final GuiDeckFormat format = GuiDeckFormat.fromCliValue(formatValue);
+                    if (format == null) {
+                        throw new IllegalArgumentException("Unknown GUI format: " + formatValue);
+                    }
+                    options.format = format;
+                    break;
+                case "-h":
+                case "--help":
+                    printGuiUsage();
+                    System.exit(0);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown GUI option: " + arg);
+            }
+        }
+
+        return options;
+    }
+
+    private static String requireOptionValue(final String[] args, final int valueIndex, final String option) {
+        if (valueIndex >= args.length) {
+            throw new IllegalArgumentException("Missing value for option: " + option);
+        }
+        return args[valueIndex];
+    }
+
+    private static void applyGuiLaunchOptions(final GuiLaunchOptions options) {
+        if (options.playerOneDeck == null && options.playerTwoDeck == null) {
+            return;
+        }
+
+        final ForgePreferences prefs = FModel.getPreferences();
+        final String deckPrefix = options.format.deckTypeName + ";";
+
+        if (options.playerOneDeck != null) {
+            final String prefValue = deckPrefix + options.playerOneDeck;
+            System.err.println("[DECK-PRESELECT] Writing P1 pref to " + options.format.prefKeys[0] + ": " + prefValue);
+            prefs.setPref(options.format.prefKeys[0], prefValue);
+        }
+        if (options.playerTwoDeck != null) {
+            final String prefValue = deckPrefix + options.playerTwoDeck;
+            System.err.println("[DECK-PRESELECT] Writing P2 pref to " + options.format.prefKeys[1] + ": " + prefValue);
+            prefs.setPref(options.format.prefKeys[1], prefValue);
+        }
+
+        // Resolve GameType by name now that Localizer is ready
+        final Set<GameType> variants = EnumSet.noneOf(GameType.class);
+        if (options.format.variantName != null) {
+            for (final GameType gt : GameType.values()) {
+                if (gt.name().equals(options.format.variantName)) {
+                    variants.add(gt);
+                    break;
+                }
+            }
+        }
+        // Set variant in memory only — lobby reads in-memory prefs; no save() here
+        // to avoid accidentally overwriting user preferences mid-session.
+        prefs.setGameType(FPref.UI_APPLIED_VARIANTS, variants);
+    }
+
+    private static void printGuiUsage() {
+        System.out.println("GUI mode usage:");
+        System.out.println("  java -jar <jar> gui [--format commander|oathbreaker|tinyleaders|brawl|constructed] [--deck <name>] [--deck2 <name>]");
+        System.out.println("  java -jar <jar> --deck <name> [--deck2 <name>] [--format <format>]");
     }
 
     @SuppressWarnings("deprecation")

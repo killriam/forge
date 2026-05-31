@@ -42,6 +42,13 @@
   - [Restrictions / Conditions](Card-scripting-API/Restrictions.md)
   - [Tutorial: creating a custom card](Card-scripting-API/Creating-a-Custom-Card.md)
 
+- Testing & Simulation
+  - [Simulation & Log Analysis Guide](SIMULATION_AND_LOG_ANALYSIS_GUIDE.md)
+  - [Commander Simulation Complete Guide](COMMANDER_SIMULATION_COMPLETE_GUIDE.md)
+  - [Scenario Blackbox Testing Guide](SCENARIO_BLACKBOX_TESTING_GUIDE.md)
+  - [CLI Replay](CLI-REPLAY.md)
+  - [Scenario Starting Hand Format](SCENARIO_STARTING_HAND_FORMAT.md)
+
 - Development
   - [IntelliJ Setup](Development/IntelliJ-setup/IntelliJ-setup.md)
   - [Snapshots & Releases](Development/Snapshots-and-Releases.md)

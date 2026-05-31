@@ -51,6 +51,8 @@ public class ReplayNotationExporter {
     // ---- Turn summary tracking ----
     private int trackingTurn = 0;
     private String trackingActivePlayer = null;
+    // FIX P1: Track turn-start snapshots for L2 generation
+    private GameState turnStartSnapshot = null;
     // Per-player counters reset each turn: playerId → counter
     private final Map<String, Integer> turnLandsPlayed = new HashMap<>();
     private final Map<String, Integer> turnCardsDrawn = new HashMap<>();
@@ -90,6 +92,15 @@ public class ReplayNotationExporter {
         } else {
             meta.setGameType("Unknown");
         }
+        
+        // FIX: Set mode="scenario" if scenario settings are present
+        if (game.getRules() != null && game.getRules().getScenarioStartingHands() != null 
+                && !game.getRules().getScenarioStartingHands().isEmpty()) {
+            replayLog.setMode("scenario");
+            System.out.println("[ReplayNotationExporter] Setting replay mode to 'scenario'");
+        } else {
+            System.out.println("[ReplayNotationExporter] Replay mode remains 'full_game'");
+        }
 
         // Build stable player ID map from initial game.getPlayers() order.
         // Must happen before any player can be eliminated (moved to lostPlayers).
@@ -109,6 +120,13 @@ public class ReplayNotationExporter {
             playerMeta.setAi(player.isAI());
             playerMeta.setPlayerType(player.isAI() ? "AI" : "Human");
             playerMeta.setStartingLife(player.getStartingLife());
+
+            // Team information for multiplayer team games
+            int teamNumber = player.getTeam();
+            if (teamNumber >= 0) {
+                playerMeta.setTeam(teamNumber);
+            }
+            // Note: team remains null for non-team games (1v1, free-for-all)
 
             // Add deck name and hash if available
             if (player.getRegisteredPlayer() != null &&
@@ -724,6 +742,14 @@ public class ReplayNotationExporter {
         data.put("to", formatZone(to, owner));
         data.put("pos", "top");
         data.put("visibility", isPublicZone(to) ? "public" : "private");
+        
+        // FIX P2 & P3: Add controller and owner to MOVE events
+        if (card.getController() != null) {
+            data.put("controller", getPlayerId(card.getController()));
+        }
+        if (card.getOwner() != null) {
+            data.put("owner", getPlayerId(card.getOwner()));
+        }
 
         // Determine actor: player action or system action
         String actor = "SYS";
@@ -766,6 +792,16 @@ public class ReplayNotationExporter {
         data.put("to", getPlayerId(player) + ":hand");
         data.put("pos", "top");
         data.put("visibility", "private");
+
+        // FIX P2: Add controller to DRAW events
+        if (card.getController() != null) {
+            data.put("controller", getPlayerId(card.getController()));
+        }
+
+        // FIX P3: Add owner to DRAW events
+        if (card.getOwner() != null) {
+            data.put("owner", getPlayerId(card.getOwner()));
+        }
 
         // Draw is a system action, but we record which player drew
         addEvent(timeMarker, "SYS", "DRAW", data);
@@ -1526,6 +1562,126 @@ public class ReplayNotationExporter {
     }
 
     /**
+     * FIX P1: Capture a full GameState snapshot from the current game state.
+     * This includes all zones (critically P1:hand, P2:hand, etc.) and all objects.
+     */
+    private GameState captureFullGameState() {
+        GameState state = new GameState();
+        
+        // Capture turn/phase info
+        if (game.getPhaseHandler() != null) {
+            state.setTurn(game.getPhaseHandler().getTurn());
+            state.setPhase(game.getPhaseHandler().getPhase() != null ? 
+                game.getPhaseHandler().getPhase().toString() : "UNKNOWN");
+            state.setStep(game.getPhaseHandler().getPhase() != null ? 
+                game.getPhaseHandler().getPhase().toString() : "UNKNOWN");
+            state.setPriority(null); // Not tracked
+            Player activePlayer = game.getPhaseHandler().getPlayerTurn();
+            if (activePlayer != null) {
+                state.setActivePlayer(getPlayerId(activePlayer));
+            }
+        }
+
+        // Capture player states
+        for (Player player : game.getPlayers()) {
+            String playerId = getPlayerId(player);
+            GameState.PlayerState playerState = new GameState.PlayerState();
+            playerState.setLife(player.getLife());
+            playerState.setManaPool(new ArrayList<>()); // Spec: always []
+            playerState.setMaxHandSize(player.getMaxHandSize());
+            playerState.setLandsPlayedThisTurn(player.getLandsPlayedThisTurn());
+            state.getPlayers().put(playerId, playerState);
+        }
+
+        // Capture all zones
+        for (Player player : game.getPlayers()) {
+            String playerId = getPlayerId(player);
+
+            // Capture hand (CRITICAL for frontend display)
+            List<String> handCards = new ArrayList<>();
+            for (Card card : player.getZone(ZoneType.Hand)) {
+                String cardId = getCardId(card);
+                handCards.add(cardId);
+                // Ensure object state exists
+                GameState.ObjectState objState = createObjectState(card, playerId + ":hand", -1);
+                state.getObjects().put(cardId, objState);
+            }
+            state.getZones().put(playerId + ":hand", handCards);
+
+            // Capture library
+            List<String> libraryCards = new ArrayList<>();
+            int position = 0;
+            for (Card card : player.getZone(ZoneType.Library)) {
+                String cardId = getCardId(card);
+                libraryCards.add(cardId);
+                GameState.ObjectState objState = createObjectState(card, playerId + ":library", position++);
+                state.getObjects().put(cardId, objState);
+            }
+            Map<String, Object> libraryInfo = new HashMap<>();
+            libraryInfo.put("count", libraryCards.size());
+            libraryInfo.put("cards", libraryCards);
+            state.getZones().put(playerId + ":library", libraryInfo);
+
+            // Capture graveyard
+            List<String> graveyardCards = new ArrayList<>();
+            for (Card card : player.getZone(ZoneType.Graveyard)) {
+                String cardId = getCardId(card);
+                graveyardCards.add(cardId);
+                GameState.ObjectState objState = createObjectState(card, playerId + ":graveyard", -1);
+                state.getObjects().put(cardId, objState);
+            }
+            state.getZones().put(playerId + ":graveyard", graveyardCards);
+
+            // Capture exile
+            List<String> exileCards = new ArrayList<>();
+            for (Card card : player.getZone(ZoneType.Exile)) {
+                String cardId = getCardId(card);
+                exileCards.add(cardId);
+                GameState.ObjectState objState = createObjectState(card, playerId + ":exile", -1);
+                state.getObjects().put(cardId, objState);
+            }
+            state.getZones().put(playerId + ":exile", exileCards);
+
+            // Capture command zone (for Commander)
+            List<String> commandCards = new ArrayList<>();
+            for (Card card : player.getZone(ZoneType.Command)) {
+                String cardId = getCardId(card);
+                commandCards.add(cardId);
+                GameState.ObjectState objState = createObjectState(card, playerId + ":command", -1);
+                state.getObjects().put(cardId, objState);
+            }
+            if (!commandCards.isEmpty()) {
+                state.getZones().put(playerId + ":command", commandCards);
+            }
+        }
+
+        // Capture battlefield
+        List<String> battlefieldCards = new ArrayList<>();
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            String cardId = getCardId(card);
+            battlefieldCards.add(cardId);
+            GameState.ObjectState objState = createObjectState(card, "battlefield", -1);
+            state.getObjects().put(cardId, objState);
+        }
+        state.getZones().put("battlefield", battlefieldCards);
+
+        // Capture stack
+        List<String> stackCards = new ArrayList<>();
+        for (Card card : game.getCardsIn(ZoneType.Stack)) {
+            String cardId = getCardId(card);
+            stackCards.add(cardId);
+            GameState.ObjectState objState = createObjectState(card, "stack", -1);
+            state.getObjects().put(cardId, objState);
+        }
+        state.getZones().put("stack", stackCards);
+
+        // Capture shared exile zone (if not already captured per-player)
+        state.getZones().putIfAbsent("exile", new ArrayList<>());
+
+        return state;
+    }
+
+    /**
      * Called when a new turn begins. Flushes the previous turn's summary and resets per-turn counters.
      */
     public void onTurnBegin(int turnNumber, Player activePlayer) {
@@ -1536,6 +1692,9 @@ public class ReplayNotationExporter {
 
         trackingTurn = turnNumber;
         trackingActivePlayer = getPlayerId(activePlayer);
+
+        // FIX P1: Capture turn-start snapshot for L2 generation
+        turnStartSnapshot = captureFullGameState();
 
         // Reset per-turn counters
         turnLandsPlayed.clear();
@@ -1605,6 +1764,78 @@ public class ReplayNotationExporter {
         }
 
         replayLog.addTurnSummary(summary);
+
+        // FIX P1: Generate L2 Unit for this turn at end of CLEANUP
+        generateL2UnitForTurn();
+    }
+
+    /**
+     * FIX P1: Generate and add an L2 Unit for the completed turn.
+     * Creates a snapshot with before (turn start) and after (turn end) states.
+     */
+    private void generateL2UnitForTurn() {
+        if (turnStartSnapshot == null) {
+            return; // No turn start captured yet
+        }
+
+        // Capture turn-end snapshot
+        GameState turnEndSnapshot = captureFullGameState();
+
+        // Create L2 Unit
+        L2Unit unit = new L2Unit();
+        unit.setU(replayLog.getViewsL2().size()); // Sequential index
+
+        // Time markers: T<turn>.DRAW:1 to T<turn>.CLEANUP:last
+        String tStart = "T" + trackingTurn + ".DRAW:1";
+        String tEnd = "T" + trackingTurn + ".CLEANUP:last";
+        unit.setTStart(tStart);
+        unit.setTEnd(tEnd);
+
+        // L1 range: find all events in this turn
+        List<L1Event> events = replayLog.getLogL1();
+        int startIdx = -1;
+        int endIdx = -1;
+        for (int i = 0; i < events.size(); i++) {
+            L1Event evt = events.get(i);
+            String timeMarker = evt.getT();
+            if (timeMarker != null && timeMarker.startsWith("T" + trackingTurn + ".")) {
+                if (startIdx == -1) {
+                    startIdx = i;
+                }
+                endIdx = i;
+            }
+        }
+        if (startIdx >= 0) {
+            unit.setL1Range(new int[]{startIdx, endIdx});
+        } else {
+            unit.setL1Range(new int[]{0, 0});
+        }
+
+        // Decision events: find all player decision events in this turn
+        List<Integer> decisionEvents = new ArrayList<>();
+        for (int i = startIdx; i >= 0 && i <= endIdx; i++) {
+            L1Event evt = events.get(i);
+            String type = evt.getType();
+            if (type != null && (type.equals("CAST") || type.equals("ACTIVATE") ||
+                type.equals("DECLARE_ATTACKERS") || type.equals("DECLARE_BLOCKERS") ||
+                type.equals("MULLIGAN") || type.equals("PLAY_LAND") || type.equals("CHOOSE"))) {
+                decisionEvents.add(evt.getI());
+            }
+        }
+        unit.setDecisionEvents(decisionEvents);
+
+        // Set before and after snapshots
+        unit.setBefore(turnStartSnapshot);
+        unit.setAfter(turnEndSnapshot);
+
+        // Stack: empty for now (could be populated from events)
+        unit.setStack(new ArrayList<>());
+
+        // Annotations: empty for now
+        unit.setAnnotations(new L2Unit.Annotations());
+
+        // Add to replay log
+        replayLog.addL2Unit(unit);
     }
 
     // --- Tracking hooks called from log* methods ---

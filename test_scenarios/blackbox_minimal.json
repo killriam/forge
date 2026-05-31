@@ -1,0 +1,59 @@
+{
+  "format": "mtg-replay",
+  "version": "1.8.0",
+  "mode": "scenario",
+  "meta": {
+    "game_id": "blackbox-test-example-minimal",
+    "timestamp": "2026-05-03T12:00:00Z",
+    "game_type": "commander",
+    "players": {
+      "P1": {
+        "name": "Blackbox-Test-Player-1",
+        "deck_name": "Blackbox Test Deck",
+        "is_ai": true
+      },
+      "P2": {
+        "name": "Blackbox-Test-Player-2",
+        "deck_name": "Opponent Deck",
+        "is_ai": true
+      }
+    }
+  },
+  "scenario": {
+    "type": "opening_hand_test",
+    "title": "Blackbox Test — Minimal Scenario",
+    "description": "Minimales Scenario für Blackbox-Testing.\n\nDieses Scenario testet:\n- Scenario-Loading\n- Starthand-Definition\n- First-Draws-Definition\n- Basis-Replay-Log-Generierung\n\nPerfekt als Basis-Template für weitere Tests.",
+    "question": "Kann das Scenario korrekt geladen werden?",
+    "answer": "Ja, wenn beide Spieler mit definierten Händen starten.",
+    "tags": ["blackbox", "test", "minimal", "template"],
+    "ruling_references": [],
+    "player_count": 2,
+    "players": {
+      "P1": {
+        "commanders": ["Sol Ring"],
+        "starting_hand": [
+          "Mountain",
+          "Forest",
+          "Plains",
+          "Island",
+          "Swamp",
+          "Lightning Bolt",
+          "Shock"
+        ],
+        "first_draws": [
+          "Command Tower",
+          "Sol Ring",
+          "Mana Vault"
+        ],
+        "starting_life": 40
+      },
+      "P2": {
+        "commanders": [],
+        "starting_hand": [],
+        "first_draws": [],
+        "starting_life": 40
+      }
+    }
+  }
+}
+

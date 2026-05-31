@@ -76,15 +76,12 @@ public class CLobby {
         view.getCbSingletons().setSelected(prefs.getPrefBoolean(FPref.DECKGEN_SINGLETONS));
         view.getCbArtifacts().setSelected(prefs.getPrefBoolean(FPref.DECKGEN_ARTIFACTS));
 
-        // Load saved variants or default to Commander
+        // Apply saved variants (if any)
         Set<GameType> savedVariants = prefs.getGameType(FPref.UI_APPLIED_VARIANTS);
         if (!savedVariants.isEmpty()) {
             for (GameType variant : savedVariants) {
                 view.applyVariant(variant);
             }
-        } else {
-            // Default to Commander if no variants are saved
-            view.applyVariant(GameType.Commander);
         }
     }
 }

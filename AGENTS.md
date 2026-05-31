@@ -33,21 +33,22 @@ mvn clean package -pl forge-gui-desktop -am -Dmaven.test.skip=true
 # Run desktop client:
 java -jar forge-gui-desktop/target/forge-gui-desktop-*-SNAPSHOT-jar-with-dependencies.jar
 
-# Run headless AI simulation (from desktop jar):
+# CLI modes (see docs/CLI.md for full documentation):
+# - Headless AI simulation:
 java -jar <jar> sim -d deck1.dck deck2.dck -n 10 -f constructed -q
 #   -n = games, -m = match size (best-of), -f = format, -q = quiet, -c = timeout secs
-# Replay a recorded game interactively (opens GUI, reorders library to match draws):
+# - Replay a recorded game interactively (opens GUI, reorders library to match draws):
 java -jar <jar> replay path/to/replay_log.json
-
-# CLI replay simulation (deterministic, headless — reorders library from replay):
+# - CLI replay simulation (deterministic, headless — reorders library from replay):
 java -jar <jar> sim -d deck1.dck deck2.dck -n 1 -r path/to/replay_log.json
-
-# Standalone replay notation test:
-java -jar <jar> sim -replay [output_dir]
+# - Card validation:
+java -jar <jar> parse
 
 
 # Checkstyle runs at validate phase — only checks RedundantImport and UnusedImports (see checkstyle.xml)
 ```
+
+ **Full CLI Documentation:** [docs/CLI.md](docs/CLI.md)
 
 ## Card Scripting (Critical Path)
 
