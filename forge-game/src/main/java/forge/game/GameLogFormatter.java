@@ -116,6 +116,9 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
                 allPlayers,
                 generateTimeMarker()
             );
+            if (firstPlayer != null) {
+                replayExporter.setTossWinner(firstPlayer, true);
+            }
         }
 
         return new GameLogEntry(GameLogEntryType.GAME_OUTCOME, message);
