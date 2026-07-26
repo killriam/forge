@@ -929,10 +929,9 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
 
     public final ExtraTurn addExtraTurn(final Player player) {
         Player previous = null;
-        // use a stack to handle extra turns, make sure the bottom of the stack restores original turn order
-        if (extraTurns.isEmpty()) {
-            extraTurns.push(new ExtraTurn(game.getNextPlayerAfter(playerTurn)));
-        } else {
+        // Normal turn order is resumed via lastRegularTurnPlayer in getNextActivePlayer()
+        // once this stack drains, so no bottom-of-stack sentinel is needed here.
+        if (!extraTurns.isEmpty()) {
             previous = extraTurns.peek().getPlayer();
         }
 
@@ -1294,13 +1293,12 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
      * @return int
      */
     public int getExtraTurnForPlayer(final Player p) {
-        if (this.extraTurns.isEmpty() || this.extraTurns.size() < 2) {
+        if (this.extraTurns.isEmpty()) {
             return 0;
         }
 
         int count = 0;
-        // skip the first element
-        for (final ExtraTurn et : extraTurns.subList(1, extraTurns.size())) {
+        for (final ExtraTurn et : extraTurns) {
             if (!et.getPlayer().equals(p)) {
                 break;
             }

@@ -639,16 +639,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
                     hostedMatch.setStartGameHook(() -> {
                         try {
                             LOG.info("Applying mid-game state: {} lines for turn {}", stateLines.size(), branchTurn);
-                            forge.ai.GameState gameState = new forge.ai.GameState() {
-                                @Override
-                                public forge.item.IPaperCard getPaperCard(String cardName, String setCode, int artID) {
-                                    forge.item.IPaperCard card = forge.StaticData.instance().getCommonCards().getCard(cardName);
-                                    if (card == null) {
-                                        LOG.warn("Card not found in database: '{}' — skipping", cardName);
-                                    }
-                                    return card;
-                                }
-                            };
+                            forge.game.GameState gameState = new forge.game.GameState();
                             gameState.parse(stateLines);
                             gameState.applyToGame(hostedMatch.getGame());
                             LOG.info("Mid-game state applied successfully at turn {}", branchTurn);

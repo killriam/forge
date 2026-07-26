@@ -9,6 +9,8 @@ import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.game.zone.ZoneType;
 
+import com.google.common.collect.Multiset;
+
 import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
@@ -331,8 +333,8 @@ public class ReplayNotationExporter {
 
         // Counters
         if (card.getCounters() != null && !card.getCounters().isEmpty()) {
-            for (Map.Entry<forge.game.card.CounterType, Integer> counter : card.getCounters().entrySet()) {
-                objState.getCounters().put(counter.getKey().getName(), counter.getValue());
+            for (Multiset.Entry<forge.game.card.CounterType> counter : card.getCounters().entrySet()) {
+                objState.getCounters().put(counter.getElement().getName(), counter.getCount());
             }
         }
 

@@ -22,7 +22,6 @@ import forge.gui.GuiBase;
 import forge.gui.SOverlayUtils;
 import forge.gui.framework.ICDoc;
 import forge.gui.util.SOptionPane;
-import forge.item.IPaperCard;
 import forge.localinstance.properties.ForgeConstants;
 import forge.localinstance.skin.FSkinProp;
 import forge.menus.IMenuProvider;
@@ -214,7 +213,7 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
 
             hostedMatch.setStartGameHook(() -> {
                 if (!gameStateLines.isEmpty()) {
-                    ScenarioGameState gs = new ScenarioGameState();
+                    forge.game.GameState gs = new forge.game.GameState();
                     gs.parse(gameStateLines);
                     gs.applyToGame(hostedMatch.getGame());
                 }
@@ -310,16 +309,5 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     @Override
     public List<JMenu> getMenus() {
         return new ArrayList<>();
-    }
-
-    /**
-     * Minimal concrete GameState that resolves card names against the main Forge card database.
-     * Used to parse and apply puzzle-format game state lines from scenario JSON files.
-     */
-    private static class ScenarioGameState extends forge.ai.GameState {
-        @Override
-        public IPaperCard getPaperCard(String cardName, String setCode, int artID) {
-            return FModel.getMagicDb().getCommonCards().getCard(cardName, setCode, artID);
-        }
     }
 }
