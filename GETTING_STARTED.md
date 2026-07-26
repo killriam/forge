@@ -14,7 +14,7 @@ This fork includes custom features like:
 - Game learning viewer with turn evaluation
 - Scenario viewer
 
-**Upstream Repository:** `https://github.com/forge-ai/forge.git`
+**Upstream Repository:** `https://github.com/Card-Forge/forge.git`
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ If you want to track upstream changes and sync regularly:
 ```bash
 git clone https://github.com/killriam/forge.git forge-fork
 cd forge-fork
-git remote add upstream https://github.com/forge-ai/forge.git
+git remote add upstream https://github.com/Card-Forge/forge.git
 git fetch upstream
 ```
 
@@ -169,8 +169,10 @@ The desktop GUI should launch, and simulations should complete without errors.
 4. **Sync with Upstream** (Optional)
    ```bash
    git fetch upstream
-   git rebase upstream/master
+   git merge upstream/master
    ```
+   Use merge, not rebase — custom commits are already pushed to `origin/replay-Features`,
+   and rebasing would rewrite that published history.
 
 ## Troubleshooting
 
@@ -204,7 +206,7 @@ ls -la forge-gui-desktop/target/forge-gui-desktop-*-SNAPSHOT-jar-with-dependenci
 
 ## Resources
 
-- **Official Forge Repository:** https://github.com/forge-ai/forge
+- **Official Forge Repository:** https://github.com/Card-Forge/forge
 - **Magic: The Gathering Rules:** https://magic.wizards.com/en/rules
 - **Card Scripting Documentation:** `docs/Card-scripting-API/`
 - **Fork Analysis:** `AI_FEATURES_ANALYSIS.md`

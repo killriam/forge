@@ -1,4 +1,4 @@
-# Important Docs: Build, Simulation, Upstream Rebase
+# Important Docs: Build, Simulation, Upstream Merge
 
 This is the canonical shortlist of markdown references in this fork for build/simulation/upstream sync workflow.
 
@@ -14,12 +14,17 @@ This is the canonical shortlist of markdown references in this fork for build/si
 2. `GETTING_STARTED.md` — practical CLI examples for simulation, replay, and parse.
 3. `README.md` — high-level CLI overview and quick-start examples.
 
-## Upstream rebase to commit/release (canonical)
+## Upstream merge to commit/release (canonical)
 
 1. `GETTING_STARTED.md` — upstream remote setup and sync path:
-   - `git remote add upstream https://github.com/forge-ai/forge.git`
+   - `git remote add upstream https://github.com/Card-Forge/forge.git`
    - `git fetch upstream`
-   - `git rebase upstream/master`
+   - `git merge upstream/master`
+
+   Merge, not rebase: the fork's custom commits are already published to
+   `origin/replay-Features`, so rebasing would rewrite published history and
+   require a force-push. Merge keeps existing commit hashes intact and matches
+   actual sync practice (see `FORK_CHANGES_SUMMARY.md` sync log).
 2. `docs/Development/Snapshots-and-Releases.md` — branch/PR/release flow after syncing.
 
 ## Context-only (not canonical process docs)
