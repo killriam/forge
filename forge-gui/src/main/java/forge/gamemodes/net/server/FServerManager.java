@@ -3,6 +3,10 @@ package forge.gamemodes.net.server;
 import forge.ai.LobbyPlayerAi;
 import forge.ai.PlayerControllerAi;
 import forge.game.Game;
+import forge.game.GameLogEntry;
+import forge.game.GameView;
+import forge.game.event.GameEvent;
+import forge.game.event.GameEventAddLog;
 import forge.game.player.Player;
 import forge.gamemodes.match.HostedMatch;
 import forge.gamemodes.match.LobbySlot;
@@ -22,6 +26,7 @@ import forge.gui.interfaces.IGuiGame;
 import forge.gui.util.SOptionPane;
 import forge.interfaces.IGameController;
 import forge.interfaces.ILobbyListener;
+import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
 import forge.player.PlayerControllerHuman;
 import forge.util.BuildInfo;
@@ -433,6 +438,8 @@ public final class FServerManager implements IHasForgeLog {
     }
 
     public void updateLobbyState() {
+        localLobby.getData().setMaximumCommanderBracket(
+                FModel.getPreferences().getPrefInt(FPref.DECKGEN_MAXIMUM_COMMANDER_BRACKET));
         final LobbyUpdateEvent event = new LobbyUpdateEvent(localLobby.getData());
         broadcast(event);
     }
@@ -668,14 +675,14 @@ public final class FServerManager implements IHasForgeLog {
     }
 
     private void mapNatPort() {
-        final String localAddress = getLocalAddress();
-        final PortMapping portMapping = new PortMapping(port, localAddress, PortMapping.Protocol.TCP, "Forge");
-        // Shutdown existing UPnP service if already running
-        if (upnpService != null) {
-            upnpService.shutdown();
-        }
-
         try {
+            final String localAddress = getLocalAddress();
+            final PortMapping portMapping = new PortMapping(port, localAddress, PortMapping.Protocol.TCP, "Forge");
+            // Shutdown existing UPnP service if already running
+            if (upnpService != null) {
+                upnpService.shutdown();
+            }
+
             // Create a new UPnP service instance
             upnpService = new UpnpServiceImpl(GuiBase.getInterface().getUpnpPlatformService());
             upnpService.startup();
@@ -695,8 +702,14 @@ public final class FServerManager implements IHasForgeLog {
                     }
                 }
             }, 5000);
-        } catch (Exception e) {
-            netLog.error(e, "UPnP mapping error");
+        } catch (LinkageError | Exception e) {
+            // UPnP port mapping is optional (it makes the host reachable from the
+            // internet; LAN/direct hosting works without it). jupnp is unavailable
+            // on iOS/MobiVM (provided scope, no platform UPnP service), so the
+            // PortMapping/UpnpService classes fail to load - NoClassDefFoundError
+            // is a LinkageError and degrades gracefully instead of killing hosting,
+            // while fatal Errors (OutOfMemoryError etc.) still propagate.
+            netLog.error(e, "UPnP mapping unavailable");
         }
     }
 
@@ -841,6 +854,19 @@ public final class FServerManager implements IHasForgeLog {
         netGui.updateGameView();
         netGui.openView(new forge.trackable.TrackableCollection<>(netGui.getLocalPlayers()));
         netLog.info("[Reconnect] Sent game state and openView to slot {}", slotIndex);
+
+        // Replay the host's log entries to rebuild the client's log on re-connect
+        final GameView gameView = netGui.getGameView();
+        if (gameView != null && gameView.getGameLog() != null) {
+            final List<GameEvent> logEvents = new ArrayList<>();
+            for (final GameLogEntry entry : gameView.getGameLog().getAllEntries()) {
+                logEvents.add(new GameEventAddLog(entry.type(), entry.message(), entry.sourceCard()));
+            }
+            if (!logEvents.isEmpty()) {
+                netGui.replayEvents(logEvents);
+                netLog.info("[Reconnect] Replayed {} game log entries for slot {} ({})", logEvents.size(), slotIndex, client.getUsername());
+            }
+        }
 
         // Replay current prompt
         final PlayerControllerHuman pch = findRemoteController(slotIndex);

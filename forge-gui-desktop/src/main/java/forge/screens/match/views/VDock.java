@@ -312,7 +312,8 @@ public class VDock implements IVDoc<CDock> {
         AUTO_YIELDS    (FSkinProp.ICO_AUTOYIELDS,       "lblAutoYieldsAndTriggers",   true),
         VIEW_DECK_LIST   (FSkinProp.ICO_DOCK_DECKLIST,    "lblViewDeckList",            true),
         LEARNING_MARKER  (FSkinProp.ICO_QUEST_BOOK,      "lblBookmarkTitle",            true),
-        CONCEDE          (FSkinProp.ICO_DOCK_CONCEDE,    "lblConcedeGame",             false);
+        CONCEDE          (FSkinProp.ICO_DOCK_CONCEDE,    "lblConcedeGame",             false),
+        OFFER_DRAW       (FSkinProp.ICO_DOCK_OFFERDRAW,  "lblOfferDraw",               false);
 
         final FSkinProp icon;
         final String labelKey;

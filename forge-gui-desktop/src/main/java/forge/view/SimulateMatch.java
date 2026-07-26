@@ -37,6 +37,7 @@ import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
 import forge.util.Lang;
+import forge.util.MyRandom;
 import forge.util.SQLiteConnection;
 import forge.util.TextUtil;
 import forge.util.WordUtil;
@@ -108,6 +109,12 @@ public class SimulateMatch {
         }
 
         boolean outputGamelog = !params.containsKey("q");
+
+        Long seed = null;
+        if (params.containsKey("s")) {
+            seed = Long.parseLong(params.get("s").get(0));
+            MyRandom.setRandom(new Random(seed));
+        }
 
         GameType type = GameType.Constructed;
         if (params.containsKey("f")) {
@@ -221,6 +228,9 @@ public class SimulateMatch {
         }
 
         sb.append(" - ").append(Lang.nounWithNumeral(nGames, "game")).append(" of ").append(type);
+        if (seed != null) {
+            sb.append(" seed ").append(seed);
+        }
 
         System.out.println(sb.toString());
 
@@ -261,6 +271,7 @@ public class SimulateMatch {
         System.out.println("\tT - Type of tournament to run with all provided decks (Bracket, RoundRobin, Swiss)");
         System.out.println("\tP - Amount of players per match (used only with Tournaments, defaults to 2)");
         System.out.println("\tF - format of games, defaults to constructed");
+        System.out.println("\tS - RNG seed for simulation");
         System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
         System.out.println("\tr - Replay mode. Path to a replay JSON log; reorders libraries to match recorded draw order.");
@@ -1008,4 +1019,4 @@ public class SimulateMatch {
         }
     }
 
- }
+}
