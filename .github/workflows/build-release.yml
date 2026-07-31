@@ -10,7 +10,7 @@ jobs:
   build-and-release:
     name: Build JAR and publish release
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     permissions:
       contents: write
@@ -39,6 +39,24 @@ jobs:
           echo "jar_path=$JAR" >> $GITHUB_OUTPUT
           echo "jar_name=$(basename $JAR)" >> $GITHUB_OUTPUT
           echo "Found: $JAR ($(du -sh $JAR | cut -f1))"
+
+      - name: Package portable build (JAR + res/)
+        id: package
+        run: |
+          # The fat JAR loads card images/sounds/skins etc. from a `res/` folder next to it at
+          # runtime (forge.GuiDesktop.getAssetsDir()) - it does NOT read them from its own
+          # classpath even though maven also copies them in there. A bare JAR download crashes
+          # immediately after the splash screen with "Cannot find default skin". Ship a
+          # self-contained zip so a fresh download actually runs.
+          STAGE_DIR="MaMoForge-portable"
+          mkdir -p "$STAGE_DIR"
+          cp "${{ steps.find_jar.outputs.jar_path }}" "$STAGE_DIR/"
+          cp -r forge-gui/res "$STAGE_DIR/res"
+          ZIP_NAME="MaMoForge-portable.zip"
+          zip -rq "$ZIP_NAME" "$STAGE_DIR"
+          echo "zip_path=$ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "Packaged: $ZIP_NAME ($(du -sh "$ZIP_NAME" | cut -f1))"
 
       - name: Delete existing replay-features-latest release and tag
         env:
@@ -73,6 +91,9 @@ jobs:
           **Build date:** ${BUILD_DATE}
 
           ## Installation
-          Download the JAR and configure it via the MaMo Connector setup wizard." \
+          - **Fresh install:** download \`${{ steps.package.outputs.zip_name }}\`, extract it, and run \`java -jar ${{ steps.find_jar.outputs.jar_name }}\` from inside the extracted folder. This bundles the \`res/\` folder the JAR needs at runtime - a bare JAR alone will crash on launch.
+          - **Existing install:** if you already have a \`res/\` folder from a previous extract, you can just drop in the smaller \`${{ steps.find_jar.outputs.jar_name }}\` to update.
+          - Configure via the MaMo Connector setup wizard." \
             --prerelease \
-            "${{ steps.find_jar.outputs.jar_path }}#${{ steps.find_jar.outputs.jar_name }}"
+            "${{ steps.find_jar.outputs.jar_path }}#${{ steps.find_jar.outputs.jar_name }}" \
+            "${{ steps.package.outputs.zip_path }}#${{ steps.package.outputs.zip_name }}"
