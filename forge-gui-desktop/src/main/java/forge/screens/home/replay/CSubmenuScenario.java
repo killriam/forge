@@ -226,6 +226,11 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             final List<RegisteredPlayer> players = new ArrayList<>();
             final RegisteredPlayer human = new RegisteredPlayer(new Deck())
                     .setPlayer(GamePlayerUtil.getGuiPlayer());
+            // Tracks the actual lobby name assigned to each seat this run, so a forced
+            // play sequence (keyed by "P1"/"P2" in the JSON) can be translated to the
+            // runtime name GameRules.setForcedPlaySequence()/AiController expect.
+            final Map<String, String> idToLobbyName = new LinkedHashMap<>();
+            idToLobbyName.put("P1", GamePlayerUtil.getGuiPlayer().getName());
             // Apply commander from player setup if present (for Commander game type support)
             if (si != null && si.playerCommanders.containsKey("P1")) {
                 for (String cmdName : si.playerCommanders.get("P1")) {
@@ -239,9 +244,11 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
 
             // AI players (indices 1..playerCount-1)
             for (int i = 1; i < playerCount; i++) {
+                final String aiName = "AI " + i;
                 final RegisteredPlayer ai = new RegisteredPlayer(new Deck())
-                        .setPlayer(GamePlayerUtil.createAiPlayer("AI " + i));
+                        .setPlayer(GamePlayerUtil.createAiPlayer(aiName));
                 String aiPlayerId = "P" + (i + 1);
+                idToLobbyName.put(aiPlayerId, aiName);
                 if (si != null && si.playerCommanders.containsKey(aiPlayerId)) {
                     for (String cmdName : si.playerCommanders.get(aiPlayerId)) {
                         forge.item.PaperCard cmdCard = FModel.getMagicDb().getCommonCards().getCard(cmdName);
@@ -272,6 +279,22 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             if (si != null && "opening_hand_test".equals(si.type)) {
                 rules.setScenarioSkipMulligan(true);
             }
+
+            // Forced play sequence (events array): reuses the same GameRules field and
+            // AiController "Case 1" consumption logic that drives full-game Replay mode
+            // (soft enforcement — an uncastable next card is left in the queue and retried
+            // next priority instead of blocking normal play). Translate P1/P2 ids to the
+            // lobby names actually assigned above so the AI's name lookup can find them.
+            if (si != null && si.hasForcedPlaySequence()) {
+                Map<String, List<String>> forcedSeq = si.buildForcedPlaySequenceForLobbyNames(idToLobbyName);
+                if (!forcedSeq.isEmpty()) {
+                    rules.setForcedPlaySequence(forcedSeq);
+                    int total = forcedSeq.values().stream().mapToInt(List::size).sum();
+                    LOG.info("Scenario: forced play sequence set — {} event(s) for {} player(s)",
+                            total, forcedSeq.size());
+                }
+            }
+
             hostedMatch.startMatch(rules, null, players, human, GuiBase.getInterface().getNewGuiGame());
 
             SwingUtilities.invokeLater(SOverlayUtils::hideOverlay);

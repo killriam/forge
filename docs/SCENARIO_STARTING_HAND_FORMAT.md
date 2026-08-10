@@ -64,6 +64,14 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
 }
 ```
 
+> **Actor identity (`"a"`):** always a plain player id — `"P1"`, `"P2"`, … — matching the
+> `scenario.players` keys elsewhere in the same file. It is **not** the in-game lobby name.
+> `CSubmenuScenario`/`SimulateMatch` translate this id to whatever name they actually assign
+> that seat at launch time before handing the sequence to `GameRules.setForcedPlaySequence()` —
+> callers never need to predict or reconstruct Forge's internal naming conventions
+> (`Ai(N)-<deckName>`, profile names, etc.). This replaced an earlier, broken design where the
+> exporter had to guess the exact runtime lobby-name string; see Troubleshooting below.
+
 ### Event-Typen
 
 | `type` | Beschreibung |
@@ -86,12 +94,24 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
 ### Funktionsweise
 
 1. Scenario-JSON wird geladen → `starting_hand` + `first_draws` + `events`
-2. `ReplayPlaySequenceParser` liest das `events`-Array
-3. `GameRules.forcedPlaySequence` wird mit der Karten-Reihenfolge befüllt
+2. `ReplayLogParser.parseForcedSequenceEvents()` liest das `events`-Array → Map
+   `Spieler-ID ("P1"/"P2"/…) → Karten-Reihenfolge`
+3. Der Launcher (`CSubmenuScenario` für die GUI, `SimulateMatch` für `-s`) übersetzt jede
+   Spieler-ID in den tatsächlich vergebenen Lobby-Namen dieses Laufs (Mensch: konfigurierter
+   Spielername; AI: der Name, mit dem der Sitz erzeugt wurde) und befüllt
+   `GameRules.forcedPlaySequence` mit dem übersetzten Ergebnis — **derselbe Mechanismus**, den
+   der `-r`-Replay-Modus für echte abgeschlossene Spiele nutzt (siehe `AiController`,
+   "Forced play sequence from replay").
 4. Während des Spiels: AI prüft bei jeder Priorität die Queue
    - Nächste Karte castbar? → Cast + aus Queue entfernen
    - Nicht castbar? → in Queue lassen, normal AI-Entscheidung
 5. Mensch (P1): kann die Sequenz befolgen oder ignorieren
+
+**Beide Einstiegspunkte unterstützt seit Fork-Version, in der dieser Absatz aktualisiert
+wurde:** die GUI **Replay Scenario**-Submenu (`CSubmenuScenario`) und der CLI `-s`-Flag
+(`SimulateMatch`). Zuvor wertete nur `-s` das `events`-Array überhaupt aus — und selbst dort
+wurde die Spieler-ID (`"P1"`) fälschlich direkt als Lobby-Name verwendet, wodurch die
+Sequenz nie zum tatsächlichen `player.getLobbyPlayer().getName()` passte und niemals feuerte.
 
 ---
 
@@ -191,21 +211,21 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
     {
       "i": 1,
       "t": "T1.MP1:1",
-      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "a": "P1",
       "type": "PLAY_LAND",
       "data": { "card_name": "Command Tower" }
     },
     {
       "i": 2,
       "t": "T2.MP1:1",
-      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "a": "P1",
       "type": "PLAY_LAND",
       "data": { "card_name": "Breeding Pool" }
     },
     {
       "i": 3,
       "t": "T2.MP1:2",
-      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "a": "P1",
       "type": "CAST",
       "data": { "card_name": "Energy Tap" }
     }
@@ -215,8 +235,13 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
 
 > ✅ **Getestet** — `hand: 7/7, draws: 3/3, 3 event(s) for 1 player(s)` — AI spielt exakt: T2 Command Tower, T2 Breeding Pool, T2 Energy Tap (Sequence befolgt)
 
-**Wichtig:** Der `"a"`-Wert (Actor) im `events`-Array muss mit dem **tatsächlichen Lobby-Namen** des Spielers übereinstimmen.  
-Bei CLI-Sim mit `-d <deck.dck>` ist der Name: `Ai(1)-<Username> - <DeckName> (<Date>)`.
+**Wichtig:** Der `"a"`-Wert (Actor) im `events`-Array ist eine **Spieler-ID** (`"P1"`, `"P2"`, …) —
+dieselbe, die auch unter `scenario.players` verwendet wird. Er muss **nicht** mit dem
+tatsächlichen Lobby-Namen übereinstimmen; `CSubmenuScenario`/`SimulateMatch` übernehmen die
+Übersetzung selbst, da nur der Launcher zum Startzeitpunkt weiß, welchen Namen ein Sitz
+bekommt. (Frühere Fork-Versionen verlangten hier fälschlich einen vorkonstruierten
+Lobby-Namen-String wie `Ai(1)-<Username> - <DeckName> (<Date>)` — das führte dazu, dass die
+Sequenz nie feuerte, siehe Troubleshooting unten.)
 
 ---
 
@@ -426,22 +451,28 @@ Spiel startet — Spieler zieht seine Starthand aus der vorbereiteten Library
 > **Hinweis:** Szenario-Dateien erscheinen in der Liste wenn `"mode": "scenario"` gesetzt ist.  
 > Normale Replays (`"mode": "full_game"`) erscheinen nur in der Replay-Liste.
 
-### Via CLI (`-s` Flag)
+### Via CLI (`-scenario` Flag)
 
 ```bash
 # Scenario mit Starthand + First-Draws (ohne Forced Sequence):
 java -jar forge-gui-desktop-*.jar sim \
   -d "Horror__Dead_is_not_an_end.dck" "Aggro.dck" \
   -n 1 -f Commander \
-  -s path/to/scenario.json
+  -scenario path/to/scenario.json
 
 # Scenario MIT Forced Play Sequence (events-Array im JSON):
 java -jar forge-gui-desktop-*.jar sim \
   -d "Horror__Dead_is_not_an_end.dck" "Aggro.dck" \
   -n 1 -f Commander \
-  -s path/to/scenario_with_forced_sequence.json
+  -scenario path/to/scenario_with_forced_sequence.json
 # → Startet Spiel mit definierter Hand UND erzwungener Spielreihenfolge
 ```
+
+> **Achtung, Flag umbenannt:** Das Scenario-Flag heißt `-scenario`, **nicht** `-s` — `-s` ist
+> bereits durch den RNG-Seed-Parameter belegt (`Long.parseLong()` auf einen Dateipfad crasht
+> sofort). Beide Flags teilten sich früher denselben Schlüssel; das war ein Bug, kein
+> Konfigurationsfehler des Aufrufers, und wurde beim Fix der Forced-Play-Sequence-Übersetzung
+> (siehe oben) korrigiert.
 
 ---
 
@@ -483,13 +514,23 @@ Das Szenario-JSON beschreibt nur die *Reihenfolge* — die Karten müssen im Dec
 
 ### Problem: Forced Play Sequence wird nicht befolgt
 
-**Ursache:** Der `"a"`-Wert (Actor) im `events`-Array stimmt nicht mit dem Lobby-Namen des Spielers überein.
+**Ursache (aktuell):** `"events"` ist nicht auf **Top-Level** (neben `scenario`), oder der `type`
+ist keiner von `"CAST"`/`"ACTIVATE"`/`"PLAY_LAND"`, oder `data.card_name` fehlt. Prüfen, ob
+`Scenario: forced play sequence set — N event(s) for M player(s)` (GUI-Log) bzw.
+`Scenario: Loaded forced play sequence — N event(s) for M player(s)` (CLI-Log) überhaupt
+erscheint — wenn nicht, wurde das Array gar nicht geparst.
 
-**Lösung:** Bei CLI-Sim mit `-d <deck.dck>` ist der Lobby-Name:  
-`Ai(1)-<Username> - <DeckName> (<Date>)`  
-Beispiel: `"Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)"`
+Falls das Log erscheint, aber die AI die Sequenz trotzdem nicht befolgt: die angegebene Karte
+war zu diesem Zeitpunkt nicht castbar (**Soft Enforcement**, siehe unten) — kein Bug, sondern
+erwartetes Verhalten.
 
-**Tipp:** Ein normales Replay-Spiel laufen lassen, dann aus dem Replay-JSON die `meta.players.<id>.name`-Werte kopieren.
+**Ursache (behoben, historisch):** Vor dieser Korrektur musste `"a"` exakt dem tatsächlichen
+Lobby-Namen des Spielers entsprechen (`Ai(1)-<Username> - <DeckName> (<Date>)`), den aber
+weder GUI- noch CLI-Pfad zuverlässig reproduzierten — der CLI-Pfad verwendete sogar
+fälschlich die rohe Spieler-ID (`"P1"`) direkt als Lobby-Namen. `"a"` ist jetzt immer eine
+Spieler-ID (`"P1"`, `"P2"`, …); die Übersetzung zum tatsächlichen Lobby-Namen übernimmt der
+Launcher selbst. Falls du eine alte Szenario-Datei mit einem vorkonstruierten Lobby-Namen-String
+in `"a"` hast, ersetze ihn durch die passende Spieler-ID.
 
 ### Problem: Karte aus Forced Sequence wird übersprungen
 
@@ -536,7 +577,7 @@ Die Karte bleibt in der Queue und wird bei der nächsten Priorität erneut versu
     {
       "i": 1,                      // event index
       "t": "T1.MP1:1",             // timestamp: Turn.Phase:Priority
-      "a": "Ai(1)-PlayerName",     // actor: lobby name of player
+      "a": "P1",                   // actor: player id, matches scenario.players keys
       "type": "PLAY_LAND",         // PLAY_LAND | CAST | ACTIVATE
       "data": {
         "card_name": "string",     // card name

@@ -160,6 +160,8 @@ public class SimulateMatch {
 
         List<RegisteredPlayer> pp = new ArrayList<>();
         StringBuilder sb = new StringBuilder();
+        // Seat order == "P1", "P2", … order in a scenario's events/players blocks.
+        List<String> seatLobbyNames = new ArrayList<>();
 
         int i = 1;
 
@@ -175,6 +177,7 @@ public class SimulateMatch {
                 }
                 String name = TextUtil.concatNoSpace("Ai(", String.valueOf(i), ")-", d.getName());
                 sb.append(name);
+                seatLobbyNames.add(name);
 
                 RegisteredPlayer rp;
 
@@ -211,11 +214,14 @@ public class SimulateMatch {
             }
         }
 
-        // Scenario mode: load starting hands and first draws from a scenario JSON file
+        // Scenario mode: load starting hands and first draws from a scenario JSON file.
+        // Deliberately NOT "-s" - that key collides with the RNG seed flag above
+        // (params.containsKey("s") near the top of this method), which would try to
+        // Long.parseLong() the scenario file path and crash before ever reaching here.
         Map<String, List<String>> scenarioExpectedHands = new LinkedHashMap<>();
-        if (params.containsKey("s")) {
-            String scenarioPath = params.get("s").get(0);
-            loadScenarioIntoRules(scenarioPath, rules, scenarioExpectedHands);
+        if (params.containsKey("scenario")) {
+            String scenarioPath = params.get("scenario").get(0);
+            loadScenarioIntoRules(scenarioPath, rules, scenarioExpectedHands, seatLobbyNames);
         }
 
         // Decklist-based mulligan config: -l <config1.json> [config2.json] ...
@@ -261,7 +267,7 @@ public class SimulateMatch {
     }
 
     private static void argumentHelp() {
-        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -q -r [R] -s [S] -l [L1] [L2]");
+        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -q -r [R] -s [S] -scenario [SC] -l [L1] [L2]");
         System.out.println("\tsim - stands for simulation mode");
         System.out.println("\tdeck1 (or deck2,...,X) - constructed deck name or filename (has to be quoted when contains multiple words)");
         System.out.println("\tdeck is treated as file if it ends with a dot followed by three numbers or letters");
@@ -275,8 +281,9 @@ public class SimulateMatch {
         System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
         System.out.println("\tr - Replay mode. Path to a replay JSON log; reorders libraries to match recorded draw order.");
-        System.out.println("\ts - Scenario mode. Path to a scenario JSON (mtg-replay format, mode=scenario).");
+        System.out.println("\tscenario - Scenario mode. Path to a scenario JSON (mtg-replay format, mode=scenario).");
         System.out.println("\t    Loads starting hands + first draws into GameRules and verifies them after game start.");
+        System.out.println("\t    (Not \"-s\" - that's taken by the RNG seed flag above.)");
         System.out.println("\tl - Decklist mulligan config. One JSON path per player (Commander Decklist Notation format).");
         System.out.println();
         System.out.println("Alternative: forge.exe sim -replay [output_dir]");
@@ -294,9 +301,14 @@ public class SimulateMatch {
      * @param path            path to the scenario JSON file
      * @param rules           GameRules to configure
      * @param expectedHands   map to fill with expected hands per player id ("P1", "P2", …)
+     * @param seatLobbyNames  the lobby name assigned to each {@code -d} seat, in order
+     *                        (index 0 = "P1", index 1 = "P2", …) — used to translate a
+     *                        forced play sequence's player-id keys into the runtime names
+     *                        AiController actually looks up.
      */
     private static void loadScenarioIntoRules(String path, GameRules rules,
-                                               Map<String, List<String>> expectedHands) {
+                                               Map<String, List<String>> expectedHands,
+                                               List<String> seatLobbyNames) {
         try (java.io.FileReader reader = new java.io.FileReader(path)) {
             JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
 
@@ -358,9 +370,20 @@ public class SimulateMatch {
                 System.out.println("[DEBUG] Scenario type '" + scenarioType + "' does not auto-skip mulligans");
             }
 
-            // Forced play sequence: parse events array if present
+            // Forced play sequence: parse events array if present. Keys come back as raw
+            // player ids ("P1", "P2", …) — translate to the actual per-seat lobby names
+            // (Ai(N)-<deckName>) before handing to GameRules, since that's what
+            // AiController looks up by at decision time. An id with no matching seat
+            // (out-of-range index) is dropped rather than guessed.
             if (root.has("events") && root.get("events").isJsonArray()) {
-                Map<String, List<String>> playSeq = parsePlaySequenceFromEvents(root.getAsJsonArray("events"));
+                Map<String, List<String>> byId =
+                        forge.game.ReplayLogParser.parseForcedSequenceEvents(root.getAsJsonArray("events"));
+                Map<String, List<String>> playSeq = new LinkedHashMap<>();
+                for (Map.Entry<String, List<String>> e : byId.entrySet()) {
+                    int seatIdx = playerIdToSeatIndex(e.getKey());
+                    if (seatIdx < 0 || seatIdx >= seatLobbyNames.size() || e.getValue().isEmpty()) continue;
+                    playSeq.put(seatLobbyNames.get(seatIdx), e.getValue());
+                }
                 if (!playSeq.isEmpty()) {
                     rules.setForcedPlaySequence(playSeq);
                     int total = playSeq.values().stream().mapToInt(List::size).sum();
@@ -373,41 +396,14 @@ public class SimulateMatch {
         }
     }
 
-    /**
-     * Parse a forced play sequence from a scenario's events array.
-     * Returns a map of lobbyName → ordered card names for forced AI plays.
-     */
-    private static Map<String, List<String>> parsePlaySequenceFromEvents(JsonArray events) {
-        final Map<String, List<String>> result = new LinkedHashMap();
-        final Set<String> playEventTypes = new HashSet<>(Arrays.asList("CAST", "ACTIVATE", "PLAY_LAND"));
-
-        for (JsonElement el : events) {
-            if (!el.isJsonObject()) continue;
-            JsonObject ev = el.getAsJsonObject();
-
-            String type = ev.has("type") && !ev.get("type").isJsonNull() ? ev.get("type").getAsString() : null;
-            if (type == null || !playEventTypes.contains(type)) continue;
-
-            String actor = ev.has("a") && !ev.get("a").isJsonNull() ? ev.get("a").getAsString() : null;
-            if (actor == null) continue;
-
-            // Scenario uses player IDs directly (P1, P2, …) — no need to map to lobby names
-            String lobbyName = actor;
-
-            String cardName = null;
-            if (ev.has("data") && ev.get("data").isJsonObject()) {
-                JsonObject data = ev.getAsJsonObject("data");
-                if (data.has("card_name") && !data.get("card_name").isJsonNull()) {
-                    cardName = data.get("card_name").getAsString();
-                } else if (data.has("card") && !data.get("card").isJsonNull()) {
-                    cardName = data.get("card").getAsString();
-                }
-            }
-            if (cardName == null) continue;
-
-            result.computeIfAbsent(lobbyName, k -> new ArrayList<>()).add(cardName);
+    /** Maps a scenario player id ("P1", "P2", …) to a zero-based seat index, or -1 if unparseable. */
+    private static int playerIdToSeatIndex(String playerId) {
+        if (playerId == null || playerId.length() < 2 || playerId.charAt(0) != 'P') return -1;
+        try {
+            return Integer.parseInt(playerId.substring(1)) - 1;
+        } catch (NumberFormatException e) {
+            return -1;
         }
-        return result;
     }
 
     /**
@@ -429,6 +425,11 @@ public class SimulateMatch {
         sw.start();
 
         final Game g1 = mc.createGame();
+        // Without this, GameLogSaver.saveGameLog() below only writes the .txt narrative
+        // log — gameLog.getReplayExporter() stays null, so no mtg-replay JSON is produced
+        // and there's nothing for CSubmenuScenario/ReplayLogParser (or an external
+        // validator) to load back and inspect.
+        forge.game.GameLogSaver.enableReplayNotation(g1);
 
         // Captured hands — populated by the startGameHook (before T1 phase loop)
         final Map<String, List<String>> capturedHands = new LinkedHashMap<>();

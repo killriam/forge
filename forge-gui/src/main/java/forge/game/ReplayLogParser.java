@@ -202,6 +202,15 @@ public class ReplayLogParser {
                         }
                     }
                 }
+                // v1.8.0 (fork): top-level "events" — forced play sequence, keyed by raw
+                // player id ("P1", "P2", …) as written by mamo-Connector. Callers translate
+                // these ids to the actual runtime lobby name they assigned to that seat
+                // (see ScenarioInfo#buildForcedPlaySequenceForLobbyNames) — the JSON itself
+                // never carries a lobby-name string, avoiding the whole class of
+                // filename/metadata/date-convention mismatches that string would be prone to.
+                if (root.has("events") && root.get("events").isJsonArray()) {
+                    si.playerForcedSequence.putAll(parseForcedSequenceEvents(root.getAsJsonArray("events")));
+                }
                 this.scenarioInfo = si;
             }
 
@@ -453,6 +462,47 @@ public class ReplayLogParser {
         }
     }
 
+    /**
+     * Parses a scenario's top-level {@code events} array into a forced play sequence,
+     * keyed by the raw actor id exactly as written in the JSON (e.g. {@code "P1"}).
+     *
+     * <p>Only {@code CAST}/{@code ACTIVATE}/{@code PLAY_LAND} events with a resolvable
+     * card name are included, in array order. Callers must translate the returned keys
+     * to actual runtime lobby names (via {@link ScenarioInfo#buildForcedPlaySequenceForLobbyNames})
+     * before handing the result to {@link forge.game.GameRules#setForcedPlaySequence(Map)} —
+     * {@link forge.ai.AiController} looks the sequence up by {@code player.getLobbyPlayer().getName()},
+     * not by the JSON's player id.
+     */
+    public static Map<String, List<String>> parseForcedSequenceEvents(JsonArray events) {
+        final Map<String, List<String>> result = new LinkedHashMap<>();
+        for (JsonElement el : events) {
+            if (!el.isJsonObject()) continue;
+            JsonObject ev = el.getAsJsonObject();
+
+            String type = ev.has("type") && !ev.get("type").isJsonNull() ? ev.get("type").getAsString() : null;
+            if (type == null || !("CAST".equals(type) || "ACTIVATE".equals(type) || "PLAY_LAND".equals(type))) {
+                continue;
+            }
+
+            String actor = ev.has("a") && !ev.get("a").isJsonNull() ? ev.get("a").getAsString() : null;
+            if (actor == null) continue;
+
+            String cardName = null;
+            if (ev.has("data") && ev.get("data").isJsonObject()) {
+                JsonObject data = ev.getAsJsonObject("data");
+                if (data.has("card_name") && !data.get("card_name").isJsonNull()) {
+                    cardName = data.get("card_name").getAsString();
+                } else if (data.has("card") && !data.get("card").isJsonNull()) {
+                    cardName = data.get("card").getAsString();
+                }
+            }
+            if (cardName == null) continue;
+
+            result.computeIfAbsent(actor, k -> new ArrayList<>()).add(cardName);
+        }
+        return result;
+    }
+
     private String getStringField(JsonObject obj, String field) {
         if (obj.has(field) && !obj.get(field).isJsonNull()) {
             return obj.get(field).getAsString();
@@ -636,6 +686,12 @@ public class ReplayLogParser {
         public final Map<String, List<String>> playerBattlefield = new LinkedHashMap<>();
         /** Per-player starting life override. Key = "P1", "P2", … */
         public final Map<String, Integer> playerStartingLife = new LinkedHashMap<>();
+        /**
+         * Forced play sequence parsed from the top-level {@code events} array, keyed by
+         * the raw JSON actor id ("P1", "P2", …) — NOT yet a runtime lobby name.
+         * Use {@link #buildForcedPlaySequenceForLobbyNames(Map)} before handing to GameRules.
+         */
+        public final Map<String, List<String>> playerForcedSequence = new LinkedHashMap<>();
 
         /**
          * Returns true when at least one player in this scenario has a structured
@@ -643,6 +699,30 @@ public class ReplayLogParser {
          */
         public boolean hasPlayerSetup() {
             return !playerStartingHands.isEmpty() || !playerFirstDraws.isEmpty();
+        }
+
+        /** Returns true when this scenario defines a forced play sequence via {@code events}. */
+        public boolean hasForcedPlaySequence() {
+            return !playerForcedSequence.isEmpty();
+        }
+
+        /**
+         * Translates {@link #playerForcedSequence}'s player-id keys ("P1", "P2", …) into the
+         * lobby-name keys {@code GameRules.setForcedPlaySequence()} expects, using the actual
+         * names the launcher assigned to each seat this run (e.g. the human's configured
+         * player name, or whatever name an AI seat was created with).
+         *
+         * <p>An id with no corresponding entry in {@code idToLobbyName} is dropped rather than
+         * guessed — a stale/renamed seat should not silently match the wrong player.</p>
+         */
+        public Map<String, List<String>> buildForcedPlaySequenceForLobbyNames(Map<String, String> idToLobbyName) {
+            Map<String, List<String>> result = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> e : playerForcedSequence.entrySet()) {
+                String lobbyName = idToLobbyName.get(e.getKey());
+                if (lobbyName == null || e.getValue().isEmpty()) continue;
+                result.put(lobbyName, new ArrayList<>(e.getValue()));
+            }
+            return result;
         }
 
         /**

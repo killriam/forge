@@ -59,7 +59,7 @@
     {
       "i": 1,
       "t": "T2.MP1:1",
-      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "a": "P1",
       "type": "PLAY_LAND",
       "data": {
         "card_name": "Command Tower"
@@ -68,7 +68,7 @@
     {
       "i": 2,
       "t": "T2.MP1:2",
-      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "a": "P1",
       "type": "PLAY_LAND",
       "data": {
         "card_name": "Breeding Pool"
@@ -77,7 +77,7 @@
     {
       "i": 3,
       "t": "T2.MP1:3",
-      "a": "Ai(1)-killriam - Horror: Dead is not an end (2026-04-21)",
+      "a": "P1",
       "type": "CAST",
       "data": {
         "card_name": "Energy Tap"
