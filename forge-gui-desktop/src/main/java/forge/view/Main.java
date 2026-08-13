@@ -26,9 +26,11 @@ import forge.gui.card.CardReaderExperiments;
 import forge.localinstance.properties.ForgePreferences;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
+import forge.screens.home.replay.CSubmenuReplay;
 import forge.util.BuildInfo;
 import io.sentry.Sentry;
 
+import javax.swing.SwingUtilities;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Locale;
@@ -42,6 +44,7 @@ public final class Main {
         private String playerOneDeck;
         private String playerTwoDeck;
         private GuiDeckFormat format = GuiDeckFormat.COMMANDER;
+        private String pendingReplayPath;
     }
 
     /**
@@ -146,8 +149,18 @@ public final class Main {
                 System.out.println("Dedicated server mode.\nNot implemented.");
                 break;
 
+            case "replay":
+                if (args.length < 2) {
+                    System.out.println("Error: Missing replay file path.\nUsage: java -jar <jar> replay <path-to-replay.json>");
+                    System.exit(1);
+                }
+                final GuiLaunchOptions replayOptions = new GuiLaunchOptions();
+                replayOptions.pendingReplayPath = args[1];
+                startGui(replayOptions);
+                return; // GUI stays alive on its own non-daemon thread; skip the System.exit(0) below
+
             default:
-                System.out.println("Unknown mode.\nKnown modes are 'sim', 'parse', 'gui'.");
+                System.out.println("Unknown mode.\nKnown modes are 'sim', 'parse', 'gui', 'replay'.");
                 break;
         }
 
@@ -168,6 +181,18 @@ public final class Main {
 
         // Controller can now step in and take over.
         Singletons.getControl().initialize();
+
+        // Auto-launch a pending replay only now that the GUI, skins, and home screen
+        // submenus (which reference skin icons in their constructors) have finished
+        // initializing — referencing CSubmenuReplay any earlier than this crashes with
+        // an NPE on an unloaded skin icon (e.g. IMG_BTN_START_OVER). Must run on the EDT: the
+        // match screen's Swing components (e.g. PlayerDetailsPanel) assert this themselves
+        // and throw IllegalStateException otherwise, same as every other caller of
+        // startReplayFromPath, which are all invoked from Swing UI callbacks already on the EDT.
+        if (options != null && options.pendingReplayPath != null) {
+            final String replayPath = options.pendingReplayPath;
+            SwingUtilities.invokeLater(() -> CSubmenuReplay.SINGLETON_INSTANCE.startReplayFromPath(replayPath));
+        }
     }
 
     private static GuiLaunchOptions parseGuiLaunchOptions(final String[] args) {
