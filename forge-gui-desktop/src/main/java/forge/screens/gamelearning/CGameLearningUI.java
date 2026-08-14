@@ -456,7 +456,7 @@ public enum CGameLearningUI implements ICDoc {
             boolean won = humanPlayerId.equals(winnerId);
             String displayName = won ? "\uD83C\uDFC6 " + humanName : humanName;
             List<BattlefieldCardInfo> cards = turn.battlefieldCards.getOrDefault(humanPlayerId, Collections.emptyList());
-            view.getMtgBoardPanel().setHumanState(displayName, life, hand, lib, grave, exile, bf, won, cards);
+            view.getMtgBoardPanelGameOver().setHumanState(displayName, life, hand, lib, grave, exile, bf, won, cards);
         }
         if (oppId != null) {
             String oppName = names.getOrDefault(oppId, oppId);
@@ -469,7 +469,7 @@ public enum CGameLearningUI implements ICDoc {
             boolean won = oppId.equals(winnerId);
             String displayName = won ? "\uD83C\uDFC6 " + oppName : oppName;
             List<BattlefieldCardInfo> cards = turn.battlefieldCards.getOrDefault(oppId, Collections.emptyList());
-            view.getMtgBoardPanel().setOpponentState(displayName, life, hand, lib, grave, exile, bf, won, cards);
+            view.getMtgBoardPanelGameOver().setOpponentState(displayName, life, hand, lib, grave, exile, bf, won, cards);
         }
     }
 

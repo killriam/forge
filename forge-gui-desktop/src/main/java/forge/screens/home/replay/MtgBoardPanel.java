@@ -64,11 +64,11 @@ public class MtgBoardPanel extends JPanel {
 
         // Opponent area (top half) — darker blue-grey tint
         JPanel oppArea = buildArea(true, oppBar, oppBf, false);
-        add(oppArea, "growx, growy 50, h 50%!");
+        add(oppArea, "grow, push");
 
         // Human area (bottom half) — green felt tint
         JPanel humanArea = buildArea(false, humanBar, humanBf, true);
-        add(humanArea, "growx, growy 50, h 50%!");
+        add(humanArea, "grow, push");
     }
 
     /**

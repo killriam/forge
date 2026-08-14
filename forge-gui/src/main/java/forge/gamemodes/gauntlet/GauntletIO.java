@@ -13,7 +13,6 @@ import com.thoughtworks.xstream.security.PrimitiveTypePermission;
 import forge.deck.CardPool;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
-import forge.gui.error.BugReporter;
 import forge.item.PaperCard;
 import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
@@ -109,7 +108,13 @@ public class GauntletIO {
         } catch (final IOException e) {
             e.printStackTrace();
         } catch (final ConversionException e) {
-            BugReporter.reportException(e);
+            // Known XStream/JDK incompatibility with some old (pre-2015) save formats - see
+            // Card-Forge/forge#4670, never fixed upstream. Several of the bundled LOCKED_*.dat
+            // gauntlets hit this on every load. Don't pop a "Report a Crash" dialog for it: it's
+            // not an application bug the user caused, it happens deterministically on every
+            // startup for every gauntlet-related submenu, and the caller already treats a null
+            // return as "skip this one" - logging is enough to keep it diagnosable.
+            e.printStackTrace();
         } catch (final Exception e) { //if there's a non-IO exception, delete the corrupt file
             e.printStackTrace();
             isCorrupt = true;

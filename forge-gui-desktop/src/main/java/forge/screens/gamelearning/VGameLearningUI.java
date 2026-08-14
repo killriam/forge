@@ -59,6 +59,11 @@ public enum VGameLearningUI implements IVTopLevelUI {
 
     // --- MTG board panel (replaces old human/opponent split) ---
     private final MtgBoardPanel mtgBoardPanel = new MtgBoardPanel();
+    // Game Over gets its own instance: a Swing component can only have one parent, so
+    // reusing mtgBoardPanel here would silently steal it away from the TURN card's layout
+    // the moment buildGameOverView() adds it, leaving the TURN view's board permanently
+    // empty (correct size, correct data, but showing=false - never actually on-screen).
+    private final MtgBoardPanel mtgBoardPanelGameOver = new MtgBoardPanel();
 
     // --- Special views ---
     private final GameOverviewPanel gameOverviewPanel;
@@ -126,6 +131,7 @@ public enum VGameLearningUI implements IVTopLevelUI {
     public JList<TurnSnapshot> getTurnList()                  { return turnList; }
     public DefaultListModel<TurnSnapshot> getTurnModel()      { return turnModel; }
     public MtgBoardPanel getMtgBoardPanel()                   { return mtgBoardPanel; }
+    public MtgBoardPanel getMtgBoardPanelGameOver()           { return mtgBoardPanelGameOver; }
     public GameOverviewPanel getGameOverviewPanel()           { return gameOverviewPanel; }
     public GameInitPanel getGameInitPanel()                   { return gameInitPanel; }
     public GameOutcomePanel getGameOutcomePanel()             { return gameOutcomePanel; }
@@ -222,6 +228,15 @@ public enum VGameLearningUI implements IVTopLevelUI {
 
         container.add(splitPane, "grow, push");
 
+        // Nav buttons are built once here, outside the CardLayout: btnPrev/btnNext/btnReplay
+        // are shared singleton fields, and a Swing component can only have one parent, so
+        // adding them inside each buildXxxView() (as before) meant whichever card was built
+        // last silently stole them from every other card, leaving the rest with no nav bar at
+        // all. They're meaningful on every card (turn navigation isn't card-specific), so a
+        // single persistent bar below the CardLayout is also the more correct behavior, not
+        // just the fix.
+        container.add(buildNavPanel(), "growx, h 38!, dock south");
+
         // Default to overview
         showView("OVERVIEW");
 
@@ -246,7 +261,6 @@ public enum VGameLearningUI implements IVTopLevelUI {
         JPanel panel = new JPanel(new MigLayout("insets 6, gap 6, fill, wrap 1"));
         panel.setOpaque(false);
         panel.add(gameOverviewPanel, "grow, push");
-        panel.add(buildNavPanel(), "growx, h 38!, dock south");
         return panel;
     }
 
@@ -255,7 +269,6 @@ public enum VGameLearningUI implements IVTopLevelUI {
         panel.setOpaque(false);
         panel.add(new JLabel("Game Initialization"), "growx, h 24!");
         panel.add(gameInitPanel, "grow, push");
-        panel.add(buildNavPanel(), "growx, h 38!, dock south");
         return panel;
     }
 
@@ -266,20 +279,19 @@ public enum VGameLearningUI implements IVTopLevelUI {
         // Turn info header
         panel.add(lblTurnInfo, "growx, h 22!");
 
-        // MTG board panel — opponent on top, human on bottom (gets MOST of the space)
+        // MTG board panel — opponent on top, human on bottom. Capped so it can't balloon to
+        // fill the whole screen on a tall display; the analysis tabs below get the "push"
+        // priority instead, since events/stats are the part worth growing into extra room.
         mtgBoardPanel.setBorder(BorderFactory.createLineBorder(new Color(40, 70, 50), 1));
-        panel.add(mtgBoardPanel, "grow, push, h 300::");
+        panel.add(mtgBoardPanel, "growx, grow, h 250:360:440");
 
         // Evaluation panel (compact inline bar)
         evalPanel.setBorder(BorderFactory.createLineBorder(new Color(60, 80, 100), 1));
         FScrollPane evalScroll = new FScrollPane(evalPanel, false);
         panel.add(evalScroll, "growx, h 50:70:100");
 
-        // Analysis tabs — Events | Statistics | Game Report (compact)
-        panel.add(analysisTabs, "growx, h 80:120:160");
-
-        // Navigation buttons
-        panel.add(buildNavPanel(), "growx, h 38!, dock south");
+        // Analysis tabs — Events | Statistics | Game Report (gets remaining vertical space)
+        panel.add(analysisTabs, "grow, push, h 150::");
 
         return panel;
     }
@@ -292,8 +304,7 @@ public enum VGameLearningUI implements IVTopLevelUI {
         lblGameOver.setForeground(new Color(220, 190, 60));
         panel.add(lblGameOver, "growx, h 30!");
         panel.add(gameOutcomePanel, "growx, h 160:200:240");
-        panel.add(mtgBoardPanel, "grow, push");
-        panel.add(buildNavPanel(), "growx, h 38!, dock south");
+        panel.add(mtgBoardPanelGameOver, "grow, push");
         return panel;
     }
 

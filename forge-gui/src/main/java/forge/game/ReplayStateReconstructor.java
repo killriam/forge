@@ -304,6 +304,17 @@ public class ReplayStateReconstructor {
             // Track battlefield card movements BEFORE buildDescription updates zone counts
             if ("MOVE".equals(type) && data != null) {
                 updateBattlefieldCards(data, actor, currentBattlefield);
+            } else if ("PLAY_LAND".equals(type) && data != null) {
+                // Lands never go through a MOVE event at all (confirmed against real replay
+                // logs: PLAY_LAND has no from/to fields), so without this they never appear
+                // on the battlefield despite being the single most common permanent type.
+                String cardName = getCardDisplayName(data);
+                String pid = getStr(data, "player");
+                if (pid == null) pid = actor;
+                if (cardName != null && pid != null) {
+                    currentBattlefield.computeIfAbsent(pid, k -> new ArrayList<>()).add(cardName);
+                    battlefieldCount.merge(pid, 1, Integer::sum);
+                }
             }
 
             if ("ACTIVE_PLAYER_CHANGE".equals(type)) {
@@ -376,7 +387,7 @@ public class ReplayStateReconstructor {
         }
         // Add to destination battlefield if applicable
         if (to != null && to.contains("battlefield")) {
-            String pid = extractPlayerFromZone(to, from, actor);
+            String pid = extractPlayerFromZone(to, from, actor, data);
             if (pid != null) {
                 currentBattlefield.computeIfAbsent(pid, k -> new ArrayList<>()).add(cardName);
             }
@@ -385,9 +396,12 @@ public class ReplayStateReconstructor {
 
     /**
      * Determine the player ID for a zone reference that may lack a player prefix.
-     * Falls back to the source zone's player, then to the actor.
+     * A cast permanent's stack-to-battlefield MOVE has bare "to":"battlefield" with no
+     * player prefix at all (confirmed against real replay logs) - the event's own
+     * controller/owner field is the authoritative source there, checked before falling back
+     * to the source zone's player or the acting player.
      */
-    private static String extractPlayerFromZone(String zone, String fromZone, String actor) {
+    private static String extractPlayerFromZone(String zone, String fromZone, String actor, JsonObject data) {
         if (zone == null) return null;
         int colon = zone.indexOf(':');
         if (colon > 0) {
@@ -395,6 +409,14 @@ public class ReplayStateReconstructor {
             if (!pid.equalsIgnoreCase("shared") && !pid.equalsIgnoreCase("stack")) {
                 return pid;
             }
+        }
+        // No player prefix in "to" zone (e.g. plain "battlefield") — the event's own
+        // controller/owner is authoritative for whose battlefield this is.
+        if (data != null) {
+            String controller = getStr(data, "controller");
+            if (controller != null) return controller;
+            String owner = getStr(data, "owner");
+            if (owner != null) return owner;
         }
         // No usable player in "to" zone — try to derive from "from" zone
         if (fromZone != null) {
@@ -478,7 +500,7 @@ public class ReplayStateReconstructor {
                 String cardName = data != null ? getCardDisplayName(data) : null;
                 String from = data != null ? getStr(data, "from") : null;
                 String to = data != null ? getStr(data, "to") : null;
-                updateZoneSizes(from, to, handSize, libSize, graveyardSize, exileSize, battlefieldCount);
+                updateZoneSizes(from, to, data, handSize, libSize, graveyardSize, exileSize, battlefieldCount);
                 String fromStr = from != null ? formatZone(from) : "?";
                 String toStr = to != null ? formatZone(to) : "?";
                 if (cardName != null) {
@@ -582,17 +604,17 @@ public class ReplayStateReconstructor {
         }
     }
 
-    private static void updateZoneSizes(String from, String to,
+    private static void updateZoneSizes(String from, String to, JsonObject data,
                                          Map<String, Integer> handSize,
                                          Map<String, Integer> libSize,
                                          Map<String, Integer> graveyardSize,
                                          Map<String, Integer> exileSize,
                                          Map<String, Integer> battlefieldCount) {
-        applyZoneDelta(from, handSize, libSize, graveyardSize, exileSize, battlefieldCount, -1);
-        applyZoneDelta(to, handSize, libSize, graveyardSize, exileSize, battlefieldCount, +1);
+        applyZoneDelta(from, data, handSize, libSize, graveyardSize, exileSize, battlefieldCount, -1);
+        applyZoneDelta(to, data, handSize, libSize, graveyardSize, exileSize, battlefieldCount, +1);
     }
 
-    private static void applyZoneDelta(String zoneRef,
+    private static void applyZoneDelta(String zoneRef, JsonObject data,
                                         Map<String, Integer> handSize,
                                         Map<String, Integer> libSize,
                                         Map<String, Integer> graveyardSize,
@@ -600,17 +622,29 @@ public class ReplayStateReconstructor {
                                         Map<String, Integer> battlefieldCount,
                                         int delta) {
         if (zoneRef == null) return;
-        String[] parts = zoneRef.split(":");
-        if (parts.length == 2) {
-            String pid = parts[0];
-            switch (parts[1]) {
-                case "hand": adjustZone(handSize, pid, delta); break;
-                case "library": adjustZone(libSize, pid, delta); break;
-                case "graveyard": adjustZone(graveyardSize, pid, delta); break;
-                case "exile": adjustZone(exileSize, pid, delta); break;
-                case "battlefield": adjustZone(battlefieldCount, pid, delta); break;
-                default: break;
-            }
+        String pid;
+        String zoneName;
+        int colon = zoneRef.indexOf(':');
+        if (colon > 0) {
+            pid = zoneRef.substring(0, colon);
+            zoneName = zoneRef.substring(colon + 1);
+        } else {
+            // No player prefix (e.g. a cast permanent's plain "battlefield" or "stack") - the
+            // event's own controller/owner field is the authoritative source. Same class of
+            // gap as extractPlayerFromZone() above; a bare zone with no resolvable player
+            // (e.g. "stack" on the "from" side, or "shared") correctly falls through to a no-op.
+            pid = data != null ? getStr(data, "controller") : null;
+            if (pid == null && data != null) pid = getStr(data, "owner");
+            zoneName = zoneRef;
+        }
+        if (pid == null) return;
+        switch (zoneName) {
+            case "hand": adjustZone(handSize, pid, delta); break;
+            case "library": adjustZone(libSize, pid, delta); break;
+            case "graveyard": adjustZone(graveyardSize, pid, delta); break;
+            case "exile": adjustZone(exileSize, pid, delta); break;
+            case "battlefield": adjustZone(battlefieldCount, pid, delta); break;
+            default: break;
         }
     }
 
