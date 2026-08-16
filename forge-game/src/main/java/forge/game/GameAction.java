@@ -2391,6 +2391,18 @@ public class GameAction {
                     p1.drawCards(handSize);  // ← Now draws correct number of cards!
                 }
 
+                // Scenario mode: the library is still empty here (its cards arrive later via the
+                // scenario's game_state hook, see PhaseHandler.setupFirstTurn), so this draw sets
+                // the "attempted to draw from an empty library" SBA flag on every player. For
+                // GameType.Puzzle that's harmless (MulliganService never runs below), but for
+                // GameType.Commander scenarios (has commanders) the real MulliganService DOES run
+                // and its state-based-action check would eliminate both players before the
+                // game_state hook ever populates their libraries. Clear it here so scenario-mode
+                // games reach that hook with players still in game.
+                if (game.getRules().isScenarioMode()) {
+                    p1.resetTriedToDrawFromEmptyLibrary();
+                }
+
                 BackupPlanService backupPlans = new BackupPlanService(p1);
                 if (backupPlans.initializeExtraHands()) {
                     backupPlans.chooseHand();

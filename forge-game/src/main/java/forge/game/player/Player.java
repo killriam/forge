@@ -2050,6 +2050,15 @@ public class Player extends GameEntity implements Comparable<Player> {
         return game.getReplacementHandler().cantHappenCheck(ReplacementType.GameWin, AbilityKey.mapFromAffected(this));
     }
 
+    /** Scenario mode deals a player's starting hand from an intentionally still-empty library
+     *  (real cards get placed afterward via the scenario's game_state hook) - clears the
+     *  resulting "drew from an empty library" flag so the next state-based-action check (run by
+     *  the real MulliganService for any non-Puzzle scenario, e.g. Commander) doesn't eliminate
+     *  the player before those cards ever arrive. See GameAction's scenario starting-hand loop. */
+    public final void resetTriedToDrawFromEmptyLibrary() {
+        triedToDrawFromEmptyLibrary = false;
+    }
+
     public final boolean checkLoseCondition() {
         // Just in case player already lost
         if (hasLost()) {
