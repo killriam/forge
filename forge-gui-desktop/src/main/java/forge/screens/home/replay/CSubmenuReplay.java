@@ -287,6 +287,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             view.getBtnView().setEnabled(false);
             return;
         }
+        // Only reconstructs for this one selected file, not the whole list - see
+        // ReplayLogParser.ensureDecksReconstructed().
+        parser.ensureDecksReconstructed();
 
         StringBuilder sb = new StringBuilder();
         sb.append("File: ").append(parser.getReplayFile().getName()).append("\n");
@@ -458,6 +461,10 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
      */
     private boolean launchReplay(ReplayLogParser parser, boolean enforceDrawOrder,
                                   int branchTurn, OriginalGameSummary originalSummary) {
+        // Covers all three launch paths (list Start, CLI direct path, Game Learning Viewer's
+        // "Replay from here") - no-op if updateReplayInfo() already reconstructed this parser.
+        parser.ensureDecksReconstructed();
+
         // Validate that we have at least 2 players with decks
         if (parser.getPlayers().size() < 2) {
             SOptionPane.showMessageDialog(

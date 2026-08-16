@@ -1,5 +1,6 @@
 package forge.screens.home.replay;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.Map;
 import javax.swing.JMenu;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 
 import forge.deck.Deck;
 import forge.game.DemoPlaySequenceExtractor;
@@ -53,6 +55,9 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     private final VSubmenuScenario view = VSubmenuScenario.SINGLETON_INSTANCE;
     private final Map<String, ReplayLogParser> scenarioParsers = new LinkedHashMap<>();
 
+    /** Background worker for async file scanning - cancelled if the screen is re-entered. */
+    private SwingWorker<List<Map.Entry<String, ReplayLogParser>>, Void> loadWorker;
+
     @Override
     public void register() {
     }
@@ -67,29 +72,99 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         });
         view.getBtnStart().addActionListener(e -> startScenario());
         view.getBtnDemoPlay().addActionListener(e -> startScenarioDemoPlay());
-        updateData();
+        // Do NOT call updateData() here - every home-screen submenu's initialize() runs
+        // unconditionally, synchronously, on the EDT at app startup (FView.initialize()), well
+        // before the user has navigated here. ReplayLogParser.listScenarioFiles() parses every
+        // *.json in the game-log directory - including full deck reconstruction (real
+        // card-database lookups) - to find the handful that are actually scenarios, which with
+        // a large gamelogs folder blocked the UI thread for seconds on every launch regardless
+        // of whether this screen was ever opened. Lazy-load only when the screen is shown
+        // instead, same fix already applied to CSubmenuReplay for the same reason.
+        updateBtnEnablement();
     }
 
+    /**
+     * Scan the game log directory asynchronously and populate the scenario list. Only runs when
+     * the screen is actually visible (called from update()), not at app startup.
+     */
     private void updateData() {
+        if (loadWorker != null && !loadWorker.isDone()) {
+            loadWorker.cancel(true);
+        }
+
         scenarioParsers.clear();
         view.getModel().clear();
+        updateBtnEnablement();
 
-        for (ReplayLogParser parser : ReplayLogParser.listScenarioFiles()) {
-            String display = buildDisplayName(parser);
-            scenarioParsers.put(display, parser);
-            view.getModel().addElement(display);
-        }
+        loadWorker = new SwingWorker<>() {
+            @Override
+            protected List<Map.Entry<String, ReplayLogParser>> doInBackground() {
+                List<Map.Entry<String, ReplayLogParser>> result = new ArrayList<>();
+                for (ReplayLogParser parser : ReplayLogParser.listScenarioFiles()) {
+                    if (isCancelled()) break;
+                    String display = buildDisplayName(parser);
+                    result.add(new AbstractMap.SimpleEntry<>(display, parser));
+                }
+                return result;
+            }
 
-        LOG.info("Found {} scenario files", scenarioParsers.size());
+            @Override
+            protected void done() {
+                if (isCancelled()) return;
+                try {
+                    List<Map.Entry<String, ReplayLogParser>> result = get();
+                    for (Map.Entry<String, ReplayLogParser> entry : result) {
+                        scenarioParsers.put(entry.getKey(), entry.getValue());
+                        view.getModel().addElement(entry.getKey());
+                    }
+                    LOG.info("Found {} scenario files", scenarioParsers.size());
+                } catch (Exception e) {
+                    LOG.error("Failed to load scenario files", e);
+                } finally {
+                    updateBtnEnablement();
+                }
+            }
+        };
+        loadWorker.execute();
     }
 
+    private void updateBtnEnablement() {
+        boolean hasItems = view.getModel().getSize() > 0;
+        view.getBtnStart().setEnabled(hasItems);
+        view.getBtnDemoPlay().setEnabled(hasItems);
+    }
+
+    /**
+     * Builds the list entry text - includes the deck(s) the scenario was recorded/intended for
+     * (from {@code meta.players.PX.deck_name}) whenever available, so entries are identifiable
+     * by deck rather than just a generic title or a raw timestamped filename.
+     */
     private String buildDisplayName(ReplayLogParser parser) {
         ScenarioInfo si = parser.getScenarioInfo();
+        String deckName = getPlayerDeckName(parser, "P1");
+        String oppDeckName = getPlayerDeckName(parser, "P2");
+
         if (si != null && si.title != null) {
             String prefix = si.type != null ? "[" + si.type + "] " : "";
-            return prefix + si.title;
+            String title = prefix + si.title;
+            if (deckName != null && !title.contains(deckName)) {
+                title += " (" + deckName + ")";
+            }
+            return title;
         }
+
+        if (deckName != null) {
+            return oppDeckName != null && !oppDeckName.equals(deckName)
+                    ? deckName + " vs " + oppDeckName
+                    : deckName;
+        }
+
         return parser.getReplayFile().getName();
+    }
+
+    private static String getPlayerDeckName(ReplayLogParser parser, String playerId) {
+        ReplayLogParser.PlayerInfo info = parser.getPlayers().get(playerId);
+        return info != null ? info.deckName : null;
     }
 
     private void updateScenarioInfo() {
@@ -372,6 +447,7 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     @Override
     public void update() {
         MenuUtil.setMenuProvider(this);
+        updateData();
     }
 
     @Override

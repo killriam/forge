@@ -54,6 +54,7 @@ public class ReplayLogParser {
     // v1.7.0: scenario mode
     private String mode = "full_game";
     private ScenarioInfo scenarioInfo;
+    private boolean decksReconstructed = false;
 
     public ReplayLogParser(File replayFile) {
         this.replayFile = replayFile;
@@ -216,8 +217,12 @@ public class ReplayLogParser {
                 this.scenarioInfo = si;
             }
 
-            LOG.debug("Starting deck reconstruction");
-            reconstructDecks();
+            // Deck reconstruction (real card-database lookups per card, per player) is deferred
+            // until something actually needs a Deck object - see ensureDecksReconstructed().
+            // Building a list entry (Game Recap, Investigate Scenarios) only ever needs the
+            // metadata already parsed above (deckName, timestamp, turns, winner, ...); with a
+            // large gamelogs folder, reconstructing every file's decks just to list them was a
+            // multi-second startup/scan cost for work nobody was about to look at.
 
             LOG.info("Parsed replay: {} players, game_type={}, turns={}, winner={}",
                     players.size(), gameType, turns, winner);
@@ -230,6 +235,21 @@ public class ReplayLogParser {
             LOG.error("Error parsing replay file: {}", replayFile, e);
             return false;
         }
+    }
+
+    /**
+     * Reconstructs each player's {@link Deck} (real card-database lookup per card) if it hasn't
+     * been done yet for this parser instance. No-op on repeat calls. {@link #parse()} no longer
+     * does this automatically - call this explicitly before reading {@link PlayerInfo#deck},
+     * typically right before actually launching a replay/scenario, or when a user has selected
+     * one specific file to preview. Building a list of many files should never need this.
+     */
+    public synchronized void ensureDecksReconstructed() {
+        if (decksReconstructed) return;
+        if (root == null) return;
+        LOG.debug("Starting deck reconstruction");
+        reconstructDecks();
+        decksReconstructed = true;
     }
 
     /**
