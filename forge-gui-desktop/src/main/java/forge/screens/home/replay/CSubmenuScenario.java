@@ -213,6 +213,51 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         return scenarioToDeck.get(withoutExt);
     }
 
+    /**
+     * Resolves the real {@link Deck} a scenario with structured starting-hand data (opening_hand_test
+     * / "Perfect Game" / "Best Starting Hand") is meant to be played with - such scenarios exist to
+     * validate a specific deck's opening, so the hand needs to come from that deck's actual library,
+     * not an empty placeholder. Same priority chain as {@link #resolveDeckName}, but resolves to the
+     * Deck object itself for launching rather than just a display name. Returns null if unresolvable.
+     */
+    private static Deck resolveScenarioDeck(ReplayLogParser parser, ScenarioInfo si) {
+        if (si != null && si.deckId != null && !si.deckId.isEmpty()) {
+            Deck byId = findDeckByName(si.deckId);
+            if (byId != null) return byId;
+        }
+        Map<String, String> scenarioToDeck = buildScenarioToDeckIndex();
+        String deckName = null;
+        if (si != null && si.id != null) {
+            deckName = scenarioToDeck.get(si.id);
+        }
+        if (deckName == null) {
+            String fileName = parser.getReplayFile().getName();
+            String withoutExt = fileName.endsWith(".json") ? fileName.substring(0, fileName.length() - ".json".length()) : fileName;
+            deckName = scenarioToDeck.get(withoutExt);
+        }
+        return deckName != null ? findDeckByName(deckName) : null;
+    }
+
+    private static Deck findDeckByName(String name) {
+        Deck d = FModel.getDecks().getCommander().get(name);
+        if (d != null) return d;
+        return FModel.getDecks().getConstructed().get(name);
+    }
+
+    /** A minimal, inert opponent deck (basic lands only) for scenario launches where a real deck
+     *  was resolved for the human seat. These scenarios exist to validate the human's line, not
+     *  the AI's - the opponent just needs to be alive and harmless, not a functioning deck. */
+    private static Deck buildDummyLandsDeck() {
+        Deck deck = new Deck("Scenario Dummy (Lands Only)");
+        forge.deck.CardPool lands = deck.getOrCreate(forge.deck.DeckSection.Main);
+        lands.add("Plains", 12);
+        lands.add("Island", 12);
+        lands.add("Swamp", 12);
+        lands.add("Mountain", 12);
+        lands.add("Forest", 12);
+        return deck;
+    }
+
     private static String getPlayerDeckName(ReplayLogParser parser, String playerId) {
         ReplayLogParser.PlayerInfo info = parser.getPlayers().get(playerId);
         return info != null ? info.deckName : null;
@@ -316,6 +361,23 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         final ScenarioInfo si = parser.getScenarioInfo();
         final int playerCount = (si != null && si.playerCount >= 2) ? si.playerCount : 2;
 
+        // Scenarios with a structured starting hand (opening_hand_test / "Perfect Game" /
+        // "Best Starting Hand") exist to validate a specific deck's opening - drawing that hand
+        // from an empty or unrelated deck isn't meaningful, so these require a resolvable deck
+        // reference (scenario.deck_id, or a deck's own Scenario= metadata pointing at it) and
+        // refuse to launch without one, rather than silently falling back to a placeholder.
+        final boolean needsRealDeck = si != null && si.hasPlayerSetup();
+        final Deck resolvedDeck = needsRealDeck ? resolveScenarioDeck(parser, si) : null;
+        if (needsRealDeck && resolvedDeck == null) {
+            SOptionPane.showMessageDialog(
+                    "This scenario has a starting hand to validate, but no deck references it "
+                            + "(no scenario.deck_id, and no deck's Scenario= metadata points at it). "
+                            + "Attach it to a deck first — see docs/SCENARIO_STARTING_HAND_FORMAT.md, "
+                            + "\"Von einem Deck referenzieren\".",
+                    "Cannot Launch Scenario", FSkinProp.ICO_ERROR);
+            return false;
+        }
+
         SwingUtilities.invokeLater(() -> {
             SOverlayUtils.startGameOverlay();
             SOverlayUtils.showOverlay();
@@ -324,11 +386,21 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         try {
             final HostedMatch hostedMatch = GuiBase.getInterface().hostMatch();
 
-            // Merge explicit game_state lines with auto-generated lines from player setup
+            // Merge explicit game_state lines with auto-generated lines from player setup. When
+            // a real deck was resolved, starting_hand/first_draws instead come from
+            // ScenarioLibrarySetup reordering that deck's actual library (below), and commanders
+            // come from the deck's own Commander section (RegisteredPlayer.forCommander) - so
+            // the raw hand=/library=/command= lines are dropped here to avoid creating phantom
+            // duplicate cards alongside the real ones. life= has no other mechanism and always
+            // applies; battlefield= likewise.
             final List<String> gameStateLines = si != null ? new ArrayList<>(si.gameState) : new ArrayList<>();
             if (si != null && si.hasPlayerSetup()) {
                 // Prepend structured lines so explicit game_state overrides them if needed
                 List<String> structuredLines = si.buildGameStateFromPlayerSetup();
+                if (resolvedDeck != null) {
+                    structuredLines.removeIf(line ->
+                            line.contains("hand=") || line.contains("library=") || line.contains("command="));
+                }
                 structuredLines.addAll(gameStateLines);
                 gameStateLines.clear();
                 gameStateLines.addAll(structuredLines);
@@ -389,17 +461,26 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
                 });
             }
 
-            // Human player (index 0)
+            // Human player (index 0). A resolved deck gets used as-is (with its own commander,
+            // via RegisteredPlayer.forCommander when this is a Commander scenario) instead of an
+            // empty placeholder, so ScenarioLibrarySetup below can reorder that deck's actual
+            // library rather than finding nothing to reorder.
             final List<RegisteredPlayer> players = new ArrayList<>();
-            final RegisteredPlayer human = new RegisteredPlayer(new Deck())
-                    .setPlayer(GamePlayerUtil.getGuiPlayer());
+            final RegisteredPlayer human;
+            if (resolvedDeck != null) {
+                human = (hasCommanders ? RegisteredPlayer.forCommander(resolvedDeck) : new RegisteredPlayer(resolvedDeck))
+                        .setPlayer(GamePlayerUtil.getGuiPlayer());
+            } else {
+                human = new RegisteredPlayer(new Deck()).setPlayer(GamePlayerUtil.getGuiPlayer());
+            }
             // Tracks the actual lobby name assigned to each seat this run, so a forced
             // play sequence (keyed by "P1"/"P2" in the JSON) can be translated to the
             // runtime name GameRules.setForcedPlaySequence()/AiController expect.
             final Map<String, String> idToLobbyName = new LinkedHashMap<>();
             idToLobbyName.put("P1", GamePlayerUtil.getGuiPlayer().getName());
-            // Apply commander from player setup if present (for Commander game type support)
-            if (si != null && si.playerCommanders.containsKey("P1")) {
+            // Apply commander from player setup if present (placeholder-deck path only - a
+            // resolved deck's own Commander section is already picked up above).
+            if (resolvedDeck == null && si != null && si.playerCommanders.containsKey("P1")) {
                 for (String cmdName : si.playerCommanders.get("P1")) {
                     forge.item.PaperCard cmdCard = FModel.getMagicDb().getCommonCards().getCard(cmdName);
                     if (cmdCard != null) {
@@ -409,14 +490,18 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             }
             players.add(human);
 
-            // AI players (indices 1..playerCount-1)
+            // AI players (indices 1..playerCount-1). When a real deck was resolved for the human
+            // seat, the AI opponent gets an inert lands-only "dummy" deck instead of an empty one
+            // - these scenarios validate the human's line, not the AI's, and an empty deck here
+            // would hit the same empty-library crash the human's used to (see the two fixes this
+            // supersedes the root cause of).
             for (int i = 1; i < playerCount; i++) {
                 final String aiName = "AI " + i;
-                final RegisteredPlayer ai = new RegisteredPlayer(new Deck())
+                final RegisteredPlayer ai = new RegisteredPlayer(resolvedDeck != null ? buildDummyLandsDeck() : new Deck())
                         .setPlayer(GamePlayerUtil.createAiPlayer(aiName));
                 String aiPlayerId = "P" + (i + 1);
                 idToLobbyName.put(aiPlayerId, aiName);
-                if (si != null && si.playerCommanders.containsKey(aiPlayerId)) {
+                if (resolvedDeck == null && si != null && si.playerCommanders.containsKey(aiPlayerId)) {
                     for (String cmdName : si.playerCommanders.get(aiPlayerId)) {
                         forge.item.PaperCard cmdCard = FModel.getMagicDb().getCommonCards().getCard(cmdName);
                         if (cmdCard != null) {
