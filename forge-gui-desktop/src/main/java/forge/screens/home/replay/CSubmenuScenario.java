@@ -387,20 +387,20 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             final HostedMatch hostedMatch = GuiBase.getInterface().hostMatch();
 
             // Merge explicit game_state lines with auto-generated lines from player setup. When
-            // a real deck was resolved, starting_hand/first_draws instead come from
-            // ScenarioLibrarySetup reordering that deck's actual library (below), and commanders
-            // come from the deck's own Commander section (RegisteredPlayer.forCommander) - so
-            // the raw hand=/library=/command= lines are dropped here to avoid creating phantom
-            // duplicate cards alongside the real ones. life= has no other mechanism and always
-            // applies; battlefield= likewise.
+            // a real deck was resolved, the auto-generated structured lines are skipped
+            // entirely: GameState.applyToGame unconditionally clears EVERY zone for a player
+            // before reapplying only what's in the lines it's given (see
+            // GameState.setupPlayerState) - safe for puzzle-style empty-deck scenarios, where
+            // that's the whole board being authored, but it would wipe a real deck's
+            // already-populated library and hand (from ScenarioLibrarySetup /
+            // RegisteredPlayer.forCommander below) down to nothing the moment this hook fires.
+            // starting_hand/first_draws come from ScenarioLibrarySetup, commanders from the
+            // deck's own Commander section, and starting life is set directly on the
+            // RegisteredPlayer objects below instead - none of that needs this hook.
             final List<String> gameStateLines = si != null ? new ArrayList<>(si.gameState) : new ArrayList<>();
-            if (si != null && si.hasPlayerSetup()) {
+            if (si != null && si.hasPlayerSetup() && resolvedDeck == null) {
                 // Prepend structured lines so explicit game_state overrides them if needed
                 List<String> structuredLines = si.buildGameStateFromPlayerSetup();
-                if (resolvedDeck != null) {
-                    structuredLines.removeIf(line ->
-                            line.contains("hand=") || line.contains("library=") || line.contains("command="));
-                }
                 structuredLines.addAll(gameStateLines);
                 gameStateLines.clear();
                 gameStateLines.addAll(structuredLines);
@@ -446,13 +446,38 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             if (demoPlay) {
                 hostedMatch.setOnMatchOver(() -> {
                     try {
+                        final com.google.gson.JsonArray events =
+                                DemoPlaySequenceExtractor.extractPlayerEvents(demoRecordingFile, "P1");
                         DemoPlaySequenceExtractor.writeSnippet(demoRecordingFile, "P1", demoSnippetFile);
                         SwingUtilities.invokeLater(() -> {
-                            SOptionPane.showMessageDialog(
-                                    "Demo play recorded. P1's actions were extracted to an events[] snippet:\n\n"
-                                            + demoSnippetFile.getPath()
-                                            + "\n\nPaste its contents into this scenario's \"events\" field to encode this line.",
-                                    "Demo Play Complete", SOptionPane.INFORMATION_ICON);
+                            if (events.size() == 0) {
+                                SOptionPane.showMessageDialog(
+                                        "Demo play recorded, but no CAST/ACTIVATE/PLAY_LAND actions were found "
+                                                + "for P1 - nothing to encode.",
+                                        "Demo Play Complete", SOptionPane.INFORMATION_ICON);
+                                updateData();
+                                return;
+                            }
+                            boolean update = SOptionPane.showConfirmDialog(
+                                    "Demo play recorded " + events.size() + " action(s) for P1.\n\n"
+                                            + "Update this scenario's \"events\" field with the recorded line now?\n"
+                                            + "(A copy is also saved separately at:\n" + demoSnippetFile.getPath() + ")",
+                                    "Demo Play Complete");
+                            if (update) {
+                                try {
+                                    DemoPlaySequenceExtractor.updateScenarioEvents(parser.getReplayFile(), events);
+                                    SOptionPane.showMessageDialog(
+                                            "Scenario file updated:\n\n" + parser.getReplayFile().getPath(),
+                                            "Scenario Updated", SOptionPane.INFORMATION_ICON);
+                                } catch (Exception e) {
+                                    LOG.error("Failed to update scenario file with demo-play events", e);
+                                    SOptionPane.showMessageDialog(
+                                            "Failed to update the scenario file: " + e.getMessage()
+                                                    + "\n\nThe recorded events are still available at:\n"
+                                                    + demoSnippetFile.getPath(),
+                                            "Update Failed", FSkinProp.ICO_ERROR);
+                                }
+                            }
                             updateData(); // refresh so the Demoed column/button reflect the new recording
                         });
                     } catch (Exception e) {
@@ -499,6 +524,11 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
                 final String aiName = "AI " + i;
                 final RegisteredPlayer ai = new RegisteredPlayer(resolvedDeck != null ? buildDummyLandsDeck() : new Deck())
                         .setPlayer(GamePlayerUtil.createAiPlayer(aiName));
+                if (resolvedDeck != null && hasCommanders) {
+                    // No forCommander() here (the dummy deck has no commander to pull from) -
+                    // Commander rule 903.7 still gives every player 40 life regardless.
+                    ai.setStartingLife(40);
+                }
                 String aiPlayerId = "P" + (i + 1);
                 idToLobbyName.put(aiPlayerId, aiName);
                 if (resolvedDeck == null && si != null && si.playerCommanders.containsKey(aiPlayerId)) {

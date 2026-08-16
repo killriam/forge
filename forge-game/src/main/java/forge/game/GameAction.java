@@ -2452,6 +2452,14 @@ public class GameAction {
                 return game.getPlayers().get(0);
             }
 
+            // Scenario mode (Investigate Scenarios / Demo Play): the scripted starting hand and
+            // any forced play sequence are authored from the human seat's perspective going
+            // first (e.g. "T1.MP1:1 PLAY_LAND"), and a scenario is meant to be reproducible, not
+            // subject to a random coin toss each launch - same reasoning as the Puzzle case above.
+            if (game.getRules().isScenarioMode()) {
+                return game.getPlayers().get(0);
+            }
+
             // 904.6: in Archenemy games the Archenemy goes first
             if (game.getRules().hasAppliedVariant(GameType.Archenemy)) {
                 for (Player p : game.getPlayers()) {

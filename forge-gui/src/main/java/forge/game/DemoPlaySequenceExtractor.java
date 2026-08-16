@@ -117,6 +117,35 @@ public final class DemoPlaySequenceExtractor {
         LOG.info("Demo-play events snippet ({} event(s)) written to {}", events.size(), outFile);
     }
 
+    /**
+     * Overwrites {@code scenarioFile}'s top-level {@code "events"} field with {@code events},
+     * preserving everything else in the file - used when the user confirms they want their
+     * demo-play line encoded directly into the scenario instead of manually pasting the snippet
+     * from {@link #writeSnippet}. Copies the file to {@code <name>.bak} first (overwriting any
+     * previous backup) so an unwanted update is trivially reversible.
+     */
+    public static void updateScenarioEvents(final File scenarioFile, final JsonArray events) throws IOException {
+        final JsonObject root;
+        try (Reader reader = new FileReader(scenarioFile)) {
+            final JsonElement rootElem = JsonParser.parseReader(reader);
+            if (!rootElem.isJsonObject()) {
+                throw new IOException("Scenario file is not a JSON object: " + scenarioFile);
+            }
+            root = rootElem.getAsJsonObject();
+        }
+
+        final File backup = new File(scenarioFile.getParentFile(), scenarioFile.getName() + ".bak");
+        java.nio.file.Files.copy(scenarioFile.toPath(), backup.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+        root.add("events", events);
+        final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        try (FileWriter fw = new FileWriter(scenarioFile)) {
+            gson.toJson(root, fw);
+        }
+        LOG.info("Scenario file updated with {} event(s) (backup at {}): {}", events.size(), backup, scenarioFile);
+    }
+
     private static String resolveCardName(final JsonObject ev) {
         if (!ev.has("data") || !ev.get("data").isJsonObject()) return null;
         final JsonObject data = ev.getAsJsonObject("data");
