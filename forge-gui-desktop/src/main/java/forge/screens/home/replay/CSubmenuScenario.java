@@ -408,8 +408,12 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
                         structuredLines.size() - si.gameState.size(), si.gameState.size());
             }
 
-            // Detect Commander scenarios (any player has commanders defined)
-            final boolean hasCommanders = si != null && !si.playerCommanders.isEmpty();
+            // Detect Commander scenarios: either the scenario JSON itself lists commanders, or
+            // (for the real-deck path) the resolved deck has its own Commander section - a
+            // Commander-format deck attached to a scenario whose JSON omits "commanders" would
+            // otherwise silently launch as GameType.Puzzle with no commander, no mulligan, 20 life.
+            final boolean hasCommanders = (si != null && !si.playerCommanders.isEmpty())
+                    || (resolvedDeck != null && !resolvedDeck.getCommanders().isEmpty());
 
             final String dialogTitle = si != null && si.name != null ? si.name : "Scenario";
             final String dialogText = buildGameStartDialog(si);
@@ -546,6 +550,17 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             GameRules rules = new GameRules(hasCommanders ? GameType.Commander : GameType.Puzzle);
             rules.setGamesPerMatch(1);
             rules.setScenarioMode(true);  // disables achievement tracking and game log saving
+            if (hasCommanders) {
+                // Every Commander-specific rule (CR 903.9a graveyard/exile -> command zone,
+                // 21-commander-damage loss) is gated on GameRules.appliedVariants, never on
+                // getGameType() - a real Constructed/Commander lobby match is baseGameType
+                // Constructed + variant Commander (see GameLobby.startGame()), so setting only
+                // the game TYPE here left those rules silently inactive: a dead commander just
+                // stayed in the graveyard instead of offering to return to the command zone.
+                // Commander tax and casting from the command zone are NOT gated this way and
+                // already worked without this.
+                rules.addAppliedVariant(GameType.Commander);
+            }
 
             // Scenario library setup: pass defined starting hand + first draws to GameRules.
             // ScenarioLibrarySetup (called from GameAction) will reorder each player's library

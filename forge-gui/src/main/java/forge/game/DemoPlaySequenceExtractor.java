@@ -65,6 +65,7 @@ public final class DemoPlaySequenceExtractor {
             if (!root.has(eventsKey) || !root.get(eventsKey).isJsonArray()) {
                 return result;
             }
+            final java.util.Map<String, String> cardNamesById = buildCardIndex(root);
 
             int index = 1;
             for (final JsonElement el : root.getAsJsonArray(eventsKey)) {
@@ -87,6 +88,13 @@ public final class DemoPlaySequenceExtractor {
                 out.addProperty("type", type);
                 final JsonObject data = new JsonObject();
                 data.addProperty("card_name", cardName);
+                // Targets and additional costs (e.g. Metamorphosis' "sacrifice a creature") are
+                // recorded by card id in the raw log - resolve them to names here so the events[]
+                // snippet is self-contained and human-authorable without cross-referencing the
+                // recording. Not yet consumed on replay (see docs/SCENARIO_STARTING_HAND_FORMAT.md,
+                // "Phase 2") - recorded for now so a scenario author can encode them by hand.
+                addResolvedNames(data, "targets", ev.get("targets"), cardNamesById);
+                addResolvedNames(data, "sacrifice", ev.get("cost_sacrificed"), cardNamesById);
                 out.add("data", data);
                 result.add(out);
             }
@@ -144,6 +152,37 @@ public final class DemoPlaySequenceExtractor {
             gson.toJson(root, fw);
         }
         LOG.info("Scenario file updated with {} event(s) (backup at {}): {}", events.size(), backup, scenarioFile);
+    }
+
+    /** Builds an id ("c3", "t1", a player id like "P2") -> name lookup from the replay's
+     *  top-level card_index. Player ids are left to resolve as themselves (targets can be
+     *  players, e.g. a burn spell aimed at an opponent). */
+    private static java.util.Map<String, String> buildCardIndex(final JsonObject root) {
+        final java.util.Map<String, String> byId = new java.util.HashMap<>();
+        if (root.has("card_index") && root.get("card_index").isJsonObject()) {
+            for (final java.util.Map.Entry<String, JsonElement> e : root.getAsJsonObject("card_index").entrySet()) {
+                if (e.getValue().isJsonObject() && e.getValue().getAsJsonObject().has("name")) {
+                    byId.put(e.getKey(), e.getValue().getAsJsonObject().get("name").getAsString());
+                }
+            }
+        }
+        return byId;
+    }
+
+    /** If {@code idsElement} is a non-empty JSON array of ids, resolves each to a name (falling
+     *  back to the raw id, e.g. a player id, when it's not in the card index) and adds the
+     *  result to {@code data} under {@code key}. No-op if the array is absent or empty. */
+    private static void addResolvedNames(final JsonObject data, final String key,
+            final JsonElement idsElement, final java.util.Map<String, String> cardNamesById) {
+        if (idsElement == null || !idsElement.isJsonArray() || idsElement.getAsJsonArray().size() == 0) {
+            return;
+        }
+        final JsonArray names = new JsonArray();
+        for (final JsonElement idEl : idsElement.getAsJsonArray()) {
+            final String id = idEl.getAsString();
+            names.add(cardNamesById.getOrDefault(id, id));
+        }
+        data.add(key, names);
     }
 
     private static String resolveCardName(final JsonObject ev) {

@@ -89,7 +89,8 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
 | `a` | `string` | Actor — welcher Spieler (`"P1"`, `"P2"`, ...) |
 | `type` | `string` | Event-Typ (`"CAST"`, `"ACTIVATE"`, `"PLAY_LAND"`) |
 | `data.card_name` | `string` | Karten-Name |
-| `data.targets` | `[string]` | Optional: Ziele der Fähigkeit (für Phase 2 — noch nicht implementiert) |
+| `data.targets` | `[string]` | Optional: Ziele der Fähigkeit, per Name (Kartenname oder Spieler-ID). Wird beim Demo-Play-Export (`DemoPlaySequenceExtractor`) automatisch aus der Aufzeichnung aufgelöst und eingetragen — beim Abspielen einer Sequenz aber noch **nicht ausgewertet** (die AI wählt ihre eigenen Ziele normal; siehe "Getestet, aber noch nicht konsumiert" unten). |
+| `data.sacrifice` | `[string]` | Optional: als Zusatzkosten geopferte Karte(n) (z.B. bei Metamorphosis), per Name. Gleiche Einschränkung wie `data.targets` — wird aufgezeichnet, aber beim Abspielen noch nicht ausgewertet. |
 
 ### Funktionsweise
 
@@ -634,7 +635,8 @@ Die Karte bleibt in der Queue und wird bei jeder weiteren Priorität **innerhalb
       "type": "PLAY_LAND",         // PLAY_LAND | CAST | ACTIVATE
       "data": {
         "card_name": "string",     // card name
-        "targets": ["string"]      // optional: target IDs (Phase 2)
+        "targets": ["string"],     // optional: target names, auto-filled on Demo Play export - recorded, not yet replayed
+        "sacrifice": ["string"]    // optional: card(s) sacrificed as an additional cost, e.g. Metamorphosis - recorded, not yet replayed
       }
     }
   ]

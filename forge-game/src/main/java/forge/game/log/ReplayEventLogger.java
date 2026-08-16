@@ -83,6 +83,15 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
     // [0]=draws, [1]=spells, [2]=lands, [3]=unused, [4]=unused, [5]=creatures
     private final Map<String, int[]> gameStats = new LinkedHashMap<>();
 
+    /**
+     * Cards sacrificed since the last CAST/ACTIVATE event, not yet attached to one. Additional
+     * costs like "sacrifice a creature" (e.g. Metamorphosis) are paid before the spell/ability is
+     * finalized onto the stack, so GameEventCardSacrificed fires first - buffering it here and
+     * attaching + clearing on the next CAST/ACTIVATE is a reasonable approximation of "this is
+     * what was sacrificed to pay for it" for the common case of one action at a time.
+     */
+    private final List<String> pendingSacrificedIds = new ArrayList<>();
+
     // -------------------------------------------------------------------
     //  Constructor
     // -------------------------------------------------------------------
@@ -303,6 +312,11 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
 
     @Override
     public Void visit(GameEventTurnPhase ev) {
+        // Bounds the "attach pending sacrifices to the next cast" window to within the same
+        // phase, so a sacrifice that was never followed by a cast (e.g. a sac outlet used for
+        // its own sake) doesn't get misattributed to some unrelated cast several phases later.
+        pendingSacrificedIds.clear();
+
         String actor = playerStr(ev.playerTurn());
         L1Event l1 = makeEvent(actor, "PHASE_CHANGE");
         l1.addData("turn", currentTurn);
@@ -363,6 +377,15 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
     }
 
     @Override
+    public Void visit(GameEventCardSacrificed ev) {
+        CardView card = ev.card();
+        if (card == null) return null;
+        registerCardView(card);
+        pendingSacrificedIds.add(cardId(card));
+        return null;
+    }
+
+    @Override
     public Void visit(GameEventSpellAbilityCast ev) {
         StackItemView si = ev.si();
         String actor = si != null && si.getActivatingPlayer() != null
@@ -400,6 +423,10 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
             if (!targets.isEmpty()) {
                 l1.addData("targets", targets);
             }
+        }
+        if (!pendingSacrificedIds.isEmpty()) {
+            l1.addData("cost_sacrificed", new ArrayList<>(pendingSacrificedIds));
+            pendingSacrificedIds.clear();
         }
         replayLog.addL1Event(l1);
 
