@@ -100,9 +100,25 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             @Override
             protected List<Map.Entry<String, ReplayLogParser>> doInBackground() {
                 List<Map.Entry<String, ReplayLogParser>> result = new ArrayList<>();
+                Map<String, String> scenarioToDeck = buildScenarioToDeckIndex();
+                // scenarioParsers is keyed by this display string (below, in done()) and the
+                // JList itself only ever hands back a String on selection - two files that
+                // happen to produce the same display name (e.g. both titled "Perfect Game",
+                // whether coincidentally or because one is a literal duplicate of the other)
+                // would otherwise silently collide: every visible row with that text would
+                // resolve to whichever parser was put() last, so selecting what looks like your
+                // scenario can silently open a different, unrelated one. Disambiguate by
+                // filename the moment a repeat is seen.
+                java.util.Set<String> seen = new java.util.HashSet<>();
                 for (ReplayLogParser parser : ReplayLogParser.listScenarioFiles()) {
                     if (isCancelled()) break;
-                    String display = buildDisplayName(parser);
+                    String display = buildDisplayName(parser, scenarioToDeck);
+                    if (!seen.add(display)) {
+                        String fileToken = parser.getReplayFile().getName().replace(".json", "");
+                        display = display + " — " + fileToken;
+                        seen.add(display);
+                        LOG.warn("Scenario display name collision - disambiguated as '{}'", display);
+                    }
                     result.add(new AbstractMap.SimpleEntry<>(display, parser));
                 }
                 return result;
@@ -135,19 +151,48 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     }
 
     /**
-     * Builds the list entry text - includes the deck(s) the scenario was recorded/intended for
-     * (from {@code meta.players.PX.deck_name}) whenever available, so entries are identifiable
-     * by deck rather than just a generic title or a raw timestamped filename.
+     * Builds a reverse index from every scenario id/filename token referenced by any deck's
+     * {@code Scenario=} metadata to that deck's name - lets {@link #buildDisplayName} show a
+     * deck name even for scenario files with no {@code meta.players.P1.deck_name} of their own
+     * (e.g. hand-authored files, or ones an external tool didn't stamp with player meta), by
+     * finding whichever real deck actually references that scenario.
      */
-    private String buildDisplayName(ReplayLogParser parser) {
+    private static Map<String, String> buildScenarioToDeckIndex() {
+        Map<String, String> index = new LinkedHashMap<>();
+        for (Deck deck : com.google.common.collect.Iterables.concat(
+                FModel.getDecks().getConstructed(), FModel.getDecks().getCommander())) {
+            String ids = deck.getScenarioIds();
+            if (ids == null || ids.isEmpty()) continue;
+            for (String token : ids.split(",")) {
+                String trimmed = token.trim();
+                if (!trimmed.isEmpty()) {
+                    index.putIfAbsent(trimmed, deck.getName());
+                }
+            }
+        }
+        return index;
+    }
+
+    /**
+     * Builds the list entry text - always shows the deck the scenario is for when it's knowable
+     * at all, so entries are identifiable by deck rather than a generic title or raw filename.
+     * Deck name comes first from {@code meta.players.PX.deck_name} (authoritative - reflects
+     * what was actually played), falling back to {@code scenarioToDeck} (reverse-lookup from any
+     * deck's own {@code Scenario=} reference) when the file itself carries no player metadata.
+     */
+    private String buildDisplayName(ReplayLogParser parser, Map<String, String> scenarioToDeck) {
         ScenarioInfo si = parser.getScenarioInfo();
         String deckName = getPlayerDeckName(parser, "P1");
         String oppDeckName = getPlayerDeckName(parser, "P2");
 
+        if (deckName == null) {
+            deckName = lookupDeckName(parser, si, scenarioToDeck);
+        }
+
         if (si != null && si.title != null) {
             String prefix = si.type != null ? "[" + si.type + "] " : "";
             String title = prefix + si.title;
-            if (deckName != null && !title.contains(deckName)) {
+            if (deckName != null) {
                 title += " (" + deckName + ")";
             }
             return title;
@@ -160,6 +205,16 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         }
 
         return parser.getReplayFile().getName();
+    }
+
+    private String lookupDeckName(ReplayLogParser parser, ScenarioInfo si, Map<String, String> scenarioToDeck) {
+        if (si != null && si.id != null) {
+            String byId = scenarioToDeck.get(si.id);
+            if (byId != null) return byId;
+        }
+        String fileName = parser.getReplayFile().getName();
+        String withoutExt = fileName.endsWith(".json") ? fileName.substring(0, fileName.length() - ".json".length()) : fileName;
+        return scenarioToDeck.get(withoutExt);
     }
 
     private static String getPlayerDeckName(ReplayLogParser parser, String playerId) {
