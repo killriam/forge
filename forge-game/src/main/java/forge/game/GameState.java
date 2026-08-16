@@ -604,8 +604,16 @@ public class GameState {
         cardToScript.clear();
         cardAttackMap.clear();
 
-        int playerTurn = playerStates.indexOf(getPlayerState(tChangePlayer));
-        Player newPlayerTurn = game.getPlayers().get(playerTurn);
+        // "NONE" is the default when no "activeplayer=" line was present in the applied state
+        // (e.g. scenario mode's auto-generated lines only cover hand/library/life/battlefield,
+        // never turn state) - mirrors the same "none" guard already used for phase below instead
+        // of resolving a bogus index (getPlayerState("NONE") falls through to a fresh, unlisted
+        // PlayerState, so indexOf returns -1 and the get() below throws).
+        Player newPlayerTurn = null;
+        if (!"NONE".equalsIgnoreCase(tChangePlayer)) {
+            int playerTurn = playerStates.indexOf(getPlayerState(tChangePlayer));
+            newPlayerTurn = playerTurn >= 0 ? game.getPlayers().get(playerTurn) : null;
+        }
         PhaseType newPhase = tChangePhase.equalsIgnoreCase("none") ? null : PhaseType.smartValueOf(tChangePhase);
         PhaseType advPhase = tAdvancePhase.equalsIgnoreCase("none") ? null : PhaseType.smartValueOf(tAdvancePhase);
 
