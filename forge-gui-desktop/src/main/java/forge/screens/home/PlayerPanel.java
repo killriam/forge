@@ -535,7 +535,7 @@ public class PlayerPanel extends FPanel {
                     final ReplayLogParser parser = ReplayLogParser.resolveScenarioByIdOrFilename(trimmed);
                     if (parser == null) continue;
                     final ScenarioInfo si = parser.getScenarioInfo();
-                    final String title = si != null && si.title != null ? si.title : trimmed;
+                    final String title = si != null && si.name != null ? si.name : trimmed;
                     final String display = isScenarioCompatibleWithDeck(si, deck) ? title : title + " (missing cards)";
                     scenarioPickerComboBox.addItem(new ScenarioOption(trimmed, display));
                     anyAvailable = true;

@@ -342,7 +342,9 @@ Sequenz nie feuerte, siehe Troubleshooting unten.)
 |------|-----|------|-------------|
 | `id` | `string` | — | Optionale stabile Kennung, um dieses Szenario aus einem Deck-File zu referenzieren (siehe "Von einem Deck referenzieren" unten). Fehlt sie, wird die Datei über ihren Dateinamen (ohne `.json`) referenziert. |
 | `type` | `string` | — | `"opening_hand_test"` → AI überspringt Mulligan.<br>`"puzzle"` → AI mulligant normal. Fehlt das Feld: normales Verhalten. |
-| `title` | `string` | ✅ | Anzeige-Name in der Szenario-Liste der GUI |
+| `name` | `string` | ✅ | Anzeige-Name in der Szenario-Tabelle der GUI (Spalte "Name"). Bevorzugtes Feld — entspricht `DecklistScenario.name` in mtg-replay-notation §6.4. |
+| `title` | `string` | — | **Deprecated**, Alias für `name`. Ältere Dateien, die nur `title` setzen, funktionieren weiterhin (`name` fällt automatisch auf `title` zurück); neue Dateien sollten `name` verwenden. |
+| `deck_id` | `string` | — | Kennung des Decks, zu dem dieses Szenario gehört (entspricht `DecklistScenario.deck_id`). Wenn gesetzt, wird sie in der Szenario-Tabelle als Spalte "Deck" angezeigt (authoritative) — sonst fällt die Anzeige zurück auf `meta.players.P1.deck_name`, dann auf eine Rückwärtssuche über die `Scenario=`-Metadaten aller Decks. |
 | `description` | `string` | — | Erklärungstext, wird vor dem Spielstart als Dialog gezeigt |
 | `question` | `string` | — | Lernfrage, wird im Dialog angezeigt |
 | `answer` | `string` | — | Antwort/Lösungshinweis, wird im Dialog angezeigt |
@@ -456,7 +458,7 @@ Spiel startet — Spieler zieht seine Starthand aus der vorbereiteten Library
 
 ### Via GUI
 
-1. Scenario-JSON in `%AppData%\Forge\games\gamelogs\` ablegen (Dateiname beliebig, endet auf `.json`)
+1. Scenario-JSON in `%AppData%\Forge\games\scenarios\` ablegen (Dateiname beliebig, endet auf `.json`) — **nicht** mehr in `gamelogs\`, das ist seit der Einführung eines eigenen Scenario-Ordners nur noch für echte gespielte Partien (Game Recap) gedacht.
 2. Forge starten → **Replay Mode** → **Scenario Viewer**
 3. Szenario aus der Liste wählen
 4. **Start** klicken
@@ -603,8 +605,10 @@ Die Karte bleibt in der Queue und wird bei jeder weiteren Priorität **innerhalb
     "game_type": "commander"       // "commander"|"constructed"|...
   },
   "scenario": {                    // required
+    "id": "string",                // optional: stable id for deck Scenario= references
     "type": "opening_hand_test",   // optional: "opening_hand_test"|"puzzle"|"rules_test"
-    "title": "string",             // required for GUI display
+    "name": "string",              // required for GUI display (preferred; "title" is a deprecated alias)
+    "deck_id": "string",           // optional: owning deck's identifier, shown as the "Deck" column
     "description": "string",       // optional: shown as dialog before game
     "question": "string",          // optional: shown in dialog
     "answer": "string",            // optional: shown in dialog
@@ -641,7 +645,7 @@ Die Karte bleibt in der Queue und wird bei jeder weiteren Priorität **innerhalb
 
 ## Beispiel-Datei für Horror: Dead is not an end
 
-Speicherort: `%AppData%\Forge\games\gamelogs\scenario_horror_t3_test.json`
+Speicherort: `%AppData%\Forge\games\scenarios\scenario_horror_t3_test.json`
 
 > ✅ **Getestet** — alle 7 Startkarten und alle 5 First-Draws wurden korrekt geladen (`hand: 7/7, draws: 5/5`).
 

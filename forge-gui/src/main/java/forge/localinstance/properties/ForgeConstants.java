@@ -249,6 +249,10 @@ public final class ForgeConstants {
     public static final String LOG_FILE                   = USER_DIR + "forge.log";
     public static final String NETWORK_LOGS_DIR           = USER_DIR + "networklogs" + PATH_SEPARATOR;
     public static final String GAME_LOG_DIR               = USER_GAMES_DIR + "gamelogs" + PATH_SEPARATOR;
+    /** Scenario definitions and their demo-play recordings - kept out of GAME_LOG_DIR so
+     *  Investigate Scenarios never has to scan/exclude real games, and Game Recap never has to
+     *  scan/exclude scenario or demo-play files. */
+    public static final String SCENARIO_DIR                = USER_GAMES_DIR + "scenarios" + PATH_SEPARATOR;
     public static final String ACHIEVEMENTS_DIR           = USER_DIR + "achievements" + PATH_SEPARATOR;
     public static final String USER_CUSTOM_DIR            = USER_DIR + "custom" + PATH_SEPARATOR;
     public static final String USER_CUSTOM_EDITIONS_DIR   = USER_CUSTOM_DIR + "editions" + PATH_SEPARATOR;

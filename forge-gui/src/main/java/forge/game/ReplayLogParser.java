@@ -142,7 +142,14 @@ public class ReplayLogParser {
                 ScenarioInfo si = new ScenarioInfo();
                 si.id          = getStringField(sc, "id");
                 si.type        = getStringField(sc, "type");
-                si.title       = getStringField(sc, "title");
+                // "name" is the field mtg-replay-notation's DecklistScenario spec (§6.4) uses;
+                // Forge's own scenario files predate that and use "title" - accept either,
+                // preferring "name" when a file somehow has both. si.title is kept in sync as a
+                // read-only alias for any code that still reads it directly.
+                si.name        = getStringField(sc, "name");
+                if (si.name == null) si.name = getStringField(sc, "title");
+                si.title       = si.name;
+                si.deckId      = getStringField(sc, "deck_id");
                 si.description = getStringField(sc, "description");
                 si.question    = getStringField(sc, "question");
                 si.answer      = getStringField(sc, "answer");
@@ -555,8 +562,10 @@ public class ReplayLogParser {
     public ScenarioInfo getScenarioInfo() { return scenarioInfo; }
 
     /**
-     * Scans {@code ForgeConstants.GAME_LOG_DIR} for {@code *.json} files, parses each, and
-     * returns only the ones that are scenarios ({@link #isScenario()}), newest first.
+     * Scans {@code ForgeConstants.SCENARIO_DIR} for {@code *.json} files, parses each, and
+     * returns only the ones that are scenarios ({@link #isScenario()}), newest first. Demo-play
+     * recordings also live in this folder but are plain {@code mode: full_game} replays, so they
+     * pass through {@code isScenario()} and are excluded here automatically.
      *
      * <p>Shared by {@code CSubmenuScenario} and the {@code Scenario=} .dck-metadata resolution
      * path ({@link #resolveScenarioByIdOrFilename(String)}) — previously this directory scan was
@@ -564,7 +573,7 @@ public class ReplayLogParser {
      */
     public static List<ReplayLogParser> listScenarioFiles() {
         List<ReplayLogParser> result = new ArrayList<>();
-        File logDir = new File(forge.localinstance.properties.ForgeConstants.GAME_LOG_DIR);
+        File logDir = new File(forge.localinstance.properties.ForgeConstants.SCENARIO_DIR);
         if (!logDir.exists() || !logDir.isDirectory()) {
             return result;
         }
@@ -751,7 +760,16 @@ public class ReplayLogParser {
          *  Falls back to the replay file's own filename (sans extension) when absent. */
         public String id;
         public String type;
+        /** Preferred field going forward (matches mtg-replay-notation's DecklistScenario.name).
+         *  Populated from JSON "name", falling back to the legacy "title" key. */
+        public String name;
+        /** @deprecated kept in sync with {@link #name} for old external readers; use {@link #name}. */
+        @Deprecated
         public String title;
+        /** Owning deck's identifier (mtg-replay-notation DecklistScenario.deck_id) - optional;
+         *  authoritative when present, otherwise deck association falls back to a reverse
+         *  lookup across decks' own Scenario= references (see CSubmenuScenario). */
+        public String deckId;
         public String description;
         public String question;
         public String answer;

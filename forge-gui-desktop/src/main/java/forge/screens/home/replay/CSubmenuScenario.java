@@ -1,15 +1,14 @@
 package forge.screens.home.replay;
 
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import javax.swing.JMenu;
-import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.event.ListSelectionEvent;
 
 import forge.deck.Deck;
 import forge.game.DemoPlaySequenceExtractor;
@@ -30,6 +29,7 @@ import forge.menus.IMenuProvider;
 import forge.menus.MenuUtil;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
+import forge.screens.home.replay.VSubmenuScenario.ScenarioRow;
 import forge.util.Localizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,8 +40,8 @@ import java.util.Date;
 
 /**
  * Controller for the Replay Scenario submenu.
- * Scans the game log directory for scenario JSON files and lets the user
- * play them interactively, similar to puzzle mode.
+ * Scans the scenario directory for scenario JSON files and lets the user play them
+ * interactively, similar to puzzle mode, via a sortable table (Type / Name / Deck / Demoed).
  *
  * The scenario JSON's "scenario" object may include:
  *   "player_count": 2..N   (number of players to create, default 2)
@@ -51,12 +51,13 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     SINGLETON_INSTANCE;
 
     private static final Logger LOG = LoggerFactory.getLogger(CSubmenuScenario.class);
+    private static final String DEMO_PLAY_LABEL_DEFAULT = "lblScenarioDemoPlay";
+    private static final String DEMO_PLAY_LABEL_REDO = "lblScenarioRedoDemo";
 
     private final VSubmenuScenario view = VSubmenuScenario.SINGLETON_INSTANCE;
-    private final Map<String, ReplayLogParser> scenarioParsers = new LinkedHashMap<>();
 
     /** Background worker for async file scanning - cancelled if the screen is re-entered. */
-    private SwingWorker<List<Map.Entry<String, ReplayLogParser>>, Void> loadWorker;
+    private SwingWorker<List<ScenarioRow>, Void> loadWorker;
 
     @Override
     public void register() {
@@ -64,62 +65,65 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
 
     @Override
     public void initialize() {
-        view.getList().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        view.getList().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                updateScenarioInfo();
-            }
-        });
+        view.getTable().getSelectionModel().addListSelectionListener(this::onSelectionChanged);
         view.getBtnStart().addActionListener(e -> startScenario());
         view.getBtnDemoPlay().addActionListener(e -> startScenarioDemoPlay());
         // Do NOT call updateData() here - every home-screen submenu's initialize() runs
         // unconditionally, synchronously, on the EDT at app startup (FView.initialize()), well
         // before the user has navigated here. ReplayLogParser.listScenarioFiles() parses every
-        // *.json in the game-log directory - including full deck reconstruction (real
-        // card-database lookups) - to find the handful that are actually scenarios, which with
-        // a large gamelogs folder blocked the UI thread for seconds on every launch regardless
-        // of whether this screen was ever opened. Lazy-load only when the screen is shown
-        // instead, same fix already applied to CSubmenuReplay for the same reason.
+        // *.json in the scenario directory - including full deck reconstruction (real
+        // card-database lookups) for demo-play recordings sharing that folder - which with a
+        // large enough folder blocked the UI thread for seconds on every launch regardless of
+        // whether this screen was ever opened. Lazy-load only when the screen is shown instead,
+        // same fix already applied to CSubmenuReplay for the same reason.
         updateBtnEnablement();
     }
 
+    private void onSelectionChanged(ListSelectionEvent e) {
+        if (!e.getValueIsAdjusting()) {
+            updateScenarioInfo();
+            updateDemoPlayButtonLabel();
+        }
+    }
+
     /**
-     * Scan the game log directory asynchronously and populate the scenario list. Only runs when
-     * the screen is actually visible (called from update()), not at app startup.
+     * Scan the scenario directory asynchronously and populate the table. Only runs when the
+     * screen is actually visible (called from update()), not at app startup.
      */
     private void updateData() {
         if (loadWorker != null && !loadWorker.isDone()) {
             loadWorker.cancel(true);
         }
 
-        scenarioParsers.clear();
-        view.getModel().clear();
+        view.getTableModel().setRows(new ArrayList<>());
         updateBtnEnablement();
 
         loadWorker = new SwingWorker<>() {
             @Override
-            protected List<Map.Entry<String, ReplayLogParser>> doInBackground() {
-                List<Map.Entry<String, ReplayLogParser>> result = new ArrayList<>();
+            protected List<ScenarioRow> doInBackground() {
+                List<ScenarioRow> result = new ArrayList<>();
                 Map<String, String> scenarioToDeck = buildScenarioToDeckIndex();
-                // scenarioParsers is keyed by this display string (below, in done()) and the
-                // JList itself only ever hands back a String on selection - two files that
-                // happen to produce the same display name (e.g. both titled "Perfect Game",
-                // whether coincidentally or because one is a literal duplicate of the other)
-                // would otherwise silently collide: every visible row with that text would
-                // resolve to whichever parser was put() last, so selecting what looks like your
-                // scenario can silently open a different, unrelated one. Disambiguate by
-                // filename the moment a repeat is seen.
-                java.util.Set<String> seen = new java.util.HashSet<>();
+                // Two files that happen to produce the same Name text (e.g. both titled "Perfect
+                // Game", whether coincidentally or because one is a literal duplicate of the
+                // other) used to collide in a Map<displayString, parser> lookup - selecting what
+                // looked like your scenario could silently open a different, unrelated one. The
+                // table sidesteps that entirely: each row's identity is its position, resolved
+                // back to a parser via ScenarioRow, never by re-parsing displayed text - so
+                // disambiguation here is purely cosmetic (avoid confusing duplicate Name cells),
+                // not required for correctness.
+                java.util.Set<String> seenNames = new java.util.HashSet<>();
                 for (ReplayLogParser parser : ReplayLogParser.listScenarioFiles()) {
                     if (isCancelled()) break;
-                    String display = buildDisplayName(parser, scenarioToDeck);
-                    if (!seen.add(display)) {
+                    ScenarioInfo si = parser.getScenarioInfo();
+                    String name = si != null && si.name != null ? si.name : parser.getReplayFile().getName();
+                    if (!seenNames.add(name)) {
                         String fileToken = parser.getReplayFile().getName().replace(".json", "");
-                        display = display + " — " + fileToken;
-                        seen.add(display);
-                        LOG.warn("Scenario display name collision - disambiguated as '{}'", display);
+                        name = name + " — " + fileToken;
                     }
-                    result.add(new AbstractMap.SimpleEntry<>(display, parser));
+                    String type = si != null ? si.type : null;
+                    String deck = resolveDeckName(parser, si, scenarioToDeck);
+                    boolean demoed = hasDemoRecording(parser, si);
+                    result.add(new ScenarioRow(type, name, deck, demoed, parser));
                 }
                 return result;
             }
@@ -128,12 +132,9 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             protected void done() {
                 if (isCancelled()) return;
                 try {
-                    List<Map.Entry<String, ReplayLogParser>> result = get();
-                    for (Map.Entry<String, ReplayLogParser> entry : result) {
-                        scenarioParsers.put(entry.getKey(), entry.getValue());
-                        view.getModel().addElement(entry.getKey());
-                    }
-                    LOG.info("Found {} scenario files", scenarioParsers.size());
+                    List<ScenarioRow> result = get();
+                    view.getTableModel().setRows(result);
+                    LOG.info("Found {} scenario files", result.size());
                 } catch (Exception e) {
                     LOG.error("Failed to load scenario files", e);
                 } finally {
@@ -145,15 +146,29 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     }
 
     private void updateBtnEnablement() {
-        boolean hasItems = view.getModel().getSize() > 0;
+        boolean hasItems = view.getTableModel().getRowCount() > 0;
         view.getBtnStart().setEnabled(hasItems);
         view.getBtnDemoPlay().setEnabled(hasItems);
     }
 
     /**
+     * Checks whether any demo-play recording already exists for this scenario, by looking for
+     * {@code demo-play_<token>_*.json} files in the scenario directory - same token
+     * (id, or filename as fallback) used when {@link #launchScenario} writes one.
+     */
+    private static boolean hasDemoRecording(ReplayLogParser parser, ScenarioInfo si) {
+        File dir = new File(ForgeConstants.SCENARIO_DIR);
+        if (!dir.isDirectory()) return false;
+        String token = safeFileToken(si != null && si.id != null ? si.id : parser.getReplayFile().getName());
+        String prefix = "demo-play_" + token + "_";
+        File[] matches = dir.listFiles((d, n) -> n.startsWith(prefix) && n.endsWith(".json"));
+        return matches != null && matches.length > 0;
+    }
+
+    /**
      * Builds a reverse index from every scenario id/filename token referenced by any deck's
-     * {@code Scenario=} metadata to that deck's name - lets {@link #buildDisplayName} show a
-     * deck name even for scenario files with no {@code meta.players.P1.deck_name} of their own
+     * {@code Scenario=} metadata to that deck's name - lets {@link #resolveDeckName} show a
+     * deck even for scenario files with no {@code meta.players.P1.deck_name} of their own
      * (e.g. hand-authored files, or ones an external tool didn't stamp with player meta), by
      * finding whichever real deck actually references that scenario.
      */
@@ -174,37 +189,18 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     }
 
     /**
-     * Builds the list entry text - always shows the deck the scenario is for when it's knowable
-     * at all, so entries are identifiable by deck rather than a generic title or raw filename.
-     * Deck name comes first from {@code meta.players.PX.deck_name} (authoritative - reflects
-     * what was actually played), falling back to {@code scenarioToDeck} (reverse-lookup from any
-     * deck's own {@code Scenario=} reference) when the file itself carries no player metadata.
+     * Resolves the deck this scenario is for, always showing one when it's knowable at all.
+     * Priority: explicit {@code scenario.deck_id} (authoritative, mtg-replay-notation spec) ->
+     * {@code meta.players.P1.deck_name} (reflects what was actually played) -> reverse lookup
+     * across decks' own {@code Scenario=} references (inferred).
      */
-    private String buildDisplayName(ReplayLogParser parser, Map<String, String> scenarioToDeck) {
-        ScenarioInfo si = parser.getScenarioInfo();
+    private String resolveDeckName(ReplayLogParser parser, ScenarioInfo si, Map<String, String> scenarioToDeck) {
+        if (si != null && si.deckId != null && !si.deckId.isEmpty()) {
+            return si.deckId;
+        }
         String deckName = getPlayerDeckName(parser, "P1");
-        String oppDeckName = getPlayerDeckName(parser, "P2");
-
-        if (deckName == null) {
-            deckName = lookupDeckName(parser, si, scenarioToDeck);
-        }
-
-        if (si != null && si.title != null) {
-            String prefix = si.type != null ? "[" + si.type + "] " : "";
-            String title = prefix + si.title;
-            if (deckName != null) {
-                title += " (" + deckName + ")";
-            }
-            return title;
-        }
-
-        if (deckName != null) {
-            return oppDeckName != null && !oppDeckName.equals(deckName)
-                    ? deckName + " vs " + oppDeckName
-                    : deckName;
-        }
-
-        return parser.getReplayFile().getName();
+        if (deckName != null) return deckName;
+        return lookupDeckName(parser, si, scenarioToDeck);
     }
 
     private String lookupDeckName(ReplayLogParser parser, ScenarioInfo si, Map<String, String> scenarioToDeck) {
@@ -223,26 +219,22 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     }
 
     private void updateScenarioInfo() {
-        String selected = view.getList().getSelectedValue();
-        if (selected == null) {
+        ScenarioRow row = view.getSelectedRow();
+        if (row == null) {
             view.getScenarioInfo().setText("");
             return;
         }
 
-        ReplayLogParser parser = scenarioParsers.get(selected);
-        if (parser == null) {
-            view.getScenarioInfo().setText("");
-            return;
-        }
-
+        ReplayLogParser parser = row.parser;
         ScenarioInfo si = parser.getScenarioInfo();
         StringBuilder sb = new StringBuilder();
         sb.append("File: ").append(parser.getReplayFile().getName()).append("\n\n");
 
         if (si != null) {
-            if (si.type != null)  sb.append("Type:  ").append(si.type).append("\n");
-            if (si.title != null) sb.append("Title: ").append(si.title).append("\n");
+            if (si.type != null) sb.append("Type:  ").append(si.type).append("\n");
+            if (si.name != null) sb.append("Name:  ").append(si.name).append("\n");
             sb.append("Players: ").append(si.playerCount).append("\n");
+            if (row.demoed) sb.append("Demo already recorded for this scenario.\n");
             if (si.description != null && !si.description.isEmpty()) {
                 sb.append("\n").append(si.description).append("\n");
             }
@@ -267,6 +259,16 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         view.getScenarioInfo().setCaretPosition(0);
     }
 
+    /** Switches the Demo Play button's label to "Redo Demo" once the selected scenario already
+     *  has a recording, so it's clear a fresh one will replace/add to it rather than start blind. */
+    private void updateDemoPlayButtonLabel() {
+        ScenarioRow row = view.getSelectedRow();
+        boolean redo = row != null && row.demoed;
+        view.getBtnDemoPlay().setText(Localizer.getInstance().getMessageorUseDefault(
+                redo ? DEMO_PLAY_LABEL_REDO : DEMO_PLAY_LABEL_DEFAULT,
+                redo ? "Redo Demo" : "Demo Play (record actions)"));
+    }
+
     private boolean startScenario() {
         return startScenario(false);
     }
@@ -283,8 +285,8 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
 
     private boolean startScenario(boolean demoPlay) {
         final Localizer localizer = Localizer.getInstance();
-        String selected = view.getList().getSelectedValue();
-        if (selected == null) {
+        ScenarioRow row = view.getSelectedRow();
+        if (row == null) {
             SOptionPane.showMessageDialog(
                     localizer.getMessage("lblPleaseSelectScenario"),
                     localizer.getMessage("lblNoSelectedScenario"),
@@ -292,12 +294,7 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             return false;
         }
 
-        ReplayLogParser parser = scenarioParsers.get(selected);
-        if (parser == null) {
-            return false;
-        }
-
-        return launchScenario(parser, demoPlay);
+        return launchScenario(row.parser, demoPlay);
     }
 
     /**
@@ -342,20 +339,21 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             // Detect Commander scenarios (any player has commanders defined)
             final boolean hasCommanders = si != null && !si.playerCommanders.isEmpty();
 
-            final String dialogTitle = si != null && si.title != null ? si.title : "Scenario";
+            final String dialogTitle = si != null && si.name != null ? si.name : "Scenario";
             final String dialogText = buildGameStartDialog(si);
 
             // Demo Play: record the full playthrough in detail so it can be converted into
             // events[] data afterward (see DemoPlaySequenceExtractor). Base name derived from
-            // the scenario's own id/filename so the recording is easy to associate with it.
+            // the scenario's own id/filename so the recording is easy to associate with it, and
+            // written into SCENARIO_DIR (not GAME_LOG_DIR) so it never shows up in Game Recap.
             final String demoBaseName = demoPlay
                     ? "demo-play_" + safeFileToken(si != null && si.id != null ? si.id : parser.getReplayFile().getName())
                             + "_" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date())
                     : null;
             final File demoRecordingFile = demoPlay
-                    ? new File(ForgeConstants.GAME_LOG_DIR, demoBaseName + ".json") : null;
+                    ? new File(ForgeConstants.SCENARIO_DIR, demoBaseName + ".json") : null;
             final File demoSnippetFile = demoPlay
-                    ? new File(ForgeConstants.GAME_LOG_DIR, demoBaseName + "_events_snippet.json") : null;
+                    ? new File(ForgeConstants.SCENARIO_DIR, demoBaseName + "_events_snippet.json") : null;
 
             hostedMatch.setStartGameHook(() -> {
                 if (!gameStateLines.isEmpty()) {
@@ -377,11 +375,14 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
                 hostedMatch.setOnMatchOver(() -> {
                     try {
                         DemoPlaySequenceExtractor.writeSnippet(demoRecordingFile, "P1", demoSnippetFile);
-                        SwingUtilities.invokeLater(() -> SOptionPane.showMessageDialog(
-                                "Demo play recorded. P1's actions were extracted to an events[] snippet:\n\n"
-                                        + demoSnippetFile.getPath()
-                                        + "\n\nPaste its contents into this scenario's \"events\" field to encode this line.",
-                                "Demo Play Complete", SOptionPane.INFORMATION_ICON));
+                        SwingUtilities.invokeLater(() -> {
+                            SOptionPane.showMessageDialog(
+                                    "Demo play recorded. P1's actions were extracted to an events[] snippet:\n\n"
+                                            + demoSnippetFile.getPath()
+                                            + "\n\nPaste its contents into this scenario's \"events\" field to encode this line.",
+                                    "Demo Play Complete", SOptionPane.INFORMATION_ICON);
+                            updateData(); // refresh so the Demoed column/button reflect the new recording
+                        });
                     } catch (Exception e) {
                         LOG.error("Failed to extract demo-play events snippet from {}", demoRecordingFile, e);
                     }
