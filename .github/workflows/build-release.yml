@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -58,6 +60,34 @@ jobs:
           echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
           echo "Packaged: $ZIP_NAME ($(du -sh "$ZIP_NAME" | cut -f1))"
 
+      - name: Build release notes
+        id: notes
+        run: |
+          # Diff against the PREVIOUS replay-features-latest tag (still intact at this point -
+          # it only gets deleted/moved in the next two steps) so the release actually lists what
+          # changed in this build, instead of the same static text every time.
+          PREV_SHA=$(git rev-parse replay-features-latest 2>/dev/null || echo "")
+          {
+            echo "Automated build from the \`replay-Features\` branch."
+            echo ""
+            echo "## Changes in this build"
+            if [ -n "$PREV_SHA" ]; then
+              git log "$PREV_SHA"..HEAD --no-merges --pretty=format:'- %s (%h)'
+            else
+              git log -20 --no-merges --pretty=format:'- %s (%h)'
+            fi
+            echo ""
+            echo ""
+            echo "**Built from:** \`${{ github.sha }}\`"
+            echo "**Build date:** $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "## Installation"
+            echo "- **Fresh install:** download \`${{ steps.package.outputs.zip_name }}\`, extract it, and run \`java -jar ${{ steps.find_jar.outputs.jar_name }}\` from inside the extracted folder. This bundles the \`res/\` folder the JAR needs at runtime - a bare JAR alone will crash on launch."
+            echo "- **Existing install:** if you already have a \`res/\` folder from a previous extract, you can just drop in the smaller \`${{ steps.find_jar.outputs.jar_name }}\` to update."
+            echo "- Configure via the MaMo Connector setup wizard."
+          } > release_notes.md
+          cat release_notes.md
+
       - name: Delete existing replay-features-latest release and tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -76,24 +106,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BUILD_DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
           gh release create replay-features-latest \
             --repo ${{ github.repository }} \
             --title "MaMo Forge (replay-Features) — Latest Build" \
-            --notes "Automated build from the \`replay-Features\` branch.
-
-          ## What's included
-          - Replay recording and playback support
-          - Commander simulation improvements
-          - MaMo-specific integration hooks
-
-          **Built from:** \`${{ github.sha }}\`
-          **Build date:** ${BUILD_DATE}
-
-          ## Installation
-          - **Fresh install:** download \`${{ steps.package.outputs.zip_name }}\`, extract it, and run \`java -jar ${{ steps.find_jar.outputs.jar_name }}\` from inside the extracted folder. This bundles the \`res/\` folder the JAR needs at runtime - a bare JAR alone will crash on launch.
-          - **Existing install:** if you already have a \`res/\` folder from a previous extract, you can just drop in the smaller \`${{ steps.find_jar.outputs.jar_name }}\` to update.
-          - Configure via the MaMo Connector setup wizard." \
+            --notes-file release_notes.md \
             --prerelease \
             "${{ steps.find_jar.outputs.jar_path }}#${{ steps.find_jar.outputs.jar_name }}" \
             "${{ steps.package.outputs.zip_path }}#${{ steps.package.outputs.zip_name }}"
