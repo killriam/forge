@@ -58,6 +58,8 @@ public class DeckFileHeader {
     public static final String DECK_URL = "DeckURL";
     /** Comma-separated eval_sequence scenario IDs from the companion decklist JSON. */
     public static final String EVAL_SCENARIO = "EvalScenario";
+    /** Comma-separated opening_hand_test scenario ids/filenames (docs/SCENARIO_STARTING_HAND_FORMAT.md). */
+    public static final String SCENARIO = "Scenario";
 
     private final DeckFormat deckType;
     private final String sourceUrl;
@@ -74,6 +76,7 @@ public class DeckFileHeader {
     private final String aiHints;
     private final String deckUrl;
     private final String evalScenario;
+    private final String scenario;
 
     private final String sleeveArtKey;
     private final int sleeveArtOffset;
@@ -96,6 +99,7 @@ public class DeckFileHeader {
         this.aiHints = kvPairs.get(DeckFileHeader.AI_HINTS);
         this.deckUrl = kvPairs.get(DeckFileHeader.DECK_URL);
         this.evalScenario = kvPairs.get(DeckFileHeader.EVAL_SCENARIO);
+        this.scenario = kvPairs.get(DeckFileHeader.SCENARIO);
         this.sleeveArtKey = kvPairs.get(DeckFileHeader.SLEEVE_ART);
         this.sleeveArtOffset = kvPairs.getInt(DeckFileHeader.SLEEVE_OFFSET, Deck.DEFAULT_SLEEVE_OFFSET);
 
@@ -177,6 +181,10 @@ public class DeckFileHeader {
 
     public final String getEvalScenario() {
         return evalScenario;
+    }
+
+    public final String getScenario() {
+        return scenario;
     }
 
     public final String getSleeveArtKey() {

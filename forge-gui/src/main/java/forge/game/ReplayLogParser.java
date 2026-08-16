@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,6 +139,7 @@ public class ReplayLogParser {
             if ("scenario".equals(this.mode) && root.has("scenario") && root.get("scenario").isJsonObject()) {
                 JsonObject sc = root.getAsJsonObject("scenario");
                 ScenarioInfo si = new ScenarioInfo();
+                si.id          = getStringField(sc, "id");
                 si.type        = getStringField(sc, "type");
                 si.title       = getStringField(sc, "title");
                 si.description = getStringField(sc, "description");
@@ -533,6 +535,71 @@ public class ReplayLogParser {
     public ScenarioInfo getScenarioInfo() { return scenarioInfo; }
 
     /**
+     * Scans {@code ForgeConstants.GAME_LOG_DIR} for {@code *.json} files, parses each, and
+     * returns only the ones that are scenarios ({@link #isScenario()}), newest first.
+     *
+     * <p>Shared by {@code CSubmenuScenario} and the {@code Scenario=} .dck-metadata resolution
+     * path ({@link #resolveScenarioByIdOrFilename(String)}) — previously this directory scan was
+     * duplicated inline in each GUI caller.</p>
+     */
+    public static List<ReplayLogParser> listScenarioFiles() {
+        List<ReplayLogParser> result = new ArrayList<>();
+        File logDir = new File(forge.localinstance.properties.ForgeConstants.GAME_LOG_DIR);
+        if (!logDir.exists() || !logDir.isDirectory()) {
+            return result;
+        }
+        File[] jsonFiles = logDir.listFiles((dir, name) -> name.endsWith(".json"));
+        if (jsonFiles == null || jsonFiles.length == 0) {
+            return result;
+        }
+        Arrays.sort(jsonFiles, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+        for (File jsonFile : jsonFiles) {
+            ReplayLogParser parser = new ReplayLogParser(jsonFile);
+            if (parser.parse() && parser.isScenario()) {
+                result.add(parser);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Resolves a single id/filename token (as found in a .dck's comma-separated {@code Scenario=}
+     * metadata value) to the scenario file it refers to. Matches {@code scenario.id} first (if
+     * the file declares one), then falls back to the filename with its {@code .json} extension
+     * stripped — existing scenario files predate the optional {@code id} field, so filename
+     * matching keeps them referenceable without edits.
+     *
+     * @return the matching parser, or {@code null} if no scenario file resolves this token.
+     */
+    public static ReplayLogParser resolveScenarioByIdOrFilename(String idOrFilename) {
+        return resolveScenarioByIdOrFilename(idOrFilename, listScenarioFiles());
+    }
+
+    /**
+     * Matching core of {@link #resolveScenarioByIdOrFilename(String)}, split out so it can be
+     * unit-tested against an in-memory candidate list instead of a real {@code GAME_LOG_DIR}
+     * directory scan.
+     */
+    public static ReplayLogParser resolveScenarioByIdOrFilename(String idOrFilename, List<ReplayLogParser> candidates) {
+        if (idOrFilename == null || idOrFilename.isEmpty()) return null;
+        for (ReplayLogParser parser : candidates) {
+            ScenarioInfo si = parser.getScenarioInfo();
+            if (si != null && idOrFilename.equals(si.id)) {
+                return parser;
+            }
+        }
+        for (ReplayLogParser parser : candidates) {
+            String fileName = parser.getReplayFile().getName();
+            String withoutExt = fileName.endsWith(".json")
+                    ? fileName.substring(0, fileName.length() - ".json".length()) : fileName;
+            if (idOrFilename.equals(fileName) || idOrFilename.equals(withoutExt)) {
+                return parser;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Writes a "replayed_at" timestamp into the JSON file's meta section.
      * After this, isReplayed() will return true and the file will be hidden
      * from the replay selection list.
@@ -660,6 +727,9 @@ public class ReplayLogParser {
      * Only populated when {@code mode == "scenario"}.
      */
     public static class ScenarioInfo {
+        /** Optional stable identifier for referencing this scenario from a .dck's Scenario= key.
+         *  Falls back to the replay file's own filename (sans extension) when absent. */
+        public String id;
         public String type;
         public String title;
         public String description;

@@ -73,7 +73,7 @@ public class HostedMatch {
     public void setEndGameHook(Runnable hook) { endGameHook = hook; }
     public void setOnMatchOver(Runnable callback) { onMatchOver = callback; }
 
-    private static GameRules getDefaultRules(final GameType gameType) {
+    static GameRules getDefaultRules(final GameType gameType) {
         final GameRules gameRules = new GameRules(gameType);
         gameRules.setPlayForAnte(FModel.getPreferences().getPrefBoolean(FPref.UI_ANTE));
         gameRules.setMatchAnteRarity(FModel.getPreferences().getPrefBoolean(FPref.UI_ANTE_MATCH_RARITY));
@@ -100,6 +100,26 @@ public class HostedMatch {
         return gameRules;
     }
 
+    /**
+     * Returns a new list containing {@code players} sorted so any {@link LobbyPlayerHuman}
+     * seats come first — the same ordering {@link #startMatch} always applies before building
+     * the {@link Match}/{@link Game}, so {@code game.getPlayers().get(i)}'s index is stable and
+     * predictable (human seats first) regardless of the order seats were assembled in upstream
+     * (e.g. lobby UI slot order). Callers that need to know which real seat index "P1"/"P2"
+     * (Forge's scenario-file convention) will end up as must sort with this method first, not
+     * re-derive their own ordering — {@link #startMatch} would otherwise silently reorder
+     * player-to-index assignment out from under an already-computed mapping.
+     */
+    public static List<RegisteredPlayer> sortPlayersHumanFirst(final List<RegisteredPlayer> players) {
+        final List<RegisteredPlayer> sortedPlayers = Lists.newArrayList(players);
+        sortedPlayers.sort((p1, p2) -> {
+            final int v1 = p1.getPlayer() instanceof LobbyPlayerHuman ? 0 : 1;
+            final int v2 = p2.getPlayer() instanceof LobbyPlayerHuman ? 0 : 1;
+            return Integer.compare(v1, v2);
+        });
+        return sortedPlayers;
+    }
+
     public void startMatch(final GameType gameType, final Set<GameType> appliedVariants, final List<RegisteredPlayer> players, final RegisteredPlayer human, final IGuiGame gui) {
         startMatch(getDefaultRules(gameType), appliedVariants, players, human, gui);
     }
@@ -124,13 +144,7 @@ public class HostedMatch {
             gameRules.setAppliedVariants(appliedVariants);
         }
 
-        final List<RegisteredPlayer> sortedPlayers = Lists.newArrayList(players);
-        sortedPlayers.sort((p1, p2) -> {
-
-            final int v1 = p1.getPlayer() instanceof LobbyPlayerHuman ? 0 : 1;
-            final int v2 = p2.getPlayer() instanceof LobbyPlayerHuman ? 0 : 1;
-            return Integer.compare(v1, v2);
-        });
+        final List<RegisteredPlayer> sortedPlayers = sortPlayersHumanFirst(players);
 
         if (sortedPlayers.size() == 2) {
             title = TextUtil.concatNoSpace(sortedPlayers.get(0).getPlayer().getName(), " vs ", sortedPlayers.get(1).getPlayer().getName());

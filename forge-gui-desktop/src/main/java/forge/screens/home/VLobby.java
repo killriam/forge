@@ -548,7 +548,11 @@ public class VLobby implements ILobbyView {
     }
     void firePlayerChangeListener(final int index) {
         if (playerChangeListener != null) {
-            playerChangeListener.update(index, getSlot(index));
+            final UpdateLobbyPlayerEvent event = getSlot(index);
+            // Not a create(...) parameter (unlike aiProfile) to avoid widening that factory's
+            // signature for its other caller (forge-gui-mobile's LobbyScreen) - set separately.
+            event.setScenarioFileName(getPlayerPanel(index).getScenarioFileName());
+            playerChangeListener.update(index, event);
         }
     }
     // Re-broadcasts a deck whose card-art sleeve changed, so networked opponents pick up the new sleeve
@@ -561,8 +565,27 @@ public class VLobby implements ILobbyView {
     private void fireDeckChangeListener(final int index, final Deck deck) {
         decks[index] = deck;
         getPlayerPanel(index).refreshSleeveFromDeck(deck);
+        getPlayerPanel(index).refreshScenarioOptionsFromDeck(deck);
         if (playerChangeListener != null) {
             playerChangeListener.update(index, UpdateLobbyPlayerEvent.deckUpdate(deck));
+
+            // A deck swap always clears any scenario chosen for the old deck (see
+            // refreshScenarioOptionsFromDeck, which already resets this seat's own combo box
+            // immediately) - propagate that reset to the LobbySlot too, so a stale
+            // scenarioFileName never survives into GameLobby.buildScenarioGameRules at match
+            // start. Deferred via invokeInEdtLater rather than fired synchronously here: this
+            // method can itself run nested inside VLobby.updateImpl()'s own player-panel
+            // rebuild loop (e.g. multiple deck choosers restoring saved state during the lobby
+            // screen's first construction, as with CLI --deck/--deck2 preselection) - firing a
+            // second playerChangeListener.update() synchronously in that window re-enters
+            // updateImpl() before it finishes constructing every panel's deckChooser, crashing
+            // on a still-null one. Deferring to the next EDT cycle lets the in-progress rebuild
+            // finish first.
+            FThreads.invokeInEdtLater(() -> {
+                if (playerChangeListener != null) {
+                    playerChangeListener.update(index, UpdateLobbyPlayerEvent.scenarioUpdate(""));
+                }
+            });
         }
     }
     private void fireDeckSectionChangeListener(final int index, final DeckSection section, final CardPool cards) {

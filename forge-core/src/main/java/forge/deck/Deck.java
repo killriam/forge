@@ -81,6 +81,8 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
     private String deckUrl = null;
     /** Comma-separated eval_sequence scenario IDs from the companion decklist JSON. */
     private String evalScenarioIds = null;
+    /** Comma-separated opening_hand_test scenario ids/filenames (docs/SCENARIO_STARTING_HAND_FORMAT.md). */
+    private String scenarioIds = null;
 
     public Deck() {
         this("");
@@ -721,6 +723,10 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
     /** @return Comma-separated eval_sequence scenario IDs, or null. */
     public String getEvalScenarioIds() { return evalScenarioIds; }
     public void setEvalScenarioIds(String evalScenarioIds) { this.evalScenarioIds = evalScenarioIds; }
+
+    /** @return Comma-separated opening_hand_test scenario ids/filenames, or null. */
+    public String getScenarioIds() { return scenarioIds; }
+    public void setScenarioIds(String scenarioIds) { this.scenarioIds = scenarioIds; }
 
     public void setDecklistSpecPath(String path) {
         this.decklistSpecPath = path;

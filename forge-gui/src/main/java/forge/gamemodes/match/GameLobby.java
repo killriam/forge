@@ -4,6 +4,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import forge.LobbyPlayer;
 import forge.ai.AIOption;
@@ -11,9 +13,12 @@ import forge.deck.CardPool;
 import forge.deck.Deck;
 import forge.deck.DeckFormat;
 import forge.deck.DeckSection;
+import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.GameView;
 import forge.game.IHasGameType;
+import forge.game.ReplayLogParser;
+import forge.game.ReplayLogParser.ScenarioInfo;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.gamemodes.net.NetworkEventView;
@@ -34,6 +39,7 @@ import java.io.Serializable;
 import java.util.*;
 
 public abstract class GameLobby implements IHasGameType {
+    private static final Logger LOG = LoggerFactory.getLogger(GameLobby.class);
     private final static int MAX_PLAYERS = 8;
 
     private GameLobbyData data = new GameLobbyData();
@@ -547,7 +553,13 @@ public abstract class GameLobby implements IHasGameType {
         return () -> {
             hostedMatch = GuiBase.getInterface().hostMatch();
             hostedMatch.setOnMatchOver(this::onMatchOver);
-            hostedMatch.startMatch(baseGameType, variantTypes, players, guis);
+
+            final GameRules scenarioRules = buildScenarioGameRules(baseGameType, players, playerToSlot, activeSlots);
+            if (scenarioRules != null) {
+                hostedMatch.startMatch(scenarioRules, variantTypes, players, guis, null);
+            } else {
+                hostedMatch.startMatch(baseGameType, variantTypes, players, guis);
+            }
 
             for (final Player p : hostedMatch.getGame().getPlayers()) {
                 final LobbySlot slot = playerToSlot.get(p.getRegisteredPlayer());
@@ -560,6 +572,109 @@ public abstract class GameLobby implements IHasGameType {
 
             onGameStarted();
         };
+    }
+
+    /**
+     * Builds a {@link GameRules} with any attached scenario data merged in (see
+     * {@code docs/SCENARIO_STARTING_HAND_FORMAT.md}, "Von einem Deck referenzieren"), or returns
+     * {@code null} if no active slot has a scenario attached — callers should fall back to the
+     * plain {@code startMatch(GameType, ...)} convenience overload in that case, leaving every
+     * non-scenario match's behavior byte-for-byte unchanged.
+     *
+     * <p>Two conventions this deliberately does NOT get wrong (both caught during design review,
+     * not obvious from a first read of {@link ScenarioLibrarySetup}):</p>
+     * <ul>
+     *   <li>{@code scenarioStartingHands}/{@code scenarioFirstDraws} are keyed <b>positionally</b>
+     *       ("P1" = {@code game.getPlayers().get(0)}), not by lobby name — and
+     *       {@link HostedMatch#startMatch} always sorts players human-first before creating the
+     *       {@code Game}, so the "P1"/"P2" assignment here must be computed against that same
+     *       sorted order via {@link HostedMatch#sortPlayersHumanFirst}, not {@code activeSlots}'
+     *       raw lobby order.</li>
+     *   <li>{@code forcedPlaySequence} <i>is</i> keyed by real lobby name (no sort needed there),
+     *       which is exactly {@code slot.getName()} — confirmed against how this same method
+     *       builds each seat's {@code LobbyPlayer} a few lines above (both the human and AI
+     *       branches construct it directly from {@code slot.getName()}).</li>
+     * </ul>
+     */
+    private GameRules buildScenarioGameRules(final GameType baseGameType,
+                                              final List<RegisteredPlayer> players,
+                                              final Map<RegisteredPlayer, LobbySlot> playerToSlot,
+                                              final List<LobbySlot> activeSlots) {
+        boolean anyScenarioAttached = false;
+        for (final LobbySlot slot : activeSlots) {
+            final String sf = slot.getScenarioFileName();
+            if (sf != null && !sf.isEmpty()) {
+                anyScenarioAttached = true;
+                break;
+            }
+        }
+        if (!anyScenarioAttached) {
+            return null;
+        }
+
+        final GameRules rules = HostedMatch.getDefaultRules(baseGameType);
+
+        // scenarioStartingHands/scenarioFirstDraws/scenarioSkipMulligan: positional "P1"/"P2"
+        // keys, matching the exact order HostedMatch.startMatch will sort players into.
+        final List<RegisteredPlayer> sortedForScenario = HostedMatch.sortPlayersHumanFirst(players);
+        final Map<String, List<String>> mergedStartingHands = new LinkedHashMap<>();
+        final Map<String, List<String>> mergedFirstDraws = new LinkedHashMap<>();
+        boolean anySkipMulligan = false;
+        for (int i = 0; i < sortedForScenario.size(); i++) {
+            final LobbySlot slot = playerToSlot.get(sortedForScenario.get(i));
+            final ScenarioInfo si = resolveSlotScenario(slot);
+            if (si == null) continue;
+            final String posKey = "P" + (i + 1);
+            final List<String> hand = si.playerStartingHands.get("P1");
+            final List<String> draws = si.playerFirstDraws.get("P1");
+            if (hand != null && !hand.isEmpty()) mergedStartingHands.put(posKey, hand);
+            if (draws != null && !draws.isEmpty()) mergedFirstDraws.put(posKey, draws);
+            if ("opening_hand_test".equals(si.type)) anySkipMulligan = true;
+        }
+        if (!mergedStartingHands.isEmpty()) {
+            rules.setScenarioStartingHands(mergedStartingHands);
+            rules.setScenarioFirstDraws(mergedFirstDraws);
+        }
+        if (anySkipMulligan) {
+            rules.setScenarioSkipMulligan(true);
+        }
+
+        // forcedPlaySequence: keyed by real lobby name - slot.getName() is exactly what became
+        // each seat's LobbyPlayer name above, no sort/translation needed.
+        final Map<String, List<String>> mergedForcedSeq = new LinkedHashMap<>();
+        for (final LobbySlot slot : activeSlots) {
+            final ScenarioInfo si = resolveSlotScenario(slot);
+            if (si == null || !si.hasForcedPlaySequence()) continue;
+            final List<String> seq = si.playerForcedSequence.get("P1");
+            if (seq != null && !seq.isEmpty()) {
+                mergedForcedSeq.put(slot.getName(), new ArrayList<>(seq));
+            }
+        }
+        if (!mergedForcedSeq.isEmpty()) {
+            rules.setForcedPlaySequence(mergedForcedSeq);
+        }
+
+        return rules;
+    }
+
+    /** Resolves a slot's attached scenario, if any, warning (not failing) on unused P2+ data. */
+    private ScenarioInfo resolveSlotScenario(final LobbySlot slot) {
+        if (slot == null) return null;
+        final String sf = slot.getScenarioFileName();
+        if (sf == null || sf.isEmpty()) return null;
+        final ReplayLogParser parser = ReplayLogParser.resolveScenarioByIdOrFilename(sf);
+        if (parser == null) {
+            LOG.warn("Scenario '{}' attached to seat '{}' could not be resolved to a scenario file - ignoring", sf, slot.getName());
+            return null;
+        }
+        final ScenarioInfo si = parser.getScenarioInfo();
+        if (si == null) return null;
+        for (final String pid : si.playerStartingHands.keySet()) {
+            if (!"P1".equals(pid) && !si.playerStartingHands.get(pid).isEmpty()) {
+                LOG.warn("Scenario '{}' attached to seat '{}' has non-empty data for '{}' - only its own 'P1' entry is ever applied, the rest is ignored", sf, slot.getName(), pid);
+            }
+        }
+        return si;
     }
 
     protected void onMatchOver() {

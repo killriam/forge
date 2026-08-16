@@ -12,6 +12,7 @@ import forge.screens.home.EMenuGroup;
 import forge.screens.home.IVSubmenu;
 import forge.screens.home.StartButton;
 import forge.screens.home.VHomeUI;
+import forge.toolbox.FButton;
 import forge.toolbox.FList;
 import forge.toolbox.FScrollPane;
 import forge.util.Localizer;
@@ -33,6 +34,8 @@ public enum VSubmenuScenario implements IVSubmenu<CSubmenuScenario> {
     final DefaultListModel<String> model = new DefaultListModel<>();
 
     private final StartButton btnStart = new StartButton();
+    /** Scenario-authoring aid, not a permanent player-facing mode - see CSubmenuScenario. */
+    private final FButton btnDemoPlay = new FButton();
 
     private DragCell parentCell;
     final Localizer localizer = Localizer.getInstance();
@@ -47,6 +50,7 @@ public enum VSubmenuScenario implements IVSubmenu<CSubmenuScenario> {
         scenarioInfo.setWrapStyleWord(true);
         scenarioInfo.setOpaque(false);
         scenarioInfoPane = new FScrollPane(scenarioInfo, true);
+        btnDemoPlay.setText(localizer.getMessageorUseDefault("lblScenarioDemoPlay", "Demo Play (record actions)"));
     }
 
     @Override
@@ -105,6 +109,10 @@ public enum VSubmenuScenario implements IVSubmenu<CSubmenuScenario> {
         return btnStart;
     }
 
+    public FButton getBtnDemoPlay() {
+        return btnDemoPlay;
+    }
+
     @Override
     public void populate() {
         final JPanel container = VHomeUI.SINGLETON_INSTANCE.getPnlDisplay();
@@ -122,7 +130,8 @@ public enum VSubmenuScenario implements IVSubmenu<CSubmenuScenario> {
         scenarioList.setModel(model);
         container.add(scenarioListPane, "w 96%!, h 45%, gap 2% 2% 0 0");
         container.add(scenarioInfoPane, "w 96%!, h 25%, gap 2% 2% 0 0");
-        container.add(btnStart, "w 96%!, h 30px!, gap 2% 2% 10px 10px");
+        container.add(btnStart, "w 96%!, h 30px!, gap 2% 2% 10px 5px");
+        container.add(btnDemoPlay, "w 96%!, h 30px!, gap 2% 2% 0 10px");
 
         if (container.isShowing()) {
             container.validate();

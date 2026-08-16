@@ -74,6 +74,9 @@ public class DeckSerializer {
         if (d.getEvalScenarioIds() != null && !d.getEvalScenarioIds().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.EVAL_SCENARIO, "=", d.getEvalScenarioIds()));
         }
+        if (d.getScenarioIds() != null && !d.getScenarioIds().isEmpty()) {
+            out.add(TextUtil.concatNoSpace(DeckFileHeader.SCENARIO, "=", d.getScenarioIds()));
+        }
         if (!d.getSleeveArtKey().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.SLEEVE_ART, "=", d.getSleeveArtKey()));
             if (d.getSleeveArtOffset() != Deck.DEFAULT_SLEEVE_OFFSET) {
@@ -128,6 +131,7 @@ public class DeckSerializer {
         }
         if (dh.getDeckUrl() != null)       d.setDeckUrl(dh.getDeckUrl());
         if (dh.getEvalScenario() != null)  d.setEvalScenarioIds(dh.getEvalScenario());
+        if (dh.getScenario() != null)      d.setScenarioIds(dh.getScenario());
         d.setSleeveArtKey(dh.getSleeveArtKey());
         d.setSleeveArtOffset(dh.getSleeveArtOffset());
         d.setDeferredSections(sections);

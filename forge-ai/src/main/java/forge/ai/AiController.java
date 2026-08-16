@@ -100,6 +100,13 @@ public class AiController {
     private Combat predictedCombatNextTurn;
     private boolean useSimulation;
     private SpellAbilityPicker simPicker;
+
+    // Forced-play-sequence "give up at end of turn" tracking (see chooseSpellAbilityToPlay):
+    // identifies which queue head we're currently retrying and which turn it first became the
+    // head, so a scripted entry that's still uncastable once that turn ends gets logged and
+    // skipped instead of being retried forever (unbounded soft enforcement).
+    private String forcedSeqHeadCardName;
+    private int forcedSeqHeadFirstSeenTurn = -1;
     private int lastAttackAggression;
     private boolean useLivingEnd;
     private List<SpellAbility> skipped;
@@ -1398,17 +1405,39 @@ public class AiController {
             final List<String> seq = forcedSeq.get(lobbyName);
             if (seq != null && !seq.isEmpty()) {
                 final String nextCardName = seq.get(0);
+                final int currentTurn = game.getPhaseHandler().getTurn();
+                if (!nextCardName.equals(forcedSeqHeadCardName)) {
+                    // New head (either the very first attempt, or we just moved past a prior
+                    // entry) - start a fresh "give up at end of turn" window for it.
+                    forcedSeqHeadCardName = nextCardName;
+                    forcedSeqHeadFirstSeenTurn = currentTurn;
+                }
                 final List<SpellAbility> handAbilities = ComputerUtilAbility.getSpellAbilities(
                         player.getCardsIn(ZoneType.Hand), player);
                 for (final SpellAbility sa : handAbilities) {
                     if (sa.getHostCard().getName().equals(nextCardName) && sa.canPlay()) {
                         seq.remove(0);
+                        forcedSeqHeadCardName = null;
                         LOG.debug("Forced play: '{}' for {}", nextCardName, lobbyName);
                         return singleSpellAbilityList(sa);
                     }
                 }
-                // Card not castable this priority window — soft enforcement: keep entry in queue
-                LOG.debug("Forced play deferred (not castable): '{}' for {}", nextCardName, lobbyName);
+                if (currentTurn != forcedSeqHeadFirstSeenTurn) {
+                    // Soft enforcement gave it every priority window of the turn it first became
+                    // the head - still uncastable once the turn moved on, so give up on this one
+                    // entry (not the whole sequence) and log it for the scenario author to see,
+                    // rather than retrying it silently forever.
+                    seq.remove(0);
+                    forcedSeqHeadCardName = null;
+                    final String msg = "Scripted play skipped for " + lobbyName + ": '" + nextCardName
+                            + "' was never castable during turn " + forcedSeqHeadFirstSeenTurn + " - moving on.";
+                    game.getGameLog().add(GameLogEntryType.AI_DECISION, msg);
+                    LOG.info(msg);
+                } else {
+                    // Card not castable this priority window — soft enforcement: keep entry in
+                    // queue and retry next priority window, same turn.
+                    LOG.debug("Forced play deferred (not castable): '{}' for {}", nextCardName, lobbyName);
+                }
             }
         }
         // ──────────────────────────────────────────────────────────────────

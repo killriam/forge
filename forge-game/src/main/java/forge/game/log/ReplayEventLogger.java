@@ -415,6 +415,27 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
         return null;
     }
 
+    /**
+     * Dedicated PLAY_LAND event, separate from the generic MOVE that {@link
+     * #visit(GameEventCardChangeZone)} also emits for the same physical zone change - land plays
+     * need their own explicit event type because {@link ReplayPlaySequenceParser} (the "-r"
+     * full-game-replay consumer) and the scenario {@code events[]} format both only recognize
+     * {@code type in {CAST, ACTIVATE, PLAY_LAND}}, never inferring PLAY_LAND from a generic MOVE.
+     */
+    @Override
+    public Void visit(GameEventLandPlayed ev) {
+        CardView land = ev.land();
+        if (land == null) return null;
+        registerCardView(land);
+        String actor = playerStr(ev.player());
+
+        L1Event l1 = makeEvent(actor, "PLAY_LAND");
+        l1.addData("card", cardId(land));
+        l1.addData("card_name", land.getName());
+        replayLog.addL1Event(l1);
+        return null;
+    }
+
     @Override
     public Void visit(GameEventSpellResolved ev) {
         if (ev.spell() == null) return null;

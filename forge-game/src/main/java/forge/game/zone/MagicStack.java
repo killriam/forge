@@ -556,6 +556,15 @@ public class MagicStack /* extends MyObservable */ implements Iterable<SpellAbil
 
         game.updateStackForView();
         game.fireEvent(new GameEventSpellAbilityCast(sp, si, stackIndex));
+
+        // Keep a human-facing forced-play-sequence hint (see GameRules.popForcedPlayIfMatches)
+        // in sync with what was actually cast/activated. AI seats pop their own queue entry
+        // before playing, so this must stay gated to non-AI to avoid double-popping a repeated
+        // name. Covers both CAST and ACTIVATE - activated abilities go through this same push().
+        final Player activator = sp.getActivatingPlayer();
+        if (activator != null && !activator.getController().isAI()) {
+            game.getRules().popForcedPlayIfMatches(activator.getLobbyPlayer().getName(), sp.getHostCard().getName());
+        }
     }
 
     public final void resolveStack() {

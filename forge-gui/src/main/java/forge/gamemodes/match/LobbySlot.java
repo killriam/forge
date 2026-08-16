@@ -29,6 +29,12 @@ public final class LobbySlot implements Serializable {
     private String PlanarDeckName;
     private String DeckName;
     private String aiProfile;
+    /** id/filename of the scenario file attached to this seat, resolved via
+     *  {@code forge.game.ReplayLogParser#resolveScenarioByIdOrFilename(String)}. Empty string
+     *  means "None" explicitly chosen (not the same as null/absent - {@link #apply} treats a
+     *  null incoming value as "this event doesn't touch this field", so clearing a previous
+     *  selection back to "None" must send "" to actually propagate through {@link #setIfChanged}). */
+    private String scenarioFileName;
 
     public LobbySlot(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isReady, final Set<AIOption> aiOptions) {
         this.type = type;
@@ -57,6 +63,7 @@ public final class LobbySlot implements Serializable {
         changed |= setIfChanged(data.getAvatarVanguard(),  this.AvatarVanguard, this::setAvatarVanguard);
         changed |= setIfChanged(data.getPlanarDeckName(),  this.PlanarDeckName, this::setPlanarDeckName);
         changed |= setIfChanged(data.getDeckName(),        this.DeckName,       this::setDeckName);
+        changed |= setIfChanged(data.getScenarioFileName(),this.scenarioFileName, this::setScenarioFileName);
 
         final Deck oldDeck = getDeck();
         if (data.getDeck() != null) {
@@ -126,6 +133,10 @@ public final class LobbySlot implements Serializable {
     public void setAvatarVanguard(String avatarVanguard) { this.AvatarVanguard = avatarVanguard; }
     public void setPlanarDeckName(String planarDeckName) { this.PlanarDeckName = planarDeckName; }
     public void setDeckName(String DeckName) { this.DeckName = DeckName; }
+
+    /** @return id/filename of the attached scenario, "" for explicitly none, or null if never set. */
+    public String getScenarioFileName() { return scenarioFileName; }
+    public void setScenarioFileName(String scenarioFileName) { this.scenarioFileName = scenarioFileName; }
 
     public boolean isArchenemy() {
         return isArchenemy;

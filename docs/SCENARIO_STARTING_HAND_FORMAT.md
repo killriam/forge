@@ -104,8 +104,20 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
    "Forced play sequence from replay").
 4. Während des Spiels: AI prüft bei jeder Priorität die Queue
    - Nächste Karte castbar? → Cast + aus Queue entfernen
-   - Nicht castbar? → in Queue lassen, normal AI-Entscheidung
-5. Mensch (P1): kann die Sequenz befolgen oder ignorieren
+   - Nicht castbar? → in Queue lassen, normal AI-Entscheidung, **innerhalb desselben Zugs**
+     erneut versuchen
+   - **Backup-Plan:** ist die Karte am Ende des Zugs, in dem sie zuerst an der Reihe war,
+     immer noch nicht spielbar gewesen, gibt die AI diesen einen Eintrag auf — kein
+     unbegrenztes Retry mehr. Der Eintrag wird aus der Queue entfernt (nicht die restliche
+     Sequenz), ein `AI_DECISION`-Eintrag landet im sichtbaren Spiel-Log ("Scripted play
+     skipped for `<Name>`: '`<Karte>`' was never castable during turn `<N>` - moving on."),
+     und die AI macht mit dem nächsten Queue-Eintrag weiter. Siehe
+     `AiController.chooseSpellAbilityToPlay()`, Felder `forcedSeqHeadCardName`/
+     `forcedSeqHeadFirstSeenTurn`.
+5. Mensch (P1): kann die Sequenz befolgen oder ignorieren — für ihn gibt es keine
+   Retry-Begrenzung, da nichts automatisch für ihn gespielt wird; der Hinweis
+   (`CPrompt`, "💡 Scripted line suggests: …") zeigt einfach weiter den aktuellen Queue-Kopf,
+   bis er selbst die passende Karte spielt (siehe `GameRules.popForcedPlayIfMatches`).
 
 **Beide Einstiegspunkte unterstützt seit Fork-Version, in der dieser Absatz aktualisiert
 wurde:** die GUI **Replay Scenario**-Submenu (`CSubmenuScenario`) und der CLI `-s`-Flag
@@ -328,6 +340,7 @@ Sequenz nie feuerte, siehe Troubleshooting unten.)
 
 | Feld | Typ | Req. | Beschreibung |
 |------|-----|------|-------------|
+| `id` | `string` | — | Optionale stabile Kennung, um dieses Szenario aus einem Deck-File zu referenzieren (siehe "Von einem Deck referenzieren" unten). Fehlt sie, wird die Datei über ihren Dateinamen (ohne `.json`) referenziert. |
 | `type` | `string` | — | `"opening_hand_test"` → AI überspringt Mulligan.<br>`"puzzle"` → AI mulligant normal. Fehlt das Feld: normales Verhalten. |
 | `title` | `string` | ✅ | Anzeige-Name in der Szenario-Liste der GUI |
 | `description` | `string` | — | Erklärungstext, wird vor dem Spielstart als Dialog gezeigt |
@@ -474,6 +487,42 @@ java -jar forge-gui-desktop-*.jar sim \
 > Konfigurationsfehler des Aufrufers, und wurde beim Fix der Forced-Play-Sequence-Übersetzung
 > (siehe oben) korrigiert.
 
+### Von einem Deck referenzieren (Constructed/Commander-Match, nicht Puzzle-Modus)
+
+Bisher war ein Szenario nur über den separaten, isolierten **Scenario Viewer** (Puzzle-Modus mit
+leerem Deck) spielbar. Ein `.dck`-Deck-File kann jetzt zusätzlich per Metadaten-Schlüssel auf
+ein oder mehrere Szenario-Dateien verweisen, damit dasselbe Szenario auch in einem echten
+Constructed/Commander-Match mit zwei realen Decks angehängt werden kann (pro Sitzplatz optional,
+in der Lobby wählbar):
+
+```ini
+[metadata]
+Name=Horror: Dead is not an end
+Scenario=perfect_game_horror,scenario_horror_t3_test
+```
+
+- **Werte:** kommagetrennte Liste aus `scenario.id`-Werten (bevorzugt) oder Dateinamen ohne
+  `.json` (Fallback für Szenario-Dateien ohne `id`-Feld) — Auflösung übernimmt
+  `ReplayLogParser.resolveScenarioByIdOrFilename()`.
+- **Effekt:** In der Constructed-Lobby wird pro Sitzplatz, dessen aktuell gewähltes Deck einen
+  `Scenario=`-Schlüssel hat, ein Dropdown mit den referenzierten Szenarien angeboten. Wird eines
+  gewählt, gilt für diesen Sitzplatz — **egal ob Mensch oder AI** — dieselbe erzwungene
+  Zugreihenfolge (`starting_hand`/`first_draws`) wie im Scenario Viewer. Ein eventuelles
+  `events`-Array (erzwungene Spielreihenfolge) wird nur für AI-Sitzplätze tatsächlich ausgeführt;
+  für einen menschlichen Sitzplatz erscheint stattdessen ein Hinweis ("Scripted line suggests: …"),
+  der nichts blockiert oder erzwingt.
+- **Kompatibilitätsprüfung:** der Deck-Verweis selbst entscheidet, welche Szenarien überhaupt zur
+  Auswahl stehen — es wird nicht mehr per Karten-Namens-Abgleich "erraten". Fehlen im aktuell
+  gewählten Deck einzelne `starting_hand`/`first_draws`-Karten des referenzierten Szenarios, bleibt
+  es trotzdem wählbar, wird aber mit einem Warnhinweis markiert (dieselbe "Karte übersprungen"-
+  Toleranz wie beim regulären `ScenarioLibrarySetup`-Reorder gilt weiterhin beim tatsächlichen
+  Spielstart).
+- **Konvention bei mehreren Spielern in derselben Szenario-Datei:** wird eine Szenario-Datei einem
+  Sitzplatz zugewiesen, wird ausschließlich ihr eigener `players.P1`-Eintrag (und `events` mit
+  `"a": "P1"`) gelesen — unabhängig davon, welcher tatsächliche Sitzplatz (P1 oder P2 des Matches)
+  sie referenziert. Enthält die Datei zusätzlich nicht-leere `P2+`-Daten, werden diese ignoriert
+  (mit Log-Warnung) statt versehentlich auf den anderen Sitzplatz durchzuschlagen.
+
 ---
 
 ## Troubleshooting
@@ -536,8 +585,8 @@ in `"a"` hast, ersetze ihn durch die passende Spieler-ID.
 
 **Ursache:** Karte ist zum Zeitpunkt des Events nicht castbar (z.B. keine gültigen Targets, nicht genug Mana).
 
-**Lösung:** Das ist **Soft Enforcement** — die AI versucht die Karte zu spielen, fällt aber auf normale AI-Logik zurück wenn nicht möglich.  
-Die Karte bleibt in der Queue und wird bei der nächsten Priorität erneut versucht.
+**Lösung:** Das ist **Soft Enforcement** — die AI versucht die Karte zu spielen, fällt aber auf normale AI-Logik zurück wenn nicht möglich.
+Die Karte bleibt in der Queue und wird bei jeder weiteren Priorität **innerhalb desselben Zugs** erneut versucht. Ist sie am Ende dieses Zugs immer noch nicht spielbar gewesen, gibt die AI diesen einen Eintrag auf, loggt das (`AI_DECISION`-Eintrag im Spiel-Log, sichtbar im Game Log Panel) und macht mit dem nächsten Queue-Eintrag weiter — die restliche Sequenz läuft also nicht unbegrenzt fest, falls ein einzelner Schritt aus irgendeinem Grund nie klappt.
 
 ---
 

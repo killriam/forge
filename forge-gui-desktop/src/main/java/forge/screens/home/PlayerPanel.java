@@ -29,6 +29,8 @@ import forge.deck.Deck;
 import forge.deck.DeckProxy;
 import forge.deck.DeckSection;
 import forge.game.GameType;
+import forge.game.ReplayLogParser;
+import forge.game.ReplayLogParser.ScenarioInfo;
 import forge.gamemodes.match.LobbySlot;
 import forge.gamemodes.match.LobbySlotType;
 import forge.gui.UiCommand;
@@ -88,6 +90,13 @@ public class PlayerPanel extends FPanel {
     private String aiProfile;
     private final FLabel aiPickerLabel = new FLabel.Builder().text(localizer.getMessage("lblAiPickerPanel") + ":").build();
     private FComboBoxWrapper<Object> aiPickerComboBox = new FComboBoxWrapper<>();
+
+    // Scenario picker: attaches an opening_hand_test scenario (docs/SCENARIO_STARTING_HAND_FORMAT.md)
+    // referenced by the seat's currently-selected deck's Scenario= metadata to this seat.
+    private String scenarioFileName = "";
+    private final FLabel scenarioPickerLabel = new FLabel.Builder().text("Scenario:").build();
+    private FComboBoxWrapper<Object> scenarioPickerComboBox = new FComboBoxWrapper<>();
+    private static final String SCENARIO_NONE = "None";
 
     private final FComboBoxWrapper<Object> teamComboBox = new FComboBoxWrapper<>();
     private final FComboBoxWrapper<Object> aeTeamComboBox = new FComboBoxWrapper<>();
@@ -202,6 +211,19 @@ public class PlayerPanel extends FPanel {
         this.add(vgdLabel, variantBtnConstraints + ", cell 0 6, sx 2, ax right");
         this.add(vgdSelectorBtn, variantBtnConstraints + ", cell 2 6, sx 4, growx, wrap");
 
+        // Scenario picker: hidden (hidemode 3 -> zero space) until the selected deck's Scenario=
+        // metadata actually resolves to at least one scenario file - see refreshScenarioOptionsFromDeck.
+        this.add(scenarioPickerLabel, variantBtnConstraints + ", cell 0 7, sx 2, ax right");
+        populateScenarioComboBox(slot == null ? null : slot.getDeck());
+        scenarioPickerComboBox.addTo(this, variantBtnConstraints + ", cell 2 7, pushx, growx, wmax 100%-153px, spanx 4, wrap");
+        scenarioPickerComboBox.addActionListener(scenarioPickerListener);
+        scenarioPickerLabel.setVisible(false);
+        scenarioPickerComboBox.setVisible(false);
+        // Seed the initial selection only now that the combo box has real items and is parented -
+        // calling this back where setAiProfile is (before populateScenarioComboBox/addTo even
+        // run) operated on a still-empty, unparented combo box and left it rendering blank.
+        this.setScenarioFileName(slot == null ? null : slot.getScenarioFileName());
+
         addHandlersToVariantsControls();
 
         this.addMouseListener(new FMouseAdapter() {
@@ -247,6 +269,16 @@ public class PlayerPanel extends FPanel {
         aiPickerLabel.setVisible(enableAiPicker);
         aiPickerComboBox.setVisible(enableAiPicker);
         aiPickerComboBox.setEnabled(enableAiPicker);
+
+        // Re-check the type/mayEdit half of the scenario picker's visibility gate on every
+        // update() (e.g. toggling human<->AI without changing the deck) - populateScenarioComboBox
+        // already re-derives the "does the current deck actually have anything to offer" half
+        // whenever the deck itself changes, but that method isn't re-run on a plain type change.
+        boolean enableScenarioPicker = mayEdit && scenarioPickerComboBox.getItemCount() > 1
+                && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
+        scenarioPickerLabel.setVisible(enableScenarioPicker);
+        scenarioPickerComboBox.setVisible(enableScenarioPicker);
+        scenarioPickerComboBox.setEnabled(enableScenarioPicker);
 
         teamComboBox.setEnabled(mayEdit);
         deckLabel.setVisible(mayEdit);
@@ -465,6 +497,122 @@ public class PlayerPanel extends FPanel {
         aiPickerComboBox.setSelectedItem(FPref.UI_CURRENT_AI_PROFILE.getDefault());
         aiPickerComboBox.setEnabled(true);
     }
+
+    /** A single "Scenario" combo entry - display text plus the raw id/filename to store/send. */
+    private static final class ScenarioOption {
+        final String idOrFilename;
+        final String display;
+        ScenarioOption(final String idOrFilename, final String display) {
+            this.idOrFilename = idOrFilename;
+            this.display = display;
+        }
+        @Override public String toString() { return display; }
+    }
+
+    /**
+     * Repopulates the scenario dropdown from {@code deck}'s {@code Scenario=} metadata (see
+     * "Von einem Deck referenzieren" in docs/SCENARIO_STARTING_HAND_FORMAT.md) - the deck's own
+     * declared references are the only source of what's offered, not a directory-wide scan.
+     * Resets the current selection to "None" (a deck swap always clears any prior scenario pick,
+     * since a scenario from the old deck may not even apply to the new one).
+     */
+    private void populateScenarioComboBox(final Deck deck) {
+        // removeAllItems()/setSelectedItem() below fire ActionEvents on this combo box as a side
+        // effect of the transient selection changes during repopulation (e.g. selection briefly
+        // going null mid-clear) - without suppressing, scenarioPickerListener re-enters
+        // lobby.changePlayerFocus() while VLobby is still mid-populateDeckPanel() for the deck
+        // change that triggered this call in the first place, corrupting Swing's component tree
+        // (NPE in Container.addImpl). Same pattern already used for teamComboBox/aeTeamComboBox.
+        scenarioPickerComboBox.suppressActionListeners();
+        try {
+            scenarioPickerComboBox.removeAllItems();
+            scenarioPickerComboBox.addItem(SCENARIO_NONE);
+            boolean anyAvailable = false;
+            if (deck != null && deck.getScenarioIds() != null && !deck.getScenarioIds().isEmpty()) {
+                for (final String token : deck.getScenarioIds().split(",")) {
+                    final String trimmed = token.trim();
+                    if (trimmed.isEmpty()) continue;
+                    final ReplayLogParser parser = ReplayLogParser.resolveScenarioByIdOrFilename(trimmed);
+                    if (parser == null) continue;
+                    final ScenarioInfo si = parser.getScenarioInfo();
+                    final String title = si != null && si.title != null ? si.title : trimmed;
+                    final String display = isScenarioCompatibleWithDeck(si, deck) ? title : title + " (missing cards)";
+                    scenarioPickerComboBox.addItem(new ScenarioOption(trimmed, display));
+                    anyAvailable = true;
+                }
+            }
+            scenarioPickerComboBox.setSelectedItem(SCENARIO_NONE);
+            scenarioFileName = "";
+
+            // mirrors update()'s enableScenarioPicker gate - set directly here too (not left for
+            // a later update() call to catch up) since this method runs reactively off a deck
+            // change and update() has typically already run earlier in the same lobby refresh
+            // pass with the old (pre-repopulate) item count, leaving the box visible but stuck
+            // disabled - which paints as an empty-looking box (grayed text on a dark skin).
+            final boolean showPicker = anyAvailable && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
+            scenarioPickerLabel.setVisible(showPicker);
+            scenarioPickerComboBox.setVisible(showPicker);
+            scenarioPickerComboBox.setEnabled(showPicker && mayEdit);
+        } finally {
+            scenarioPickerComboBox.unsuppressActionListeners();
+        }
+    }
+
+    /** Strict check (no skip-tolerance) used only to flag a compatibility warning in the dropdown
+     *  label - the referenced scenario stays selectable either way; the actual reorder at match
+     *  start (ScenarioLibrarySetup) already tolerates missing cards by skipping them. */
+    private static boolean isScenarioCompatibleWithDeck(final ScenarioInfo si, final Deck deck) {
+        if (si == null) return false;
+        for (final List<String> names : new List[] { si.playerStartingHands.get("P1"), si.playerFirstDraws.get("P1") }) {
+            if (names == null) continue;
+            for (final String name : names) {
+                if (deck.countByName(name) <= 0) return false;
+            }
+        }
+        return true;
+    }
+
+    /** Called by {@code VLobby.fireDeckChangeListener} whenever this seat's deck selection
+     *  changes, mirroring {@link #refreshSleeveFromDeck(Deck)}'s existing callback pattern. */
+    public void refreshScenarioOptionsFromDeck(final Deck deck) {
+        populateScenarioComboBox(deck);
+    }
+
+    public String getScenarioFileName() {
+        return scenarioFileName;
+    }
+
+    public void setScenarioFileName(final String scenarioFileName) {
+        this.scenarioFileName = scenarioFileName == null ? "" : scenarioFileName;
+        scenarioPickerComboBox.suppressActionListeners();
+        try {
+            if (this.scenarioFileName.isEmpty()) {
+                scenarioPickerComboBox.setSelectedItem(SCENARIO_NONE);
+                return;
+            }
+            for (int i = 0; i < scenarioPickerComboBox.getItemCount(); i++) {
+                final Object item = scenarioPickerComboBox.getItemAt(i);
+                if (item instanceof ScenarioOption && ((ScenarioOption) item).idOrFilename.equals(this.scenarioFileName)) {
+                    scenarioPickerComboBox.setSelectedItem(item);
+                    return;
+                }
+            }
+        } finally {
+            scenarioPickerComboBox.unsuppressActionListeners();
+        }
+    }
+
+    private final ActionListener scenarioPickerListener = new ActionListener() {
+        @Override
+        public void actionPerformed(final ActionEvent e) {
+            final FComboBox<Object> comboBox = (FComboBox<Object>) e.getSource();
+            closeBtn.requestFocusInWindow();
+            final Object selection = comboBox.getSelectedItem();
+            scenarioFileName = selection instanceof ScenarioOption ? ((ScenarioOption) selection).idOrFilename : "";
+            lobby.changePlayerFocus(index);
+            lobby.firePlayerChangeListener(index);
+        }
+    };
 
     private void populateTeamsComboBoxes() {
         aeTeamComboBox.addItem(localizer.getMessage("lblArchenemy"));
@@ -939,6 +1087,9 @@ public class PlayerPanel extends FPanel {
 
     void setDeckChooser(final FDeckChooser deckChooser) {
         this.deckChooser = deckChooser;
+        // Seed scenario options from whatever deck this chooser already has selected (e.g. a
+        // restored/default seat) - later changes flow via refreshScenarioOptionsFromDeck instead.
+        populateScenarioComboBox(deckChooser == null ? null : deckChooser.getDeck());
     }
 
     public void setAiProfile(String aiProfile) {

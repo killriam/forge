@@ -332,4 +332,27 @@ public class GameRules {
     public void setForcedPlaySequence(final Map<String, List<String>> seq) {
         this.forcedPlaySequence = seq;
     }
+
+    /**
+     * Pops {@code cardName} off the head of {@code lobbyName}'s forced-play-sequence queue if it
+     * matches, so a human-facing "what's next" hint (see {@code CPrompt}) stays in sync with what
+     * the player has actually done. AI seats never need this call: {@code AiController} already
+     * pops its own queue entry before executing the matching play, so by the time an engine event
+     * fires for that play the head is already the next entry. No-op if there's no forced sequence
+     * for this seat, or if its queue is empty.
+     *
+     * <p><b>Callers must gate this on the player not being AI-controlled.</b> Calling it
+     * unconditionally would double-pop a repeated card name (e.g. two scripted "Swamp" entries in
+     * a row) for an AI seat: the AI's own pre-play pop removes the first, the engine plays it,
+     * and this call — seeing the same name still at the head — would incorrectly pop the second
+     * scripted entry too, silently skipping a step of the AI's own script.</p>
+     */
+    public void popForcedPlayIfMatches(final String lobbyName, final String cardName) {
+        if (forcedPlaySequence == null || lobbyName == null || cardName == null) return;
+        final List<String> seq = forcedPlaySequence.get(lobbyName);
+        if (seq == null || seq.isEmpty()) return;
+        if (cardName.equals(seq.get(0))) {
+            seq.remove(0);
+        }
+    }
 }

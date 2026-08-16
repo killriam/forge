@@ -31,8 +31,13 @@ import java.beans.PropertyChangeListener;
 
 import javax.swing.JButton;
 
+import java.util.List;
+import java.util.Map;
+
+import forge.game.GameRules;
 import forge.game.GameView;
 import forge.game.card.CardView;
+import forge.game.player.PlayerView;
 import forge.gui.FThreads;
 import forge.gui.framework.ICDoc;
 import forge.gui.framework.SDisplayUtil;
@@ -180,8 +185,43 @@ public class CPrompt implements ICDoc {
         if (game == null) {
             return;
         }
-        final String text = String.format("T:%d G:%d/%d [%s]", game.getTurn(), game.getNumPlayedGamesInMatch() + 1, game.getNumGamesInMatch(), game.getGameType());
+        String text = String.format("T:%d G:%d/%d [%s]", game.getTurn(), game.getNumPlayedGamesInMatch() + 1, game.getNumGamesInMatch(), game.getGameType());
+        String tooltip = String.format("%s: Game #%d of %d, turn %d", game.getGameType(), game.getNumPlayedGamesInMatch() + 1, game.getNumGamesInMatch(), game.getTurn());
+
+        final String scriptedHint = getScriptedSequenceHint();
+        if (scriptedHint != null) {
+            text += "  💡 " + scriptedHint;
+            tooltip += " | Scripted line suggests: " + scriptedHint;
+        }
+
         view.getLblGames().setText(text);
-        view.getLblGames().setToolTipText(String.format("%s: Game #%d of %d, turn %d", game.getGameType(), game.getNumPlayedGamesInMatch() + 1, game.getNumGamesInMatch(), game.getTurn()));
+        view.getLblGames().setToolTipText(tooltip);
+    }
+
+    /**
+     * The current local human player's next scripted play, if a scenario's forced play-sequence
+     * has a queued entry for them. Never blocks or overrides their actual decisions - purely
+     * informational, and goes stale only in the sense that it keeps suggesting the same card if
+     * the player doesn't play it (queue entries are only popped by actually making that play -
+     * see {@link GameRules#popForcedPlayIfMatches}).
+     */
+    private String getScriptedSequenceHint() {
+        final PlayerView player = matchUI.getCurrentPlayer();
+        if (player == null || player.isAI() || !matchUI.isLocalPlayer(player)) {
+            return null;
+        }
+        final GameView gameView = matchUI.getGameView();
+        if (gameView == null || gameView.getGame() == null) {
+            return null;
+        }
+        final Map<String, List<String>> forcedPlaySequence = gameView.getGame().getRules().getForcedPlaySequence();
+        if (forcedPlaySequence == null) {
+            return null;
+        }
+        final List<String> seq = forcedPlaySequence.get(player.getLobbyPlayerName());
+        if (seq == null || seq.isEmpty()) {
+            return null;
+        }
+        return seq.get(0);
     }
 }

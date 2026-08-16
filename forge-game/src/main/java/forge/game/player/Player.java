@@ -1676,6 +1676,13 @@ public class Player extends GameEntity implements Comparable<Player> {
         // play a sound
         game.fireEvent(new GameEventLandPlayed(PlayerView.get(this), CardView.get(c)));
 
+        // Keep a human-facing forced-play-sequence hint (see GameRules.popForcedPlayIfMatches)
+        // in sync with what was actually played. AI seats pop their own queue entry before
+        // playing, so this must stay gated to non-AI to avoid double-popping a repeated name.
+        if (!getController().isAI()) {
+            game.getRules().popForcedPlayIfMatches(getLobbyPlayer().getName(), c.getName());
+        }
+
         return c;
     }
 

@@ -1,8 +1,6 @@
 package forge.screens.home.replay;
 
-import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,10 +10,12 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 
 import forge.deck.Deck;
+import forge.game.DemoPlaySequenceExtractor;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.ReplayLogParser;
 import forge.game.ReplayLogParser.ScenarioInfo;
+import forge.game.log.ReplayEventLogger;
 import forge.game.player.RegisteredPlayer;
 import forge.gamemodes.match.HostedMatch;
 import forge.gui.GuiBase;
@@ -31,6 +31,10 @@ import forge.player.GamePlayerUtil;
 import forge.util.Localizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 /**
  * Controller for the Replay Scenario submenu.
@@ -62,6 +66,7 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             }
         });
         view.getBtnStart().addActionListener(e -> startScenario());
+        view.getBtnDemoPlay().addActionListener(e -> startScenarioDemoPlay());
         updateData();
     }
 
@@ -69,25 +74,10 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
         scenarioParsers.clear();
         view.getModel().clear();
 
-        File logDir = new File(ForgeConstants.GAME_LOG_DIR);
-        if (!logDir.exists() || !logDir.isDirectory()) {
-            return;
-        }
-
-        File[] jsonFiles = logDir.listFiles((dir, name) -> name.endsWith(".json"));
-        if (jsonFiles == null || jsonFiles.length == 0) {
-            return;
-        }
-
-        Arrays.sort(jsonFiles, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
-
-        for (File jsonFile : jsonFiles) {
-            ReplayLogParser parser = new ReplayLogParser(jsonFile);
-            if (parser.parse() && parser.isScenario()) {
-                String display = buildDisplayName(parser);
-                scenarioParsers.put(display, parser);
-                view.getModel().addElement(display);
-            }
+        for (ReplayLogParser parser : ReplayLogParser.listScenarioFiles()) {
+            String display = buildDisplayName(parser);
+            scenarioParsers.put(display, parser);
+            view.getModel().addElement(display);
         }
 
         LOG.info("Found {} scenario files", scenarioParsers.size());
@@ -148,6 +138,20 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     }
 
     private boolean startScenario() {
+        return startScenario(false);
+    }
+
+    /**
+     * "Demo Play": applies the scenario's draw order only (no forced play-sequence, even if the
+     * file has one) and records the whole playthrough in detail, so a human can discover a good
+     * line with the guaranteed hand and use the recording to write/improve that scenario's
+     * {@code events[]} block - a scenario-authoring aid, not a player-facing mode.
+     */
+    private boolean startScenarioDemoPlay() {
+        return startScenario(true);
+    }
+
+    private boolean startScenario(boolean demoPlay) {
         final Localizer localizer = Localizer.getInstance();
         String selected = view.getList().getSelectedValue();
         if (selected == null) {
@@ -163,7 +167,7 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             return false;
         }
 
-        return launchScenario(parser);
+        return launchScenario(parser, demoPlay);
     }
 
     /**
@@ -181,7 +185,7 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
      * Scenarios with commanders use GameType.Commander rules instead of Puzzle
      * so that command-zone casting and commander tax function correctly.
      */
-    private boolean launchScenario(ReplayLogParser parser) {
+    private boolean launchScenario(ReplayLogParser parser, boolean demoPlay) {
         final ScenarioInfo si = parser.getScenarioInfo();
         final int playerCount = (si != null && si.playerCount >= 2) ? si.playerCount : 2;
 
@@ -211,16 +215,48 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             final String dialogTitle = si != null && si.title != null ? si.title : "Scenario";
             final String dialogText = buildGameStartDialog(si);
 
+            // Demo Play: record the full playthrough in detail so it can be converted into
+            // events[] data afterward (see DemoPlaySequenceExtractor). Base name derived from
+            // the scenario's own id/filename so the recording is easy to associate with it.
+            final String demoBaseName = demoPlay
+                    ? "demo-play_" + safeFileToken(si != null && si.id != null ? si.id : parser.getReplayFile().getName())
+                            + "_" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date())
+                    : null;
+            final File demoRecordingFile = demoPlay
+                    ? new File(ForgeConstants.GAME_LOG_DIR, demoBaseName + ".json") : null;
+            final File demoSnippetFile = demoPlay
+                    ? new File(ForgeConstants.GAME_LOG_DIR, demoBaseName + "_events_snippet.json") : null;
+
             hostedMatch.setStartGameHook(() -> {
                 if (!gameStateLines.isEmpty()) {
                     forge.game.GameState gs = new forge.game.GameState();
                     gs.parse(gameStateLines);
                     gs.applyToGame(hostedMatch.getGame());
                 }
+                if (demoRecordingFile != null) {
+                    hostedMatch.getGame().subscribeToEvents(
+                            new ReplayEventLogger(hostedMatch.getGame(), demoRecordingFile.getPath()));
+                    LOG.info("Demo Play: recording this playthrough to {}", demoRecordingFile);
+                }
                 if (!dialogText.isEmpty()) {
                     SOptionPane.showMessageDialog(dialogText, dialogTitle, SOptionPane.INFORMATION_ICON);
                 }
             });
+
+            if (demoPlay) {
+                hostedMatch.setOnMatchOver(() -> {
+                    try {
+                        DemoPlaySequenceExtractor.writeSnippet(demoRecordingFile, "P1", demoSnippetFile);
+                        SwingUtilities.invokeLater(() -> SOptionPane.showMessageDialog(
+                                "Demo play recorded. P1's actions were extracted to an events[] snippet:\n\n"
+                                        + demoSnippetFile.getPath()
+                                        + "\n\nPaste its contents into this scenario's \"events\" field to encode this line.",
+                                "Demo Play Complete", SOptionPane.INFORMATION_ICON));
+                    } catch (Exception e) {
+                        LOG.error("Failed to extract demo-play events snippet from {}", demoRecordingFile, e);
+                    }
+                });
+            }
 
             // Human player (index 0)
             final List<RegisteredPlayer> players = new ArrayList<>();
@@ -285,7 +321,10 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
             // (soft enforcement — an uncastable next card is left in the queue and retried
             // next priority instead of blocking normal play). Translate P1/P2 ids to the
             // lobby names actually assigned above so the AI's name lookup can find them.
-            if (si != null && si.hasForcedPlaySequence()) {
+            // Demo Play deliberately skips this even if the file has one - the whole point is
+            // to play the guaranteed hand out fresh and discover a line, not replay an existing
+            // script (see DemoPlaySequenceExtractor / startScenarioDemoPlay).
+            if (!demoPlay && si != null && si.hasForcedPlaySequence()) {
                 Map<String, List<String>> forcedSeq = si.buildForcedPlaySequenceForLobbyNames(idToLobbyName);
                 if (!forcedSeq.isEmpty()) {
                     rules.setForcedPlaySequence(forcedSeq);
@@ -307,6 +346,12 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
                     "Error", FSkinProp.ICO_ERROR);
             return false;
         }
+    }
+
+    /** Sanitizes a scenario id/filename into a safe token for use inside a generated filename. */
+    private static String safeFileToken(String s) {
+        String token = s.endsWith(".json") ? s.substring(0, s.length() - ".json".length()) : s;
+        return token.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     private String buildGameStartDialog(ScenarioInfo si) {
