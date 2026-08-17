@@ -175,7 +175,10 @@
                                                 <exclude name="res/cardsfolder/**" />
                                             </fileset>
                                             <fileset dir="${basedir}/../" includes="docs/**" />
-                                            <fileset dir="${project.build.directory}/../../forge-gui-desktop/target" includes="forge-gui-desktop-${project.version}-jar-with-dependencies.jar" />
+                                            <!-- Wildcard, not ${project.version}: forge-gui-desktop's actual filename now
+                                                 includes a build-timestamp suffix (${snapshot-version} - see its pom.xml
+                                                 <finalName>), which this module's own ${project.version} doesn't carry. -->
+                                            <fileset dir="${project.build.directory}/../../forge-gui-desktop/target" includes="forge-gui-desktop-*-jar-with-dependencies.jar" />
                                             <fileset dir="${project.build.directory}/../../forge-gui-desktop/target" includes="forge.exe" />
                                             <fileset dir="${project.build.directory}/../../adventure-editor/tools" includes="gdx-particle-editor.jar" />
                                             <fileset dir="${project.build.directory}/../../adventure-editor/target" includes="adventure-editor.exe" />

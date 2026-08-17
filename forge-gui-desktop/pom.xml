@@ -22,6 +22,16 @@
     </properties>
 
     <build>
+        <!-- Was the default forge-gui-desktop-${project.version} (static across every release
+             until versionCode bumps - the direct cause of a stale-jar mixup with mamo-Connector,
+             see mtg-replay-notation spec/forge-integration-guide.md §11). ${snapshot-version} is
+             already computed below (build-timestamp-suffixed) and already used for this exact
+             purpose by the Android/installer builds and for the in-app version banner
+             (Implementation-Version manifest attribute, further down) - this just also applies it
+             to the jar's own filename, so "what the app calls itself" and "what the file is
+             named" can never disagree. Consumers must locate the jar by glob
+             (forge-gui-desktop-*-jar-with-dependencies.jar) rather than an exact name from here on. -->
+        <finalName>forge-gui-desktop-${snapshot-version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
