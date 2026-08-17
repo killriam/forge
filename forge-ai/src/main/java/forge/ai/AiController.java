@@ -1439,16 +1439,27 @@ public class AiController {
                 // commander (re)cast - the whole point of this specific scenario, which sacrifices
                 // and recasts its commander repeatedly - would otherwise permanently fail "was
                 // never castable" the exact same way lands did before the fix above.
+                //
+                // Queried per-card via card.getAllPossibleAbilities() directly, NOT via
+                // ComputerUtilAbility.getSpellAbilities() across the whole zone: that helper's
+                // alternative-cost deduplication (built for optional alt-costs like Convoke) also
+                // strips spells with a *mandatory* additional cost - e.g. Metamorphosis
+                // ("As an additional cost..., sacrifice a creature") never appeared in its
+                // aggregated output at all, even though the same card's own
+                // getAllPossibleAbilities() call finds it fine. Since only one specific card name
+                // is being searched for here anyway, going straight to that card sidesteps the
+                // aggregation bug entirely instead of needing to fix it generally.
                 final CardCollection castableZoneCards = new CardCollection(player.getCardsIn(ZoneType.Hand));
                 castableZoneCards.addAll(player.getCardsIn(ZoneType.Command));
-                final List<SpellAbility> handAbilities = ComputerUtilAbility.getSpellAbilities(
-                        castableZoneCards, player);
-                for (final SpellAbility sa : handAbilities) {
-                    if (sa.getHostCard().getName().equals(nextCardName) && sa.canPlay()) {
-                        seq.remove(0);
-                        forcedSeqHeadCardName = null;
-                        LOG.debug("Forced play: '{}' for {}", nextCardName, lobbyName);
-                        return singleSpellAbilityList(sa);
+                for (final Card card : castableZoneCards) {
+                    if (!card.getName().equals(nextCardName)) continue;
+                    for (final SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
+                        if (sa.canPlay()) {
+                            seq.remove(0);
+                            forcedSeqHeadCardName = null;
+                            LOG.debug("Forced play: '{}' for {}", nextCardName, lobbyName);
+                            return singleSpellAbilityList(sa);
+                        }
                     }
                 }
                 if (currentTurn != forcedSeqHeadFirstSeenTurn) {
