@@ -36,7 +36,7 @@ git --version
 ### Option 1: Clone This Fork (Recommended)
 
 ```bash
-git clone https://github.com/killriam/forge.git forge-fork
+git clone --recurse-submodules https://github.com/killriam/forge.git forge-fork
 cd forge-fork
 ```
 
@@ -45,11 +45,26 @@ cd forge-fork
 If you want to track upstream changes and sync regularly:
 
 ```bash
-git clone https://github.com/killriam/forge.git forge-fork
+git clone --recurse-submodules https://github.com/killriam/forge.git forge-fork
 cd forge-fork
 git remote add upstream https://github.com/Card-Forge/forge.git
 git fetch upstream
 ```
+
+### Already cloned without `--recurse-submodules`?
+
+The `mtg-replay-notation/` directory (see Project Structure below) is a git
+submodule, not part of the main repo history — a plain `git clone` leaves it
+empty. Initialize (or refresh, if it's fallen behind) it separately:
+
+```bash
+git submodule update --init --recursive
+```
+
+This is worth doing even on an old clone: `mtg-replay-notation` is the
+scenario/replay-log **interface contract** this fork and its companion
+projects (mamo-Connector, MaMoFrontend) are built against — an outdated
+local copy can silently disagree with what those other projects expect.
 
 ## Build the Project
 
@@ -134,7 +149,9 @@ forge/
 ├── forge-gui-mobile/        # libGDX mobile UI
 ├── forge-lda/               # LDA topic modeling
 ├── adventure-editor/        # Adventure mode editor
-├── mtg-replay-notation/     # Git submodule: replay format spec
+├── mtg-replay-notation/     # Git submodule: replay/scenario notation spec - the interface
+│                            #   contract with mamo-Connector/MaMoFrontend. Empty after a plain
+│                            #   clone; see "Already cloned without --recurse-submodules?" above.
 └── docs/                    # Documentation
 ```
 
@@ -175,6 +192,16 @@ The desktop GUI should launch, and simulations should complete without errors.
    and rebasing would rewrite that published history.
 
 ## Troubleshooting
+
+### `mtg-replay-notation/` Directory is Empty
+It's a git submodule; `git clone` alone doesn't populate it. Run:
+```bash
+git submodule update --init --recursive
+```
+If it's populated but looks outdated (check `git -C mtg-replay-notation log -1`
+against https://github.com/killriam/mtg-replay-notation), the same command
+fast-forwards it once the submodule pointer in this repo has been updated —
+run `git submodule update` (no `--init` needed) after pulling.
 
 ### Build Fails with Java Version Error
 Ensure you're using Java 17 or higher:
