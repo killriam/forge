@@ -1412,8 +1412,37 @@ public class AiController {
                     forcedSeqHeadCardName = nextCardName;
                     forcedSeqHeadFirstSeenTurn = currentTurn;
                 }
+                // Land drops aren't found via getSpellAbilities() below - playing a land isn't
+                // casting a hand SpellAbility the way a spell is, it's a separate Card+
+                // canPlayLand() action (see ComputerUtilAbility.getAvailableLandsToPlay(), the
+                // same mechanism normal AI land-play uses). Without this, every scripted
+                // PLAY_LAND entry would silently fail "was never castable" every single time,
+                // starving the AI of mana and cascading into failures for the genuinely-castable
+                // spells scripted after it too.
+                final CardCollection availableLands = ComputerUtilAbility.getAvailableLandsToPlay(game, player);
+                if (availableLands != null) {
+                    for (final Card land : availableLands) {
+                        if (land.getName().equals(nextCardName)) {
+                            final List<SpellAbility> landAbilities = land.getAllPossibleAbilities(player, true);
+                            landAbilities.removeIf(sa -> !sa.isLandAbility());
+                            if (!landAbilities.isEmpty()) {
+                                seq.remove(0);
+                                forcedSeqHeadCardName = null;
+                                LOG.debug("Forced play (land): '{}' for {}", nextCardName, lobbyName);
+                                return singleSpellAbilityList(landAbilities.get(0));
+                            }
+                        }
+                    }
+                }
+                // Also search the command zone, not just hand - a commander is cast from there
+                // (with its MayPlay-as-though-in-hand static), not from hand, so a scripted
+                // commander (re)cast - the whole point of this specific scenario, which sacrifices
+                // and recasts its commander repeatedly - would otherwise permanently fail "was
+                // never castable" the exact same way lands did before the fix above.
+                final CardCollection castableZoneCards = new CardCollection(player.getCardsIn(ZoneType.Hand));
+                castableZoneCards.addAll(player.getCardsIn(ZoneType.Command));
                 final List<SpellAbility> handAbilities = ComputerUtilAbility.getSpellAbilities(
-                        player.getCardsIn(ZoneType.Hand), player);
+                        castableZoneCards, player);
                 for (final SpellAbility sa : handAbilities) {
                     if (sa.getHostCard().getName().equals(nextCardName) && sa.canPlay()) {
                         seq.remove(0);
