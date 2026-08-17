@@ -102,11 +102,20 @@ public class AiController {
     private SpellAbilityPicker simPicker;
 
     // Forced-play-sequence "give up at end of turn" tracking (see chooseSpellAbilityToPlay):
-    // identifies which queue head we're currently retrying and which turn it first became the
-    // head, so a scripted entry that's still uncastable once that turn ends gets logged and
-    // skipped instead of being retried forever (unbounded soft enforcement).
+    // identifies which queue head we're currently retrying and which turn its current chance-
+    // round started, so a scripted entry that's still uncastable once that turn ends gets logged
+    // and skipped instead of being retried forever (unbounded soft enforcement).
     private String forcedSeqHeadCardName;
     private int forcedSeqHeadFirstSeenTurn = -1;
+    // One-time grace: true once this head has already been granted a second chance-round (see
+    // the refresh logic in chooseSpellAbilityToPlay). Without this, an entry that becomes head
+    // PARTWAY through the player's own turn - e.g. a scripted land arriving right after an
+    // earlier scripted land already used up this turn's land drop - gets judged "gave it a whole
+    // turn and it failed" the instant the player's NEXT own turn begins, even though that first
+    // turn never gave it a real chance (structurally blocked, not a genuine failure) and the next
+    // turn - where it WOULD succeed - hasn't even reached its Main Phase yet. Granting exactly one
+    // extra chance-round fixes that without reopening the window indefinitely.
+    private boolean forcedSeqHeadGotExtraChance;
     // Set immediately before returning a forced-sequence spell whose scripted entry recorded a
     // sacrifice-cost target, so chooseSacrificeType can force that exact choice instead of its
     // usual heuristic. Matched by CARD NAME, not object identity: empirically (via two rounds of
@@ -1461,11 +1470,22 @@ public class AiController {
                 // off-turn doesn't start the clock, and the clock only ever expires once this
                 // player has had one full turn of their own to try it.
                 final boolean isMyTurn = player.equals(game.getPhaseHandler().getPlayerTurn());
-                if (isMyTurn && !nextCardName.equals(forcedSeqHeadCardName)) {
-                    // New head (either the very first attempt, or we just moved past a prior
-                    // entry) - start a fresh "give up at end of turn" window for it.
-                    forcedSeqHeadCardName = nextCardName;
-                    forcedSeqHeadFirstSeenTurn = currentTurn;
+                if (isMyTurn) {
+                    if (!nextCardName.equals(forcedSeqHeadCardName)) {
+                        // New head (either the very first attempt, or we just moved past a prior
+                        // entry) - start a fresh "give up at end of turn" window for it.
+                        forcedSeqHeadCardName = nextCardName;
+                        forcedSeqHeadFirstSeenTurn = currentTurn;
+                        forcedSeqHeadGotExtraChance = false;
+                    } else if (currentTurn != forcedSeqHeadFirstSeenTurn && !forcedSeqHeadGotExtraChance) {
+                        // Same head has persisted into a new own-turn, and hasn't used its one
+                        // grace round yet - refresh the window (instead of letting the give-up
+                        // check below fire) so this new turn gets counted as its own fresh chance,
+                        // not instantly judged against the possibly-blocked turn it first appeared
+                        // in. See forcedSeqHeadGotExtraChance's field comment.
+                        forcedSeqHeadFirstSeenTurn = currentTurn;
+                        forcedSeqHeadGotExtraChance = true;
+                    }
                 }
                 // Land drops aren't found via getSpellAbilities() below - playing a land isn't
                 // casting a hand SpellAbility the way a spell is, it's a separate Card+
