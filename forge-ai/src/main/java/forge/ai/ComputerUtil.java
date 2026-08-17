@@ -528,6 +528,20 @@ public class ComputerUtil {
     }
 
     public static CardCollection chooseSacrificeType(final Player ai, String type, final SpellAbility ability, final Card target, final boolean effect, final int amount, final CardCollectionView exclude) {
+        return chooseSacrificeType(ai, type, ability, target, effect, amount, exclude, null);
+    }
+
+    /**
+     * @param preferredCardName when non-null and legal (present in the filtered candidate list,
+     *                          same rules as any other pick), picked ahead of the normal
+     *                          {@code getCardPreference}/{@code getWorstAI} heuristic - used to
+     *                          replay a forced-sequence scenario's recorded sacrifice choice
+     *                          instead of the AI's own cost-benefit judgment. Falls through to
+     *                          the normal heuristic if not found (e.g. it already left the
+     *                          battlefield some other way), same soft-enforcement pattern as the
+     *                          rest of the forced-sequence mechanism.
+     */
+    public static CardCollection chooseSacrificeType(final Player ai, String type, final SpellAbility ability, final Card target, final boolean effect, final int amount, final CardCollectionView exclude, final String preferredCardName) {
         final Card source = ability.getHostCard();
         boolean differentNames = false;
         if (type.contains("+WithDifferentNames")) {
@@ -571,7 +585,18 @@ public class ComputerUtil {
         int count = 0;
 
         while (count < amount) {
-            Card prefCard = getCardPreference(ai, source, "SacCost", typeList, ability);
+            Card prefCard = null;
+            if (preferredCardName != null) {
+                for (final Card c : typeList) {
+                    if (c.getName().equals(preferredCardName)) {
+                        prefCard = c;
+                        break;
+                    }
+                }
+            }
+            if (prefCard == null) {
+                prefCard = getCardPreference(ai, source, "SacCost", typeList, ability);
+            }
             if (prefCard == null) {
                 prefCard = ComputerUtilCard.getWorstAI(typeList);
             }

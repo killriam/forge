@@ -334,6 +334,27 @@ public class GameRules {
     }
 
     /**
+     * Recorded sacrifice-cost target for each {@link #forcedPlaySequence} entry, index-aligned
+     * 1:1 per lobby name with {@link #forcedPlaySequence}'s list for that name ({@code null}
+     * where that entry recorded no sacrifice choice). {@code AiController} pops both lists
+     * together so they never drift apart, then uses the popped sacrifice name (if any) to force
+     * its own sacrifice-cost decision instead of falling back to its usual heuristic.
+     *
+     * <p>{@code null} means no recorded sacrifice choices (normal AI sacrifice heuristic for
+     * every scripted entry) — distinct from an empty map, which would mean "recorded, but no
+     * entry needed one".
+     */
+    private Map<String, List<String>> forcedPlaySequenceSacrifice = null;
+
+    public Map<String, List<String>> getForcedPlaySequenceSacrifice() {
+        return forcedPlaySequenceSacrifice;
+    }
+
+    public void setForcedPlaySequenceSacrifice(final Map<String, List<String>> seq) {
+        this.forcedPlaySequenceSacrifice = seq;
+    }
+
+    /**
      * Pops {@code cardName} off the head of {@code lobbyName}'s forced-play-sequence queue if it
      * matches, so a human-facing "what's next" hint (see {@code CPrompt}) stays in sync with what
      * the player has actually done. AI seats never need this call: {@code AiController} already
@@ -353,6 +374,13 @@ public class GameRules {
         if (seq == null || seq.isEmpty()) return;
         if (cardName.equals(seq.get(0))) {
             seq.remove(0);
+            // Keep forcedPlaySequenceSacrifice index-aligned with forcedPlaySequence even for a
+            // human seat's queue (which never reads the sacrifice list back) - a hint-only pop
+            // here must not leave the two lists out of sync for good.
+            if (forcedPlaySequenceSacrifice != null) {
+                final List<String> sacSeq = forcedPlaySequenceSacrifice.get(lobbyName);
+                if (sacSeq != null && !sacSeq.isEmpty()) sacSeq.remove(0);
+            }
         }
     }
 }

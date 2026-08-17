@@ -107,6 +107,19 @@ public class AiController {
     // skipped instead of being retried forever (unbounded soft enforcement).
     private String forcedSeqHeadCardName;
     private int forcedSeqHeadFirstSeenTurn = -1;
+    // Set immediately before returning a forced-sequence spell whose scripted entry recorded a
+    // sacrifice-cost target, so chooseSacrificeType can force that exact choice instead of its
+    // usual heuristic. Matched by CARD NAME, not object identity: empirically (via two rounds of
+    // diagnostic builds), neither the SpellAbility returned from chooseSpellAbilityToPlay nor even
+    // its host Card is the same object AiCostDecision.visit(CostSacrifice) later calls
+    // chooseSacrificeType with - the engine's cast/cost-payment pipeline evidently runs against
+    // copied objects, not the originals, so no identity check survives it. Name-matching is safe
+    // here specifically because of the tight temporal scoping already in place: this is consumed
+    // (cleared) by the very next chooseSacrificeType call for a same-named card, which in practice
+    // is the cost payment for the exact spell just chosen - no other AiController decision point
+    // runs in between casting a spell and paying its own cost.
+    private String pendingForcedSacrificeCardName;
+    private String pendingForcedSacrificeTargetName;
     private int lastAttackAggression;
     private boolean useLivingEnd;
     private List<SpellAbility> skipped;
@@ -1385,6 +1398,29 @@ public class AiController {
         return Lists.newArrayList(sa);
     }
 
+    /**
+     * Called from {@link #chooseSacrificeType} to check whether the additional-cost sacrifice it's
+     * currently being asked to pay belongs to a forced-sequence spell that recorded a specific
+     * sacrifice target. Returns the recorded card name and clears the pending state (one-shot: a
+     * stale, unconsumed entry from a spell that never actually got to cost payment - e.g.
+     * countered before resolution isn't possible in practice, since additional costs are paid
+     * up-front, but this keeps the contract tight regardless) if {@code sa}'s host card name
+     * matches the spell this was recorded for, otherwise returns {@code null} and leaves the
+     * pending state untouched (so a different, unrelated sacrifice ability being paid for around
+     * the same time doesn't consume it).
+     */
+    private String consumePendingForcedSacrifice(final SpellAbility sa) {
+        final Card host = sa != null ? sa.getHostCard() : null;
+        if (pendingForcedSacrificeCardName != null && host != null
+                && pendingForcedSacrificeCardName.equals(host.getName())) {
+            final String name = pendingForcedSacrificeTargetName;
+            pendingForcedSacrificeCardName = null;
+            pendingForcedSacrificeTargetName = null;
+            return name;
+        }
+        return null;
+    }
+
     public List<SpellAbility> chooseSpellAbilityToPlay() {
         AiCache.clear();
         // Reset cached predicted combat, as it may be stale. It will be
@@ -1405,8 +1441,27 @@ public class AiController {
             final List<String> seq = forcedSeq.get(lobbyName);
             if (seq != null && !seq.isEmpty()) {
                 final String nextCardName = seq.get(0);
+                // Recorded sacrifice-cost target for this same queue entry, if any - popped in
+                // lockstep with seq below at every exit point (found via land, found via
+                // hand/command zone, or given up on) so the two lists never drift apart.
+                final Map<String, List<String>> forcedSac = game.getRules().getForcedPlaySequenceSacrifice();
+                final List<String> sacSeq = forcedSac != null ? forcedSac.get(lobbyName) : null;
+                final String nextSacrificeName = (sacSeq != null && !sacSeq.isEmpty()) ? sacSeq.get(0) : null;
                 final int currentTurn = game.getPhaseHandler().getTurn();
-                if (!nextCardName.equals(forcedSeqHeadCardName)) {
+                // Both players get priority windows on every turn, not just their own - Ai(1)
+                // still gets asked "what would you play" during Ai(2)'s turn. game.getTurn() is
+                // the *global* turn counter (increments on every player's turn), so an entry
+                // that first becomes head during an OPPONENT's turn would otherwise start its
+                // "give up" window right there - by the time this player's own turn actually
+                // begins, the global turn number has already changed, and the very first check
+                // of their own turn (often before even reaching their main phase) would
+                // immediately conclude the window expired, without this player ever having had a
+                // real chance to cast a sorcery-speed card. Gating the window's start/expiry to
+                // only this player's own turns fixes that: an entry seen for the first time
+                // off-turn doesn't start the clock, and the clock only ever expires once this
+                // player has had one full turn of their own to try it.
+                final boolean isMyTurn = player.equals(game.getPhaseHandler().getPlayerTurn());
+                if (isMyTurn && !nextCardName.equals(forcedSeqHeadCardName)) {
                     // New head (either the very first attempt, or we just moved past a prior
                     // entry) - start a fresh "give up at end of turn" window for it.
                     forcedSeqHeadCardName = nextCardName;
@@ -1427,8 +1482,9 @@ public class AiController {
                             landAbilities.removeIf(sa -> !sa.isLandAbility());
                             if (!landAbilities.isEmpty()) {
                                 seq.remove(0);
+                                if (sacSeq != null && !sacSeq.isEmpty()) sacSeq.remove(0);
                                 forcedSeqHeadCardName = null;
-                                LOG.debug("Forced play (land): '{}' for {}", nextCardName, lobbyName);
+                                LOG.info("Forced play (land): '{}' for {}", nextCardName, lobbyName);
                                 return singleSpellAbilityList(landAbilities.get(0));
                             }
                         }
@@ -1456,18 +1512,33 @@ public class AiController {
                     for (final SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
                         if (sa.canPlay()) {
                             seq.remove(0);
+                            if (sacSeq != null && !sacSeq.isEmpty()) sacSeq.remove(0);
                             forcedSeqHeadCardName = null;
-                            LOG.debug("Forced play: '{}' for {}", nextCardName, lobbyName);
+                            if (nextSacrificeName != null) {
+                                pendingForcedSacrificeCardName = nextCardName;
+                                pendingForcedSacrificeTargetName = nextSacrificeName;
+                                LOG.info("Forced play: '{}' for {} (recorded sacrifice target: '{}')",
+                                        nextCardName, lobbyName, nextSacrificeName);
+                            } else {
+                                LOG.info("Forced play: '{}' for {}", nextCardName, lobbyName);
+                            }
                             return singleSpellAbilityList(sa);
                         }
                     }
                 }
-                if (currentTurn != forcedSeqHeadFirstSeenTurn) {
+                if (isMyTurn && currentTurn != forcedSeqHeadFirstSeenTurn) {
                     // Soft enforcement gave it every priority window of the turn it first became
                     // the head - still uncastable once the turn moved on, so give up on this one
                     // entry (not the whole sequence) and log it for the scenario author to see,
-                    // rather than retrying it silently forever.
+                    // rather than retrying it silently forever. Gated on isMyTurn for the same
+                    // reason forcedSeqHeadFirstSeenTurn's assignment above is: forcedSeqHeadCardName
+                    // may still be non-null (unchanged) during an intervening opponent's turn, and
+                    // without this guard the global turn counter having moved on since this
+                    // player's own last turn would look identical to "gave up its whole turn and
+                    // still couldn't cast it" - an opponent's turn is never this entry's turn to
+                    // lose its chance in.
                     seq.remove(0);
+                    if (sacSeq != null && !sacSeq.isEmpty()) sacSeq.remove(0);
                     forcedSeqHeadCardName = null;
                     final String msg = "Scripted play skipped for " + lobbyName + ": '" + nextCardName
                             + "' was never castable during turn " + forcedSeqHeadFirstSeenTurn + " - moving on.";
@@ -2455,6 +2526,40 @@ public class AiController {
     }
 
     public CardCollectionView chooseSacrificeType(String type, SpellAbility ability, boolean effect, int amount, final CardCollectionView exclude) {
+        // Forced-sequence replay: this is the additional-cost sacrifice hook (e.g. Metamorphosis'
+        // "As an additional cost to cast this spell, sacrifice a creature"), reached via
+        // CostSacrifice -> AiCostDecision.visit(CostSacrifice) -> here, NOT via
+        // PlayerController.choosePermanentsToSacrifice (that hook is for a different set of
+        // effects - Balance, Emerge/Offering, a resolved Sacrifice ability - and is never invoked
+        // for a spell's own cast cost). amount == 1 mirrors the same single-target scope the
+        // recorded data.sacrifice field is documented for.
+        //
+        // Checked and handled BEFORE the simPicker branch below deliberately: simPicker is built
+        // unconditionally in the constructor (never nulled out), so "if (simPicker != null)" is
+        // always true and everything past it - including the plain ComputerUtil.chooseSacrificeType
+        // fallback this used to end with - is unreachable. Handling the forced choice up here is
+        // the only way it can ever actually apply.
+        final String forcedName = amount == 1 ? consumePendingForcedSacrifice(ability) : null;
+        if (forcedName != null) {
+            final CardCollection forced = ComputerUtil.chooseSacrificeType(
+                    player, type, ability, ability.getTargetCard(), effect, amount, exclude, forcedName);
+            if (forced != null) {
+                boolean applied = false;
+                for (final Card c : forced) {
+                    if (c.getName().equals(forcedName)) {
+                        applied = true;
+                        break;
+                    }
+                }
+                if (applied) {
+                    LOG.info("Forced sacrifice: '{}' for {}", forcedName, ability.getHostCard().getName());
+                } else {
+                    LOG.info("Recorded sacrifice target '{}' not among legal choices for {} - used normal heuristic instead",
+                            forcedName, ability.getHostCard().getName());
+                }
+                return forced;
+            }
+        }
         if (simPicker != null) {
             return simPicker.chooseSacrificeType(type, ability, effect, amount, exclude);
         }

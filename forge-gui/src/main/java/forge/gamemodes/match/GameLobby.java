@@ -642,16 +642,26 @@ public abstract class GameLobby implements IHasGameType {
         // forcedPlaySequence: keyed by real lobby name - slot.getName() is exactly what became
         // each seat's LobbyPlayer name above, no sort/translation needed.
         final Map<String, List<String>> mergedForcedSeq = new LinkedHashMap<>();
+        // Recorded sacrifice-cost targets, index-aligned per lobby name with mergedForcedSeq -
+        // lets AiController force its own sacrifice choice to match the original recording.
+        final Map<String, List<String>> mergedForcedSac = new LinkedHashMap<>();
         for (final LobbySlot slot : activeSlots) {
             final ScenarioInfo si = resolveSlotScenario(slot);
             if (si == null || !si.hasForcedPlaySequence()) continue;
             final List<String> seq = si.playerForcedSequence.get("P1");
             if (seq != null && !seq.isEmpty()) {
                 mergedForcedSeq.put(slot.getName(), new ArrayList<>(seq));
+                final List<String> sac = si.playerForcedSacrifice.get("P1");
+                if (sac != null && !sac.isEmpty()) {
+                    mergedForcedSac.put(slot.getName(), new ArrayList<>(sac));
+                }
             }
         }
         if (!mergedForcedSeq.isEmpty()) {
             rules.setForcedPlaySequence(mergedForcedSeq);
+            if (!mergedForcedSac.isEmpty()) {
+                rules.setForcedPlaySequenceSacrifice(mergedForcedSac);
+            }
         }
 
         return rules;

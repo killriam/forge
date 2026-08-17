@@ -220,6 +220,7 @@ public class ReplayLogParser {
                 // filename/metadata/date-convention mismatches that string would be prone to.
                 if (root.has("events") && root.get("events").isJsonArray()) {
                     si.playerForcedSequence.putAll(parseForcedSequenceEvents(root.getAsJsonArray("events")));
+                    si.playerForcedSacrifice.putAll(parseForcedSequenceSacrifice(root.getAsJsonArray("events")));
                 }
                 this.scenarioInfo = si;
             }
@@ -503,7 +504,27 @@ public class ReplayLogParser {
      * not by the JSON's player id.
      */
     public static Map<String, List<String>> parseForcedSequenceEvents(JsonArray events) {
-        final Map<String, List<String>> result = new LinkedHashMap<>();
+        return parseForcedSequence(events).cardNames;
+    }
+
+    /**
+     * Parses the same top-level {@code events} array as {@link #parseForcedSequenceEvents}, but
+     * returns each entry's recorded {@code data.choices.sacrifice} target instead of its card
+     * name — one list per actor id, index-aligned 1:1 with {@link #parseForcedSequenceEvents}'s
+     * result for the same actor (an entry with no recorded sacrifice choice is {@code null}, not
+     * omitted, so the two lists stay the same length and can be popped in lockstep).
+     *
+     * <p>Only the first name in a {@code choices.sacrifice} array is used — recording more than
+     * one sacrificed card per event isn't modeled here, matching the existing soft-enforcement,
+     * best-effort scope of the rest of this mechanism.
+     */
+    public static Map<String, List<String>> parseForcedSequenceSacrifice(JsonArray events) {
+        return parseForcedSequence(events).sacrificeTargets;
+    }
+
+    private static ParsedForcedSequence parseForcedSequence(JsonArray events) {
+        final Map<String, List<String>> cardNames = new LinkedHashMap<>();
+        final Map<String, List<String>> sacrificeTargets = new LinkedHashMap<>();
         for (JsonElement el : events) {
             if (!el.isJsonObject()) continue;
             JsonObject ev = el.getAsJsonObject();
@@ -517,6 +538,7 @@ public class ReplayLogParser {
             if (actor == null) continue;
 
             String cardName = null;
+            String sacrificeName = null;
             if (ev.has("data") && ev.get("data").isJsonObject()) {
                 JsonObject data = ev.getAsJsonObject("data");
                 if (data.has("card_name") && !data.get("card_name").isJsonNull()) {
@@ -524,12 +546,39 @@ public class ReplayLogParser {
                 } else if (data.has("card") && !data.get("card").isJsonNull()) {
                     cardName = data.get("card").getAsString();
                 }
+                // Documented scenario-file shape (docs/SCENARIO_STARTING_HAND_FORMAT.md): a flat
+                // data.sacrifice array, as written by DemoPlaySequenceExtractor's flattened
+                // snippet export. Also accepts the nested data.choices.sacrifice shape used by
+                // ReplayEventLogger's full internal recording (mtg-replay-notation CAST schema),
+                // in case a file is ever fed through unflattened.
+                if (data.has("sacrifice") && data.get("sacrifice").isJsonArray()
+                        && data.getAsJsonArray("sacrifice").size() > 0) {
+                    JsonElement first = data.getAsJsonArray("sacrifice").get(0);
+                    if (!first.isJsonNull()) sacrificeName = first.getAsString();
+                } else if (data.has("choices") && data.get("choices").isJsonObject()) {
+                    JsonObject choices = data.getAsJsonObject("choices");
+                    if (choices.has("sacrifice") && choices.get("sacrifice").isJsonArray()
+                            && choices.getAsJsonArray("sacrifice").size() > 0) {
+                        JsonElement first = choices.getAsJsonArray("sacrifice").get(0);
+                        if (!first.isJsonNull()) sacrificeName = first.getAsString();
+                    }
+                }
             }
             if (cardName == null) continue;
 
-            result.computeIfAbsent(actor, k -> new ArrayList<>()).add(cardName);
+            cardNames.computeIfAbsent(actor, k -> new ArrayList<>()).add(cardName);
+            sacrificeTargets.computeIfAbsent(actor, k -> new ArrayList<>()).add(sacrificeName);
         }
-        return result;
+        return new ParsedForcedSequence(cardNames, sacrificeTargets);
+    }
+
+    private static final class ParsedForcedSequence {
+        final Map<String, List<String>> cardNames;
+        final Map<String, List<String>> sacrificeTargets;
+        ParsedForcedSequence(Map<String, List<String>> cardNames, Map<String, List<String>> sacrificeTargets) {
+            this.cardNames = cardNames;
+            this.sacrificeTargets = sacrificeTargets;
+        }
     }
 
     private String getStringField(JsonObject obj, String field) {
@@ -800,6 +849,13 @@ public class ReplayLogParser {
          * Use {@link #buildForcedPlaySequenceForLobbyNames(Map)} before handing to GameRules.
          */
         public final Map<String, List<String>> playerForcedSequence = new LinkedHashMap<>();
+        /**
+         * Recorded sacrifice-cost target for each {@link #playerForcedSequence} entry, index-aligned
+         * 1:1 per actor id ({@code null} where that entry recorded no sacrifice choice). Lets
+         * {@code AiController} force its own sacrifice-cost decision to match what was originally
+         * recorded, instead of falling back to its usual cost-benefit heuristic.
+         */
+        public final Map<String, List<String>> playerForcedSacrifice = new LinkedHashMap<>();
 
         /**
          * Returns true when at least one player in this scenario has a structured
@@ -826,6 +882,21 @@ public class ReplayLogParser {
         public Map<String, List<String>> buildForcedPlaySequenceForLobbyNames(Map<String, String> idToLobbyName) {
             Map<String, List<String>> result = new LinkedHashMap<>();
             for (Map.Entry<String, List<String>> e : playerForcedSequence.entrySet()) {
+                String lobbyName = idToLobbyName.get(e.getKey());
+                if (lobbyName == null || e.getValue().isEmpty()) continue;
+                result.put(lobbyName, new ArrayList<>(e.getValue()));
+            }
+            return result;
+        }
+
+        /**
+         * Same translation as {@link #buildForcedPlaySequenceForLobbyNames}, for
+         * {@link #playerForcedSacrifice} instead. Must be applied to the same id-set the caller
+         * used for the play sequence itself, so the two lists stay index-aligned per lobby name.
+         */
+        public Map<String, List<String>> buildForcedSacrificeForLobbyNames(Map<String, String> idToLobbyName) {
+            Map<String, List<String>> result = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> e : playerForcedSacrifice.entrySet()) {
                 String lobbyName = idToLobbyName.get(e.getKey());
                 if (lobbyName == null || e.getValue().isEmpty()) continue;
                 result.put(lobbyName, new ArrayList<>(e.getValue()));

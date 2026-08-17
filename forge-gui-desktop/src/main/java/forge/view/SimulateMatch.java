@@ -378,16 +378,26 @@ public class SimulateMatch {
             if (root.has("events") && root.get("events").isJsonArray()) {
                 Map<String, List<String>> byId =
                         forge.game.ReplayLogParser.parseForcedSequenceEvents(root.getAsJsonArray("events"));
+                Map<String, List<String>> sacById =
+                        forge.game.ReplayLogParser.parseForcedSequenceSacrifice(root.getAsJsonArray("events"));
                 Map<String, List<String>> playSeq = new LinkedHashMap<>();
+                Map<String, List<String>> sacSeq = new LinkedHashMap<>();
                 for (Map.Entry<String, List<String>> e : byId.entrySet()) {
                     int seatIdx = playerIdToSeatIndex(e.getKey());
                     if (seatIdx < 0 || seatIdx >= seatLobbyNames.size() || e.getValue().isEmpty()) continue;
                     playSeq.put(seatLobbyNames.get(seatIdx), e.getValue());
+                    List<String> sac = sacById.get(e.getKey());
+                    if (sac != null && !sac.isEmpty()) {
+                        sacSeq.put(seatLobbyNames.get(seatIdx), sac);
+                    }
                 }
                 if (!playSeq.isEmpty()) {
                     rules.setForcedPlaySequence(playSeq);
                     int total = playSeq.values().stream().mapToInt(List::size).sum();
                     System.out.println("Scenario: Loaded forced play sequence — " + total + " event(s) for " + playSeq.size() + " player(s)");
+                    if (!sacSeq.isEmpty()) {
+                        rules.setForcedPlaySequenceSacrifice(sacSeq);
+                    }
                 }
             }
 

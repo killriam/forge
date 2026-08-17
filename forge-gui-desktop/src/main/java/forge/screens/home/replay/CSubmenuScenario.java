@@ -592,6 +592,13 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
                     int total = forcedSeq.values().stream().mapToInt(List::size).sum();
                     LOG.info("Scenario: forced play sequence set — {} event(s) for {} player(s)",
                             total, forcedSeq.size());
+                    // Recorded sacrifice-cost targets, index-aligned per lobby name with forcedSeq
+                    // above - lets AiController force its own sacrifice choice to match the
+                    // original recording instead of its usual heuristic.
+                    Map<String, List<String>> forcedSac = si.buildForcedSacrificeForLobbyNames(idToLobbyName);
+                    if (!forcedSac.isEmpty()) {
+                        rules.setForcedPlaySequenceSacrifice(forcedSac);
+                    }
                 }
             }
 
