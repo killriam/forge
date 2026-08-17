@@ -91,4 +91,45 @@ public class DemoPlaySequenceExtractorTest {
         String backupContents = new String(Files.readAllBytes(backup.toPath()));
         assertEquals("backup should contain the pre-update contents", original, backupContents);
     }
+
+    /**
+     * Mirrors the exact shape {@link forge.game.log.ReplayEventLogger} now produces for a
+     * Metamorphosis-style cast (sacrifice a creature as an additional cost, X mana chosen) - the
+     * concrete case that motivated capturing cost/x/choices on CAST events at all. Verifies
+     * {@link DemoPlaySequenceExtractor#extractPlayerEvents} resolves both the target and the
+     * sacrificed card from card_index into names, and passes the X value through.
+     */
+    @Test
+    public void testExtractPlayerEvents_resolvesTargetsXAndSacrificeFromRealLogShape() throws IOException {
+        File dir = Files.createTempDirectory("demoplay-test").toFile();
+        File replayFile = new File(dir, "recording.json");
+        String raw = "{"
+                + "\"card_index\": {"
+                + "  \"c10\": {\"name\": \"Metamorphosis\"},"
+                + "  \"c5\": {\"name\": \"The Pride of Hull Clade\"},"
+                + "  \"c11\": {\"name\": \"Arbor Adherent\"}"
+                + "},"
+                + "\"events\": ["
+                + "  {\"i\": 59, \"t\": \"T3.MP1:1\", \"a\": \"P1\", \"type\": \"CAST\", \"data\": {"
+                + "      \"card\": \"c10\", \"card_name\": \"Metamorphosis\","
+                + "      \"targets\": [\"c11\"],"
+                + "      \"cost\": {\"mana\": \"0\", \"additional\": [\"X=4\"], \"alternative\": null},"
+                + "      \"x\": 4,"
+                + "      \"choices\": {\"sacrifice\": [\"c5\"]}"
+                + "  }}"
+                + "]"
+                + "}";
+        try (FileWriter fw = new FileWriter(replayFile)) {
+            fw.write(raw);
+        }
+
+        JsonArray events = DemoPlaySequenceExtractor.extractPlayerEvents(replayFile, "P1");
+
+        assertEquals(1, events.size());
+        JsonObject data = events.get(0).getAsJsonObject().getAsJsonObject("data");
+        assertEquals("Metamorphosis", data.get("card_name").getAsString());
+        assertEquals(4, data.get("x").getAsInt());
+        assertEquals("Arbor Adherent", data.getAsJsonArray("targets").get(0).getAsString());
+        assertEquals("The Pride of Hull Clade", data.getAsJsonArray("sacrifice").get(0).getAsString());
+    }
 }

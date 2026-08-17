@@ -992,7 +992,7 @@ public class ReplayNotationExporter {
     /**
      * Get the mana that was actually paid for this spell.
      */
-    private String getManaPaid(forge.game.spellability.SpellAbility sa) {
+    static String getManaPaid(forge.game.spellability.SpellAbility sa) {
         if (sa == null) {
             return "0";
         }
@@ -1037,7 +1037,7 @@ public class ReplayNotationExporter {
     /**
      * Convert mana color byte to string representation.
      */
-    private String manaColorToString(byte color) {
+    static String manaColorToString(byte color) {
         if ((color & forge.card.mana.ManaAtom.WHITE) != 0) return "W";
         if ((color & forge.card.mana.ManaAtom.BLUE) != 0) return "U";
         if ((color & forge.card.mana.ManaAtom.BLACK) != 0) return "B";
@@ -1050,7 +1050,7 @@ public class ReplayNotationExporter {
     /**
      * Calculate the total mana value paid for this spell.
      */
-    private int calculateTotalCostPaid(forge.game.spellability.SpellAbility sa) {
+    static int calculateTotalCostPaid(forge.game.spellability.SpellAbility sa) {
         if (sa == null) {
             return 0;
         }
@@ -1071,7 +1071,7 @@ public class ReplayNotationExporter {
     /**
      * Get additional costs that were paid.
      */
-    private List<String> getAdditionalCosts(forge.game.spellability.SpellAbility sa) {
+    static List<String> getAdditionalCosts(forge.game.spellability.SpellAbility sa) {
         List<String> additionalCosts = new ArrayList<>();
 
         if (sa == null) {
@@ -1110,7 +1110,7 @@ public class ReplayNotationExporter {
     /**
      * Get the alternative cost type if one was used.
      */
-    private String getAlternativeCostType(forge.game.spellability.SpellAbility sa) {
+    static String getAlternativeCostType(forge.game.spellability.SpellAbility sa) {
         if (sa == null) {
             return null;
         }

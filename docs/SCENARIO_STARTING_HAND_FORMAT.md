@@ -91,6 +91,9 @@ Auf **Top-Level** (neben `scenario`) ein `events`-Array mit CAST/ACTIVATE/PLAY_L
 | `data.card_name` | `string` | Karten-Name |
 | `data.targets` | `[string]` | Optional: Ziele der Fähigkeit, per Name (Kartenname oder Spieler-ID). Wird beim Demo-Play-Export (`DemoPlaySequenceExtractor`) automatisch aus der Aufzeichnung aufgelöst und eingetragen — beim Abspielen einer Sequenz aber noch **nicht ausgewertet** (die AI wählt ihre eigenen Ziele normal; siehe "Getestet, aber noch nicht konsumiert" unten). |
 | `data.sacrifice` | `[string]` | Optional: als Zusatzkosten geopferte Karte(n) (z.B. bei Metamorphosis), per Name. Gleiche Einschränkung wie `data.targets` — wird aufgezeichnet, aber beim Abspielen noch nicht ausgewertet. |
+| `data.x` | `int` | Optional: gewählter X-Wert bei X-Kosten-Zaubern (z.B. Metamorphosis' `X` = Zähigkeit der geopferten Kreatur). Gleiche Einschränkung wie `data.targets`. |
+
+Intern (in der vollständigen `demo-play_*.json`-Aufzeichnung, nicht im extrahierten `events[]`-Snippet) folgen `cost`/`x`/`choices` dem CAST-Event-Schema von `mtg-replay-notation` (`spec/MTG-REPLAY-NOTATION.md`, §CAST Event: `cost.mana`/`cost.additional`/`cost.alternative`, `x`, `choices`) — `DemoPlaySequenceExtractor` liest daraus und flacht sie in die oben dokumentierten `data.targets`/`data.sacrifice`/`data.x`-Felder ab. `modes` und die volle `targets[].{slot,obj}`-Objektform aus der Spec sind in Forges Export noch nicht befüllt bzw. vereinfacht (flache Namensliste statt Slot-Objekten).
 
 ### Funktionsweise
 

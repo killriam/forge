@@ -424,8 +424,29 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
                 l1.addData("targets", targets);
             }
         }
+
+        // Cost/X/choices, per mtg-replay-notation's CAST event schema (spec/MTG-REPLAY-NOTATION.md
+        // §CAST Event: cost.mana/additional/alternative, x, choices). ev.realSa() is the actual
+        // SpellAbility (not just its View), so this reads real paid-cost data rather than
+        // guessing from the View, which doesn't carry it.
+        forge.game.spellability.SpellAbility realSa = ev.realSa();
+        if (realSa != null) {
+            Map<String, Object> cost = new LinkedHashMap<>();
+            cost.put("mana", ReplayNotationExporter.getManaPaid(realSa));
+            cost.put("additional", ReplayNotationExporter.getAdditionalCosts(realSa));
+            cost.put("alternative", ReplayNotationExporter.getAlternativeCostType(realSa));
+            l1.addData("cost", cost);
+            if (realSa.costHasManaX()) {
+                Integer xPaid = realSa.getXManaCostPaid();
+                if (xPaid != null) {
+                    l1.addData("x", xPaid);
+                }
+            }
+        }
         if (!pendingSacrificedIds.isEmpty()) {
-            l1.addData("cost_sacrificed", new ArrayList<>(pendingSacrificedIds));
+            Map<String, Object> choices = new LinkedHashMap<>();
+            choices.put("sacrifice", new ArrayList<>(pendingSacrificedIds));
+            l1.addData("choices", choices);
             pendingSacrificedIds.clear();
         }
         replayLog.addL1Event(l1);

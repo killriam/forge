@@ -79,6 +79,9 @@ public final class DemoPlaySequenceExtractor {
 
                 final String cardName = resolveCardName(ev);
                 if (cardName == null) continue;
+                // Raw log nests everything under "data" (ev.data.targets, ev.data.x, ...) -
+                // resolveCardName() already knows this; the fields below need the same object.
+                final JsonObject rawData = ev.getAsJsonObject("data");
 
                 final JsonObject out = new JsonObject();
                 out.addProperty("i", index++);
@@ -88,13 +91,20 @@ public final class DemoPlaySequenceExtractor {
                 out.addProperty("type", type);
                 final JsonObject data = new JsonObject();
                 data.addProperty("card_name", cardName);
-                // Targets and additional costs (e.g. Metamorphosis' "sacrifice a creature") are
-                // recorded by card id in the raw log - resolve them to names here so the events[]
-                // snippet is self-contained and human-authorable without cross-referencing the
-                // recording. Not yet consumed on replay (see docs/SCENARIO_STARTING_HAND_FORMAT.md,
-                // "Phase 2") - recorded for now so a scenario author can encode them by hand.
-                addResolvedNames(data, "targets", ev.get("targets"), cardNamesById);
-                addResolvedNames(data, "sacrifice", ev.get("cost_sacrificed"), cardNamesById);
+                // Targets, X value, and choices made to pay additional costs (e.g. Metamorphosis'
+                // "sacrifice a creature") are recorded by card id in the raw log - resolve them to
+                // names here so the events[] snippet is self-contained and human-authorable
+                // without cross-referencing the recording. Not yet consumed on replay (see
+                // docs/SCENARIO_STARTING_HAND_FORMAT.md, "Phase 2") - recorded for now so a
+                // scenario author can encode them by hand.
+                addResolvedNames(data, "targets", rawData.get("targets"), cardNamesById);
+                if (rawData.has("x") && !rawData.get("x").isJsonNull()) {
+                    data.add("x", rawData.get("x"));
+                }
+                if (rawData.has("choices") && rawData.get("choices").isJsonObject()) {
+                    final JsonObject choices = rawData.getAsJsonObject("choices");
+                    addResolvedNames(data, "sacrifice", choices.get("sacrifice"), cardNamesById);
+                }
                 out.add("data", data);
                 result.add(out);
             }

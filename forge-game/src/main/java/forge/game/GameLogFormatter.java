@@ -198,16 +198,19 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             Card hostCard = replayExporter.resolveCard(event.sa().getHostCard());
             forge.game.player.Player activatingPlayer = replayExporter.resolvePlayer(event.si().getActivatingPlayer());
             if (hostCard != null && activatingPlayer != null) {
+                // event.realSa() is the actual SpellAbility (not just its View) - carried on the
+                // event since GameEventSpellAbilityCast gained the field, so cost/X/alternative-
+                // cost details are available here instead of always passing null.
                 if (event.sa().isSpell()) {
                     replayExporter.logCast(hostCard, activatingPlayer,
-                                         generateTimeMarker(), null);
+                                         generateTimeMarker(), event.realSa());
                 } else if (event.si().isTrigger()) {
                     replayExporter.logTrigger(hostCard, activatingPlayer,
-                                             null, generateTimeMarker());
+                                             event.realSa(), generateTimeMarker());
                 } else {
                     // Activated ability (non-spell, non-trigger)
                     replayExporter.logActivate(hostCard, activatingPlayer,
-                                              null, generateTimeMarker());
+                                              event.realSa(), generateTimeMarker());
                 }
             }
         }
