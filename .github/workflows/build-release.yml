@@ -1,0 +1,134 @@
+name: Build and Release MaMo Forge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - replay-Features
+
+jobs:
+  build-and-release:
+    name: Build JAR and publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests -pl forge-gui-desktop -am -T 1C
+
+      - name: Find built JAR
+        id: find_jar
+        run: |
+          JAR=$(find forge-gui-desktop/target -name "forge-gui-desktop-*-jar-with-dependencies.jar" | head -1)
+          if [ -z "$JAR" ]; then
+            echo "ERROR: JAR not found in forge-gui-desktop/target/" && exit 1
+          fi
+          echo "jar_path=$JAR" >> $GITHUB_OUTPUT
+          echo "jar_name=$(basename $JAR)" >> $GITHUB_OUTPUT
+          echo "Found: $JAR ($(du -sh $JAR | cut -f1))"
+
+      - name: Build changelog (CHANGES.txt + release notes)
+        id: notes
+        run: |
+          # Diff against the PREVIOUS replay-features-latest tag (still intact at this point -
+          # it only gets deleted/moved further down) so both outputs reflect what actually
+          # changed in this build, instead of static text every time.
+          PREV_SHA=$(git rev-parse replay-features-latest 2>/dev/null || echo "")
+
+          # In-app "Release Notes" screen (forge.screens.home.settings.CSubmenuReleaseNotes)
+          # reads this file via TextUtil.getFormattedChangelog, which expects one commit per
+          # line as "[<short-hash>] <subject> *<yyyy-MM-dd HH:mm:ss>*" (only the first ~20
+          # lines starting with "[" are actually displayed).
+          if [ -n "$PREV_SHA" ]; then
+            git log "$PREV_SHA"..HEAD --no-merges --date=format:'%Y-%m-%d %H:%M:%S' --pretty=format:'[%h] %s *%ad*' > CHANGES.txt
+          else
+            git log -30 --no-merges --date=format:'%Y-%m-%d %H:%M:%S' --pretty=format:'[%h] %s *%ad*' > CHANGES.txt
+          fi
+          echo "" >> CHANGES.txt
+          echo "Generated CHANGES.txt:"
+          cat CHANGES.txt
+
+          # GitHub release body (plain markdown, for humans browsing the Releases page).
+          {
+            echo "Automated build from the \`replay-Features\` branch."
+            echo ""
+            echo "## Changes in this build"
+            if [ -n "$PREV_SHA" ]; then
+              git log "$PREV_SHA"..HEAD --no-merges --pretty=format:'- %s (%h)'
+            else
+              git log -20 --no-merges --pretty=format:'- %s (%h)'
+            fi
+            echo ""
+            echo ""
+            echo "**Built from:** \`${{ github.sha }}\`"
+            echo "**Build date:** $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "## Installation"
+            echo "- **Fresh install:** download \`MaMoForge-portable.zip\`, extract it, and run \`java -jar ${{ steps.find_jar.outputs.jar_name }}\` from inside the extracted folder. This bundles the \`res/\` folder the JAR needs at runtime - a bare JAR alone will crash on launch."
+            echo "- **Existing install:** if you already have a \`res/\` folder from a previous extract, you can just drop in the smaller \`${{ steps.find_jar.outputs.jar_name }}\` to update (grab the standalone \`CHANGES.txt\` asset too if you want the in-app Release Notes screen to reflect this build)."
+            echo "- Configure via the MaMo Connector setup wizard."
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Package portable build (JAR + res/ + CHANGES.txt)
+        id: package
+        run: |
+          # The fat JAR loads card images/sounds/skins etc. from a `res/` folder next to it at
+          # runtime (forge.GuiDesktop.getAssetsDir()) - it does NOT read them from its own
+          # classpath even though maven also copies them in there. A bare JAR download crashes
+          # immediately after the splash screen with "Cannot find default skin". Ship a
+          # self-contained zip so a fresh download actually runs. CHANGES.txt goes in the same
+          # folder as the jar (same ASSETS_DIR resolution as res/) so the in-app Release Notes
+          # screen finds it instead of showing "is MISSING!".
+          STAGE_DIR="MaMoForge-portable"
+          mkdir -p "$STAGE_DIR"
+          cp "${{ steps.find_jar.outputs.jar_path }}" "$STAGE_DIR/"
+          cp -r forge-gui/res "$STAGE_DIR/res"
+          cp CHANGES.txt "$STAGE_DIR/"
+          ZIP_NAME="MaMoForge-portable.zip"
+          zip -rq "$ZIP_NAME" "$STAGE_DIR"
+          echo "zip_path=$ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "Packaged: $ZIP_NAME ($(du -sh "$ZIP_NAME" | cut -f1))"
+
+      - name: Delete existing replay-features-latest release and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete replay-features-latest --yes --repo ${{ github.repository }} 2>/dev/null || true
+          git push --delete origin replay-features-latest 2>/dev/null || true
+
+      - name: Create stable tag
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git tag -fa replay-features-latest -m "Latest MaMo Forge build from replay-Features"
+          git push origin replay-features-latest --force
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create replay-features-latest \
+            --repo ${{ github.repository }} \
+            --title "MaMo Forge (replay-Features) — Latest Build" \
+            --notes-file release_notes.md \
+            --prerelease \
+            "${{ steps.find_jar.outputs.jar_path }}#${{ steps.find_jar.outputs.jar_name }}" \
+            "${{ steps.package.outputs.zip_path }}#${{ steps.package.outputs.zip_name }}" \
+            "CHANGES.txt#CHANGES.txt"
