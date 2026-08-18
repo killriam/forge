@@ -1446,8 +1446,15 @@ public class AiController {
         // sequence before falling back to heuristic decisions.
         final Map<String, List<String>> forcedSeq = game.getRules().getForcedPlaySequence();
         if (forcedSeq != null) {
+          // DIAGNOSTIC (2026-08-18): wrapped in try/catch so a silent exception here can no
+          // longer disappear without a trace - if the forced sequence appears to "stop" mid-game
+          // (no further Forced play/Scripted play skipped log lines despite many queue entries
+          // remaining), this will show what actually happened instead of nothing at all.
+          try {
             final String lobbyName = player.getLobbyPlayer().getName();
             final List<String> seq = forcedSeq.get(lobbyName);
+            LOG.info("[DIAGSEQ] Case-1 check for {}: queue={}, head={}", lobbyName,
+                    seq == null ? "null" : seq.size(), seq != null && !seq.isEmpty() ? seq.get(0) : "none");
             if (seq != null && !seq.isEmpty()) {
                 final String nextCardName = seq.get(0);
                 // Recorded sacrifice-cost target for this same queue entry, if any - popped in
@@ -1567,9 +1574,20 @@ public class AiController {
                 } else {
                     // Card not castable this priority window — soft enforcement: keep entry in
                     // queue and retry next priority window, same turn.
-                    LOG.debug("Forced play deferred (not castable): '{}' for {}", nextCardName, lobbyName);
+                    // DIAGNOSTIC (2026-08-18): temporarily promoted from debug to info, with
+                    // extra state, for the same reason as the [DIAGSEQ] trace above.
+                    LOG.info("[DIAGSEQ] Forced play deferred (not castable): '{}' for {} (queue={}, turn={}, isMyTurn={})",
+                            nextCardName, lobbyName, seq.size(), currentTurn, isMyTurn);
                 }
             }
+          } catch (final Throwable t) {
+              // DIAGNOSTIC (2026-08-18): if this fires, it explains a forced sequence that
+              // appears to silently stop advancing despite queue entries remaining - previously
+              // any such exception here would vanish without a trace. Deliberately does not
+              // rethrow: falls through to normal heuristic decision-making for this one priority
+              // window, same as "deferred", so a single bad entry can't crash the AI's turn.
+              LOG.error("[DIAGSEQ] Case-1 threw for {}", player.getLobbyPlayer().getName(), t);
+          }
         }
         // ──────────────────────────────────────────────────────────────────
 
