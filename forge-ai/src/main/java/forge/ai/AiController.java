@@ -102,20 +102,10 @@ public class AiController {
     private SpellAbilityPicker simPicker;
 
     // Forced-play-sequence "give up at end of turn" tracking (see chooseSpellAbilityToPlay):
-    // identifies which queue head we're currently retrying and which turn its current chance-
-    // round started, so a scripted entry that's still uncastable once that turn ends gets logged
-    // and skipped instead of being retried forever (unbounded soft enforcement).
+    // identifies which queue head we're currently retrying and which turn it was first seen,
+    // so a scripted entry that remains uncastable after its chance is skipped at end of turn.
     private String forcedSeqHeadCardName;
     private int forcedSeqHeadFirstSeenTurn = -1;
-    // One-time grace: true once this head has already been granted a second chance-round (see
-    // the refresh logic in chooseSpellAbilityToPlay). Without this, an entry that becomes head
-    // PARTWAY through the player's own turn - e.g. a scripted land arriving right after an
-    // earlier scripted land already used up this turn's land drop - gets judged "gave it a whole
-    // turn and it failed" the instant the player's NEXT own turn begins, even though that first
-    // turn never gave it a real chance (structurally blocked, not a genuine failure) and the next
-    // turn - where it WOULD succeed - hasn't even reached its Main Phase yet. Granting exactly one
-    // extra chance-round fixes that without reopening the window indefinitely.
-    private boolean forcedSeqHeadGotExtraChance;
     // Set immediately before returning a forced-sequence spell whose scripted entry recorded a
     // sacrifice-cost target, so chooseSacrificeType can force that exact choice instead of its
     // usual heuristic. Matched by CARD NAME, not object identity: empirically (via two rounds of
@@ -1442,65 +1432,34 @@ public class AiController {
         memory.clearMemorySet(AiCardMemory.MemorySet.HELD_MANA_SOURCES_FOR_NEXT_SPELL);
 
         // ── Forced play sequence from replay (Case 1) ─────────────────────
-        // When a replay JSON was loaded via -r, the AI follows the original play
-        // sequence before falling back to heuristic decisions.
+        // When a replay JSON was loaded via -r or scenario events, the AI follows the original
+        // play sequence before falling back to heuristic decisions.
         final Map<String, List<String>> forcedSeq = game.getRules().getForcedPlaySequence();
         if (forcedSeq != null) {
-          // DIAGNOSTIC (2026-08-18): wrapped in try/catch so a silent exception here can no
-          // longer disappear without a trace - if the forced sequence appears to "stop" mid-game
-          // (no further Forced play/Scripted play skipped log lines despite many queue entries
-          // remaining), this will show what actually happened instead of nothing at all.
           try {
             final String lobbyName = player.getLobbyPlayer().getName();
             final List<String> seq = forcedSeq.get(lobbyName);
-            LOG.info("[DIAGSEQ] Case-1 check for {}: queue={}, head={}", lobbyName,
-                    seq == null ? "null" : seq.size(), seq != null && !seq.isEmpty() ? seq.get(0) : "none");
             if (seq != null && !seq.isEmpty()) {
                 final String nextCardName = seq.get(0);
                 // Recorded sacrifice-cost target for this same queue entry, if any - popped in
                 // lockstep with seq below at every exit point (found via land, found via
-                // hand/command zone, or given up on) so the two lists never drift apart.
+                // hand/command/battlefield zone, or given up on) so the two lists never drift apart.
                 final Map<String, List<String>> forcedSac = game.getRules().getForcedPlaySequenceSacrifice();
                 final List<String> sacSeq = forcedSac != null ? forcedSac.get(lobbyName) : null;
                 final String nextSacrificeName = (sacSeq != null && !sacSeq.isEmpty()) ? sacSeq.get(0) : null;
                 final int currentTurn = game.getPhaseHandler().getTurn();
-                // Both players get priority windows on every turn, not just their own - Ai(1)
-                // still gets asked "what would you play" during Ai(2)'s turn. game.getTurn() is
-                // the *global* turn counter (increments on every player's turn), so an entry
-                // that first becomes head during an OPPONENT's turn would otherwise start its
-                // "give up" window right there - by the time this player's own turn actually
-                // begins, the global turn number has already changed, and the very first check
-                // of their own turn (often before even reaching their main phase) would
-                // immediately conclude the window expired, without this player ever having had a
-                // real chance to cast a sorcery-speed card. Gating the window's start/expiry to
-                // only this player's own turns fixes that: an entry seen for the first time
-                // off-turn doesn't start the clock, and the clock only ever expires once this
-                // player has had one full turn of their own to try it.
+                final PhaseType currentPhase = game.getPhaseHandler().getPhase();
                 final boolean isMyTurn = player.equals(game.getPhaseHandler().getPlayerTurn());
                 if (isMyTurn) {
                     if (!nextCardName.equals(forcedSeqHeadCardName)) {
-                        // New head (either the very first attempt, or we just moved past a prior
-                        // entry) - start a fresh "give up at end of turn" window for it.
                         forcedSeqHeadCardName = nextCardName;
                         forcedSeqHeadFirstSeenTurn = currentTurn;
-                        forcedSeqHeadGotExtraChance = false;
-                    } else if (currentTurn != forcedSeqHeadFirstSeenTurn && !forcedSeqHeadGotExtraChance) {
-                        // Same head has persisted into a new own-turn, and hasn't used its one
-                        // grace round yet - refresh the window (instead of letting the give-up
-                        // check below fire) so this new turn gets counted as its own fresh chance,
-                        // not instantly judged against the possibly-blocked turn it first appeared
-                        // in. See forcedSeqHeadGotExtraChance's field comment.
-                        forcedSeqHeadFirstSeenTurn = currentTurn;
-                        forcedSeqHeadGotExtraChance = true;
                     }
                 }
                 // Land drops aren't found via getSpellAbilities() below - playing a land isn't
                 // casting a hand SpellAbility the way a spell is, it's a separate Card+
                 // canPlayLand() action (see ComputerUtilAbility.getAvailableLandsToPlay(), the
-                // same mechanism normal AI land-play uses). Without this, every scripted
-                // PLAY_LAND entry would silently fail "was never castable" every single time,
-                // starving the AI of mana and cascading into failures for the genuinely-castable
-                // spells scripted after it too.
+                // same mechanism normal AI land-play uses).
                 final CardCollection availableLands = ComputerUtilAbility.getAvailableLandsToPlay(game, player);
                 if (availableLands != null) {
                     for (final Card land : availableLands) {
@@ -1517,23 +1476,13 @@ public class AiController {
                         }
                     }
                 }
-                // Also search the command zone, not just hand - a commander is cast from there
-                // (with its MayPlay-as-though-in-hand static), not from hand, so a scripted
-                // commander (re)cast - the whole point of this specific scenario, which sacrifices
-                // and recasts its commander repeatedly - would otherwise permanently fail "was
-                // never castable" the exact same way lands did before the fix above.
-                //
-                // Queried per-card via card.getAllPossibleAbilities() directly, NOT via
-                // ComputerUtilAbility.getSpellAbilities() across the whole zone: that helper's
-                // alternative-cost deduplication (built for optional alt-costs like Convoke) also
-                // strips spells with a *mandatory* additional cost - e.g. Metamorphosis
-                // ("As an additional cost..., sacrifice a creature") never appeared in its
-                // aggregated output at all, even though the same card's own
-                // getAllPossibleAbilities() call finds it fine. Since only one specific card name
-                // is being searched for here anyway, going straight to that card sidesteps the
-                // aggregation bug entirely instead of needing to fix it generally.
+                // Also search hand, command zone (commanders), battlefield (activated abilities),
+                // graveyard (flashback/retrace/escape/scavenge), and exile (adventure/foretell).
                 final CardCollection castableZoneCards = new CardCollection(player.getCardsIn(ZoneType.Hand));
                 castableZoneCards.addAll(player.getCardsIn(ZoneType.Command));
+                castableZoneCards.addAll(player.getCardsIn(ZoneType.Battlefield));
+                castableZoneCards.addAll(player.getCardsIn(ZoneType.Graveyard));
+                castableZoneCards.addAll(player.getCardsIn(ZoneType.Exile));
                 for (final Card card : castableZoneCards) {
                     if (!card.getName().equals(nextCardName)) continue;
                     for (final SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
@@ -1553,17 +1502,12 @@ public class AiController {
                         }
                     }
                 }
-                if (isMyTurn && currentTurn != forcedSeqHeadFirstSeenTurn) {
-                    // Soft enforcement gave it every priority window of the turn it first became
-                    // the head - still uncastable once the turn moved on, so give up on this one
-                    // entry (not the whole sequence) and log it for the scenario author to see,
-                    // rather than retrying it silently forever. Gated on isMyTurn for the same
-                    // reason forcedSeqHeadFirstSeenTurn's assignment above is: forcedSeqHeadCardName
-                    // may still be non-null (unchanged) during an intervening opponent's turn, and
-                    // without this guard the global turn counter having moved on since this
-                    // player's own last turn would look identical to "gave up its whole turn and
-                    // still couldn't cast it" - an opponent's turn is never this entry's turn to
-                    // lose its chance in.
+                final boolean isTurnEnding = currentPhase == PhaseType.END_OF_TURN || currentPhase == PhaseType.CLEANUP;
+                if (isMyTurn && ((currentTurn > forcedSeqHeadFirstSeenTurn && isTurnEnding) || currentTurn > forcedSeqHeadFirstSeenTurn + 2)) {
+                    // Soft enforcement: the card was uncastable throughout its initial turn and a
+                    // subsequent own-turn where both Main 1 and Main 2 have now concluded. Give up
+                    // on this one entry and log it for the scenario author to see, rather than
+                    // stalling the queue indefinitely.
                     seq.remove(0);
                     if (sacSeq != null && !sacSeq.isEmpty()) sacSeq.remove(0);
                     forcedSeqHeadCardName = null;
@@ -1572,21 +1516,12 @@ public class AiController {
                     game.getGameLog().add(GameLogEntryType.AI_DECISION, msg);
                     LOG.info(msg);
                 } else {
-                    // Card not castable this priority window — soft enforcement: keep entry in
-                    // queue and retry next priority window, same turn.
-                    // DIAGNOSTIC (2026-08-18): temporarily promoted from debug to info, with
-                    // extra state, for the same reason as the [DIAGSEQ] trace above.
-                    LOG.info("[DIAGSEQ] Forced play deferred (not castable): '{}' for {} (queue={}, turn={}, isMyTurn={})",
-                            nextCardName, lobbyName, seq.size(), currentTurn, isMyTurn);
+                    LOG.debug("Forced play deferred (not castable): '{}' for {} (queue={}, turn={}, phase={}, isMyTurn={})",
+                            nextCardName, lobbyName, seq.size(), currentTurn, currentPhase, isMyTurn);
                 }
             }
           } catch (final Throwable t) {
-              // DIAGNOSTIC (2026-08-18): if this fires, it explains a forced sequence that
-              // appears to silently stop advancing despite queue entries remaining - previously
-              // any such exception here would vanish without a trace. Deliberately does not
-              // rethrow: falls through to normal heuristic decision-making for this one priority
-              // window, same as "deferred", so a single bad entry can't crash the AI's turn.
-              LOG.error("[DIAGSEQ] Case-1 threw for {}", player.getLobbyPlayer().getName(), t);
+              LOG.error("Forced play sequence exception for {}", player.getLobbyPlayer().getName(), t);
           }
         }
         // ──────────────────────────────────────────────────────────────────

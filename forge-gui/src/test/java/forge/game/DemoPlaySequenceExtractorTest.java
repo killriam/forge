@@ -132,4 +132,38 @@ public class DemoPlaySequenceExtractorTest {
         assertEquals("Arbor Adherent", data.getAsJsonArray("targets").get(0).getAsString());
         assertEquals("The Pride of Hull Clade", data.getAsJsonArray("sacrifice").get(0).getAsString());
     }
+
+    @Test
+    public void testExtractPlayerEvents_ignoresTriggersAndOpponentEvents() throws IOException {
+        File dir = Files.createTempDirectory("demoplay-test").toFile();
+        File replayFile = new File(dir, "recording-triggers.json");
+        String raw = "{"
+                + "\"card_index\": {"
+                + "  \"c1\": {\"name\": \"Command Tower\"},"
+                + "  \"c2\": {\"name\": \"Gyre Sage\"},"
+                + "  \"c3\": {\"name\": \"Walking Bulwark\"},"
+                + "  \"c4\": {\"name\": \"Lightning Bolt\"}"
+                + "},"
+                + "\"events\": ["
+                + "  {\"i\": 1, \"t\": \"T1.MP1:1\", \"a\": \"P1\", \"type\": \"PLAY_LAND\", \"data\": {\"card\": \"c1\", \"card_name\": \"Command Tower\"}},"
+                + "  {\"i\": 2, \"t\": \"T1.MP1:2\", \"a\": \"P1\", \"type\": \"TRIGGER\", \"data\": {\"card\": \"c2\", \"card_name\": \"Gyre Sage\"}},"
+                + "  {\"i\": 3, \"t\": \"T1.MP1:3\", \"a\": \"SYS\", \"type\": \"MOVE\", \"data\": {\"card\": \"c1\"}},"
+                + "  {\"i\": 4, \"t\": \"T1.MP1:4\", \"a\": \"P2\", \"type\": \"CAST\", \"data\": {\"card\": \"c4\", \"card_name\": \"Lightning Bolt\"}},"
+                + "  {\"i\": 5, \"t\": \"T1.MP1:5\", \"a\": \"P1\", \"type\": \"ACTIVATE\", \"data\": {\"card\": \"c3\", \"card_name\": \"Walking Bulwark\"}}"
+                + "]"
+                + "}";
+        try (FileWriter fw = new FileWriter(replayFile)) {
+            fw.write(raw);
+        }
+
+        JsonArray events = DemoPlaySequenceExtractor.extractPlayerEvents(replayFile, "P1");
+
+        // Should only extract P1's PLAY_LAND (Command Tower) and ACTIVATE (Walking Bulwark)
+        // TRIGGER on Gyre Sage, MOVE on SYS, and CAST on P2 should all be ignored.
+        assertEquals(2, events.size());
+        assertEquals("PLAY_LAND", events.get(0).getAsJsonObject().get("type").getAsString());
+        assertEquals("Command Tower", events.get(0).getAsJsonObject().getAsJsonObject("data").get("card_name").getAsString());
+        assertEquals("ACTIVATE", events.get(1).getAsJsonObject().get("type").getAsString());
+        assertEquals("Walking Bulwark", events.get(1).getAsJsonObject().getAsJsonObject("data").get("card_name").getAsString());
+    }
 }

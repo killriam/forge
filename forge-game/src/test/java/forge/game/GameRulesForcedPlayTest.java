@@ -120,4 +120,47 @@ public class GameRulesForcedPlayTest {
         rules.popForcedPlayIfMatches("AI 1", "Swamp");
         assertEquals(List.of("Mountain"), rules.getForcedPlaySequence().get("AI 1"));
     }
+
+    @Test
+    public void testPopForcedPlayIfMatches_multiSeatIsolation() {
+        Map<String, List<String>> seq = new LinkedHashMap<>();
+        seq.put("Player 1", new ArrayList<>(List.of("Forest", "Sol Ring")));
+        seq.put("Player 2", new ArrayList<>(List.of("Island", "Counterspell")));
+        seq.put("Player 3", new ArrayList<>(List.of("Mountain", "Lightning Bolt")));
+        GameRules rules = rulesWithSequence(seq);
+
+        // Popping for Player 2 only modifies Player 2's sequence
+        rules.popForcedPlayIfMatches("Player 2", "Island");
+        assertEquals(List.of("Forest", "Sol Ring"), rules.getForcedPlaySequence().get("Player 1"));
+        assertEquals(List.of("Counterspell"), rules.getForcedPlaySequence().get("Player 2"));
+        assertEquals(List.of("Mountain", "Lightning Bolt"), rules.getForcedPlaySequence().get("Player 3"));
+
+        // Non-matching card for Player 1 leaves it untouched
+        rules.popForcedPlayIfMatches("Player 1", "Swamp");
+        assertEquals(List.of("Forest", "Sol Ring"), rules.getForcedPlaySequence().get("Player 1"));
+
+        // Matching card for Player 1 pops it
+        rules.popForcedPlayIfMatches("Player 1", "Forest");
+        assertEquals(List.of("Sol Ring"), rules.getForcedPlaySequence().get("Player 1"));
+    }
+
+    @Test
+    public void testPopForcedPlayIfMatches_fullSequenceDrain() {
+        Map<String, List<String>> seq = new LinkedHashMap<>();
+        seq.put("P1", new ArrayList<>(List.of("Land A", "Spell B", "Spell C")));
+        GameRules rules = rulesWithSequence(seq);
+
+        rules.popForcedPlayIfMatches("P1", "Land A");
+        assertEquals(List.of("Spell B", "Spell C"), rules.getForcedPlaySequence().get("P1"));
+
+        rules.popForcedPlayIfMatches("P1", "Spell B");
+        assertEquals(List.of("Spell C"), rules.getForcedPlaySequence().get("P1"));
+
+        rules.popForcedPlayIfMatches("P1", "Spell C");
+        assertTrue(rules.getForcedPlaySequence().get("P1").isEmpty());
+
+        // Further pops on empty list do not crash
+        rules.popForcedPlayIfMatches("P1", "Spell D");
+        assertTrue(rules.getForcedPlaySequence().get("P1").isEmpty());
+    }
 }

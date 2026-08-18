@@ -393,9 +393,11 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
         CardView hostCard = ev.sa() != null ? ev.sa().getHostCard() : null;
         if (hostCard != null) registerCardView(hostCard);
 
-        boolean isSpell = ev.sa() != null && ev.sa().isSpell();
+        forge.game.spellability.SpellAbility realSa = ev.realSa();
+        boolean isSpell = realSa != null ? realSa.isSpell() : (ev.sa() != null && ev.sa().isSpell());
+        boolean isTrigger = realSa != null ? realSa.isTrigger() : (si != null && si.isTrigger());
         boolean isAbility = si != null && si.isAbility();
-        String eventType = isSpell ? "CAST" : "ACTIVATE";
+        String eventType = isSpell ? "CAST" : (isTrigger ? "TRIGGER" : "ACTIVATE");
 
         L1Event l1 = makeEvent(actor, eventType);
         if (hostCard != null) {
@@ -429,7 +431,6 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
         // §CAST Event: cost.mana/additional/alternative, x, choices). ev.realSa() is the actual
         // SpellAbility (not just its View), so this reads real paid-cost data rather than
         // guessing from the View, which doesn't carry it.
-        forge.game.spellability.SpellAbility realSa = ev.realSa();
         if (realSa != null) {
             Map<String, Object> cost = new LinkedHashMap<>();
             cost.put("mana", ReplayNotationExporter.getManaPaid(realSa));
@@ -456,7 +457,7 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
             int[] gs = gameStats.get(actor);
             if (gs != null) gs[1]++;
             currentPlayerStats(actor).setSpellsCast(currentPlayerStats(actor).getSpellsCast() + 1);
-        } else if (isAbility) {
+        } else if (isAbility && !isTrigger) {
             currentPlayerStats(actor).setAbilitiesActivated(
                     currentPlayerStats(actor).getAbilitiesActivated() + 1);
         }
