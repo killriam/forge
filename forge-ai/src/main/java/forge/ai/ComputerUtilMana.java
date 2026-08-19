@@ -215,6 +215,12 @@ public class ComputerUtilMana {
                     return 1;
                 }
 
+                int amt1 = AbilityUtils.calculateAmount(ability1.getHostCard(), ability1.getParamOrDefault("Amount", "1"), ability1);
+                int amt2 = AbilityUtils.calculateAmount(ability2.getHostCard(), ability2.getParamOrDefault("Amount", "1"), ability2);
+                if (amt1 != amt2) {
+                    return Integer.compare(amt2, amt1);
+                }
+
                 return ability1.compareTo(ability2);
             });
 

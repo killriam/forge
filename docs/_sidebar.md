@@ -47,6 +47,7 @@
   - [Simulation & Log Analysis Guide](SIMULATION_AND_LOG_ANALYSIS_GUIDE.md)
   - [Commander Simulation Complete Guide](COMMANDER_SIMULATION_COMPLETE_GUIDE.md)
   - [Scenario Blackbox Testing Guide](SCENARIO_BLACKBOX_TESTING_GUIDE.md)
+  - [Scenario Execution Analysis (2026-08-19)](SCENARIO_EXECUTION_ANALYSIS_2026-08-19.md)
   - [Forced Play Sequence & AI Controller](FORCED_PLAY_SEQUENCE_AND_AI_CONTROLLER.md)
   - [CLI Replay](CLI-REPLAY.md)
   - [Scenario Starting Hand Format](SCENARIO_STARTING_HAND_FORMAT.md)
