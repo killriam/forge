@@ -1503,7 +1503,7 @@ public class AiController {
                     }
                 }
                 final boolean isTurnEnding = currentPhase == PhaseType.END_OF_TURN || currentPhase == PhaseType.CLEANUP;
-                if (isMyTurn && ((currentTurn > forcedSeqHeadFirstSeenTurn && isTurnEnding) || currentTurn > forcedSeqHeadFirstSeenTurn + 2)) {
+                if (isMyTurn && currentTurn > forcedSeqHeadFirstSeenTurn && isTurnEnding) {
                     // Soft enforcement: the card was uncastable throughout its initial turn and a
                     // subsequent own-turn where both Main 1 and Main 2 have now concluded. Give up
                     // on this one entry and log it for the scenario author to see, rather than
