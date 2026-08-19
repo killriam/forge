@@ -528,17 +528,41 @@ public class PlayerPanel extends FPanel {
             scenarioPickerComboBox.removeAllItems();
             scenarioPickerComboBox.addItem(SCENARIO_NONE);
             boolean anyAvailable = false;
-            if (deck != null && deck.getScenarioIds() != null && !deck.getScenarioIds().isEmpty()) {
-                for (final String token : deck.getScenarioIds().split(",")) {
-                    final String trimmed = token.trim();
-                    if (trimmed.isEmpty()) continue;
-                    final ReplayLogParser parser = ReplayLogParser.resolveScenarioByIdOrFilename(trimmed);
-                    if (parser == null) continue;
+            final Set<String> addedTokens = new java.util.HashSet<>();
+            if (deck != null) {
+                // 1. Explicit tokens from deck's Scenario= metadata
+                if (deck.getScenarioIds() != null && !deck.getScenarioIds().isEmpty()) {
+                    for (final String token : deck.getScenarioIds().split(",")) {
+                        final String trimmed = token.trim();
+                        if (trimmed.isEmpty() || !addedTokens.add(trimmed)) continue;
+                        final ReplayLogParser parser = ReplayLogParser.resolveScenarioByIdOrFilename(trimmed);
+                        if (parser == null) continue;
+                        final ScenarioInfo si = parser.getScenarioInfo();
+                        final String title = si != null && si.name != null ? si.name : trimmed;
+                        final String display = isScenarioCompatibleWithDeck(si, deck) ? title : title + " (missing cards)";
+                        scenarioPickerComboBox.addItem(new ScenarioOption(trimmed, display));
+                        anyAvailable = true;
+                    }
+                }
+                // 2. Scenarios on disk referencing this deck via scenario.deck_id
+                for (final ReplayLogParser parser : ReplayLogParser.listScenarioFiles()) {
                     final ScenarioInfo si = parser.getScenarioInfo();
-                    final String title = si != null && si.name != null ? si.name : trimmed;
-                    final String display = isScenarioCompatibleWithDeck(si, deck) ? title : title + " (missing cards)";
-                    scenarioPickerComboBox.addItem(new ScenarioOption(trimmed, display));
-                    anyAvailable = true;
+                    if (si == null) continue;
+                    final String deckId = si.deckId;
+                    if (deckId != null && !deckId.isEmpty()) {
+                        final boolean matches = deckId.equalsIgnoreCase(deck.getName())
+                                || deck.getName().contains(deckId)
+                                || deckId.contains(deck.getName());
+                        if (matches) {
+                            final String token = si.id != null && !si.id.isEmpty() ? si.id : parser.getReplayFile().getName();
+                            if (addedTokens.add(token)) {
+                                final String title = si.name != null ? si.name : token;
+                                final String display = isScenarioCompatibleWithDeck(si, deck) ? title : title + " (missing cards)";
+                                scenarioPickerComboBox.addItem(new ScenarioOption(token, display));
+                                anyAvailable = true;
+                            }
+                        }
+                    }
                 }
             }
             scenarioPickerComboBox.setSelectedItem(SCENARIO_NONE);
