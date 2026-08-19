@@ -239,9 +239,21 @@ public enum CSubmenuScenario implements ICDoc, IMenuProvider {
     }
 
     private static Deck findDeckByName(String name) {
+        if (name == null || name.isEmpty()) return null;
         Deck d = FModel.getDecks().getCommander().get(name);
         if (d != null) return d;
-        return FModel.getDecks().getConstructed().get(name);
+        d = FModel.getDecks().getConstructed().get(name);
+        if (d != null) return d;
+        // Fuzzy fallback: match by containment or case-insensitivity (e.g. stripped author prefix or date suffix)
+        for (Deck candidate : com.google.common.collect.Iterables.concat(
+                FModel.getDecks().getCommander(), FModel.getDecks().getConstructed())) {
+            if (candidate.getName().equalsIgnoreCase(name)
+                    || candidate.getName().contains(name)
+                    || name.contains(candidate.getName())) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /** A minimal, inert opponent deck (basic lands only) for scenario launches where a real deck
