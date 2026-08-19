@@ -1486,7 +1486,7 @@ public class AiController {
                 for (final Card card : castableZoneCards) {
                     if (!card.getName().equals(nextCardName)) continue;
                     for (final SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
-                        if (sa.canPlay()) {
+                        if (sa.canPlay() && ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                             seq.remove(0);
                             if (sacSeq != null && !sacSeq.isEmpty()) sacSeq.remove(0);
                             forcedSeqHeadCardName = null;
