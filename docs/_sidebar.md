@@ -4,6 +4,7 @@
   - [FAQ](Frequently-Asked-Questions.md)
   - [SteamDeck/Bazzite](Steam-Deck-and-Bazzite-Install.md)
   - [AI](ai.md)
+  - [AI Decision Making Concept](AI_DECISION_MAKING_CONCEPT.md)
   - [Network Play](network-play.md)
   - [Advanced search](Advanced-Search.md)
   - [Advanced Yield Options](Advanced-Yield-Options.md)
