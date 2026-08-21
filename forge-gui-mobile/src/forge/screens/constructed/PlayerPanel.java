@@ -878,9 +878,19 @@ public class PlayerPanel extends FContainer {
         cbTeam.setEnabled(mayEdit);
     }
 
+    // FComboBox fires its changed handler for programmatic selection too, so without these guards
+    // every network lobby update that changes a team re-enters this handler on panels the local user
+    // does not own. The wire listener drops the panel index and the server applies updates to the
+    // sender's own slot, so such an echo rewrites the SENDER's team — clients end up stomping their
+    // own seats with other players' choices until the whole lobby converges onto one team.
+    private boolean applyingTeamFromNetwork;
+
     private FEventHandler teamChangedHandler = new FEventHandler() {
         @Override
         public void handleEvent(FEvent e) {
+            if (applyingTeamFromNetwork || !mayEdit) {
+                return; //programmatic sync, or a panel this client may not speak for
+            }
             @SuppressWarnings("unchecked")
             FComboBox<Object> cb = (FComboBox<Object>)e.getSource();
             if (cb.getSelectedIndex() == -1) {
@@ -1042,6 +1052,9 @@ public class PlayerPanel extends FContainer {
     }
 
     public void setPlayerName(String string) {
+        if (txtPlayerName.isEditing()) {
+            return; //don't clobber (and cursor-reset) a name mid-typing; the commit re-syncs it
+        }
         txtPlayerName.setText(string);
     }
 
@@ -1085,7 +1098,7 @@ public class PlayerPanel extends FContainer {
 
     public Set<AIOption> getAiOptions() {
         return isSimulatedAi()
-                ? ImmutableSet.of(AIOption.USE_SIMULATION)
+                ? ImmutableSet.of(AIOption.USE_FULL_SIMULATION)
                 : Collections.emptySet();
     }
     private boolean isSimulatedAi() {
@@ -1099,14 +1112,24 @@ public class PlayerPanel extends FContainer {
         return cbTeam.getSelectedIndex();
     }
     public void setTeam(int team0) {
-        cbTeam.setSelectedIndex(team0);
+        applyingTeamFromNetwork = true;
+        try {
+            cbTeam.setSelectedIndex(team0);
+        } finally {
+            applyingTeamFromNetwork = false;
+        }
     }
 
     public int getArchenemyTeam() {
         return cbTeam.getSelectedIndex();
     }
     public void setArchenemyTeam(int team0) {
-        cbTeam.setSelectedIndex(team0);
+        applyingTeamFromNetwork = true;
+        try {
+            cbTeam.setSelectedIndex(team0);
+        } finally {
+            applyingTeamFromNetwork = false;
+        }
     }
 
     public boolean isReady() {

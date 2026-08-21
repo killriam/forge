@@ -246,7 +246,6 @@ public class AiDecisionLogger {
             case CostNotAcceptable -> "Cost too high";
             case LifeInDanger -> "Life in danger, being defensive";
             case WouldDestroyLegend -> "Would destroy own legend";
-            case WouldDestroyOtherPlaneswalker -> "Would destroy own planeswalker";
             case WouldBecomeZeroToughnessCreature -> "Would create 0-toughness creature";
             case WouldDestroyWorldEnchantment -> "Would destroy world enchantment";
             case BadEtbEffects -> "Bad enter-the-battlefield effects";

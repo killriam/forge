@@ -19,6 +19,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Clipboard;
 import forge.adventure.scene.*;
 import forge.adventure.stage.MapStage;
+import forge.adventure.stage.WorldStage;
 import forge.adventure.util.Config;
 import forge.adventure.world.WorldSave;
 import forge.animation.ForgeAnimation;
@@ -287,6 +288,24 @@ public class Forge implements ApplicationListener {
         return false;
     }
 
+    public static void setWindowFocus(boolean focused) {
+        if (SoundSystem.instance.hasWindowFocus() == focused) {
+            return;
+        }
+        SoundSystem.instance.setWindowFocus(focused);
+        if (!focused) {
+            haltControllerInput();
+        }
+    }
+
+    private static void haltControllerInput() {
+        if (!isMobileAdventureMode) {
+            return;
+        }
+        WorldStage.getInstance().stop();
+        MapStage.getInstance().stop();
+    }
+
     public static boolean lastInputWasController() {
         return lastInputWasController;
     }
@@ -472,7 +491,7 @@ public class Forge implements ApplicationListener {
     }
 
     public static void setCursor(TextureRegion textureRegion, String name) {
-        if (GuiBase.isAndroid())
+        if (GuiBase.isMobile())
             return;
         if (isMobileAdventureMode) {
             if (cursorA0 != null && Objects.equals(name, "0")) {
@@ -667,21 +686,6 @@ public class Forge implements ApplicationListener {
         Dscreens.addFirst(front);
     }
 
-    // iOS apps must not programmatically terminate (App Store guideline / HIG),
-    // so the iOS device adapter's exit()/restart() are no-ops. That left the
-    // normal exit flow stuck on the ClosingScreen, forcing the user to swipe the
-    // app away and relaunch. On iOS, return to the main menu instead so the app
-    // stays usable: adventure -> classic home (switchToClassic), classic -> home.
-    private static boolean iOSReturnToMainMenu() {
-        if (!GuiBase.isIOS())
-            return false;
-        if (isMobileAdventureMode)
-            switchToClassic();
-        else
-            openHomeDefault();
-        return true;
-    }
-
     public static void restart(boolean silent) {
         if (exited) {
             return;
@@ -689,8 +693,6 @@ public class Forge implements ApplicationListener {
 
         Consumer<Boolean> callback = result -> {
             if (result) {
-                if (iOSReturnToMainMenu())
-                    return;
                 exited = true;
                 exitAnimation(true);
             }
@@ -717,8 +719,6 @@ public class Forge implements ApplicationListener {
 
         Consumer<Integer> callback = result -> {
             if (result == 0) {
-                if (iOSReturnToMainMenu())
-                    return;
                 exited = true;
                 exitAnimation(false);
             }
@@ -1056,6 +1056,7 @@ public class Forge implements ApplicationListener {
 
     @Override
     public void pause() {
+        setWindowFocus(false);
         if (MatchController.getHostedMatch() != null) {
             MatchController.getHostedMatch().pause();
         }
@@ -1063,6 +1064,7 @@ public class Forge implements ApplicationListener {
 
     @Override
     public void resume() {
+        setWindowFocus(true);
         try {
             Texture.setAssetManager(getAssets().manager());
             needsUpdate = true;
@@ -1569,6 +1571,9 @@ public class Forge implements ApplicationListener {
                 @Override
                 public boolean buttonDown(Controller controller, int buttonIndex) {
                     //System.out.println(controller.getName()+"["+controller.getUniqueId()+"]: "+buttonIndex);
+                    if (!SoundSystem.instance.hasWindowFocus()) {
+                        return false;
+                    }
                     hasGamepad = true;
                     lastInputWasController = true;
                     translateButtons(controller, buttonIndex, true);
@@ -1577,6 +1582,9 @@ public class Forge implements ApplicationListener {
 
                 @Override
                 public boolean buttonUp(Controller controller, int buttonIndex) {
+                    if (!SoundSystem.instance.hasWindowFocus()) {
+                        return false;
+                    }
                     hasGamepad = true;
                     translateButtons(controller, buttonIndex, false);
                     return super.buttonUp(controller, buttonIndex);
@@ -1585,6 +1593,9 @@ public class Forge implements ApplicationListener {
                 @Override
                 public boolean axisMoved(Controller controller, int axisIndex, float value) {
                     //System.out.println(controller.getName()+"["+controller.getUniqueId()+"]: axis: "+axisIndex+" - "+value);
+                    if (!SoundSystem.instance.hasWindowFocus()) {
+                        return false;
+                    }
                     hasGamepad = true;
                     // Axis deadzone filters joystick drift from counting
                     if (Math.abs(value) > 0.25f) {

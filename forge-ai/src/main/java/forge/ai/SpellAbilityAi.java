@@ -76,7 +76,7 @@ public abstract class SpellAbilityAi {
         return canPlayWithoutRestrict(ai, sa);
     }
 
-    protected AiAbilityDecision canPlayWithoutRestrict(final Player ai, final SpellAbility sa) {
+    private AiAbilityDecision canPlayWithoutRestrict(final Player ai, final SpellAbility sa) {
         final Card source = sa.getHostCard();
 
         if (sa.hasParam("AILogic")) {
@@ -102,7 +102,7 @@ public abstract class SpellAbilityAi {
 
         // needs to be after API logic because needs to check possible X Cost
         final Cost cost = sa.getPayCosts();
-        if (cost != null && !willPayCosts(ai, sa, cost, source)) {
+        if (!sa.isTrigger() && cost != null && !willPayCosts(ai, sa, cost, source)) {
             return new AiAbilityDecision(0, AiPlayDecision.CostNotAcceptable);
         }
 
@@ -112,21 +112,22 @@ public abstract class SpellAbilityAi {
         if (!checkConditions(ai, sa)) {
             SpellAbility sub = sa.getSubAbility();
             if (sub == null || !checkConditions(ai, sub)) {
-                return new AiAbilityDecision(0, AiPlayDecision.NeedsToPlayCriteriaNotMet);
+                return new AiAbilityDecision(0, AiPlayDecision.ConditionsNotMet);
             }
         }
         return decision;
     }
 
     protected boolean checkConditions(final Player ai, final SpellAbility sa) {
-        // copy it to disable some checks that the AI need to check extra
-        SpellAbilityCondition con = (SpellAbilityCondition) sa.getConditions().copy();
+        SpellAbilityCondition con = sa.getConditions();
 
         // if manaspent, check if AI can pay the colored mana as cost
         if (!con.getManaSpent().isEmpty()) {
             // need to use ManaCostBeingPaid check, can't use Cost#canPay
             ManaCostBeingPaid paid = new ManaCostBeingPaid(new ManaCost(con.getManaSpent()));
             if (ComputerUtilMana.canPayManaCost(paid, sa, ai, sa.isTrigger())) {
+                // copy it to disable some checks that the AI need to check extra
+                con = (SpellAbilityCondition) con.copy();
                 con.setManaSpent("");
             }
         }
@@ -174,8 +175,7 @@ public abstract class SpellAbilityAi {
     }
 
     public final boolean doTrigger(final Player aiPlayer, final SpellAbility sa, final boolean mandatory) {
-        // this evaluation order is currently intentional as it does more stuff that helps avoiding some crashes
-        if (!ComputerUtilCost.canPayCost(sa, aiPlayer, true) && !mandatory) {
+        if (!mandatory && !(sa instanceof AbilitySub) && !ComputerUtilCost.canPayCost(sa, aiPlayer, true)) {
             return false;
         }
 
@@ -189,9 +189,16 @@ public abstract class SpellAbilityAi {
 
     public final AiAbilityDecision doTriggerNoCostWithSubs(final Player aiPlayer, final SpellAbility sa, final boolean mandatory) {
         AiAbilityDecision decision = doTriggerNoCost(aiPlayer, sa, mandatory);
+
         if (!decision.willingToPlay() && !"Always".equals(sa.getParam("AILogic"))) {
             return decision;
         }
+
+        if (decision.willingToPlay() && !mandatory && sa.getPayCosts() != null &&
+                !willPayCosts(aiPlayer, sa, sa.getPayCosts(), sa.getHostCard())) {
+            return new AiAbilityDecision(0, AiPlayDecision.CostNotAcceptable);
+        }
+
         final AbilitySub subAb = sa.getSubAbility();
         if (subAb == null) {
             if (decision.willingToPlay()) {
