@@ -1,0 +1,28 @@
+{
+  "deck_rules": {
+    "ai_guidance": {
+      "format": "mtg-ai-guidance",
+      "version": "1.0.0",
+      "role_bindings": {
+        "cards": {
+          "Runeclaw Bear": { "primary_role": "multiplier" },
+          "Ashnod's Altar": { "primary_role": "engine_core" }
+        },
+        "deployment_constraints": [
+          {
+            "id": "multiplier_requires_board",
+            "applies_to_role": "multiplier",
+            "condition": {
+              "any_of": [
+                { "field": "battlefield.roles", "op": "contains_any", "value": ["engine_core", "enabler"] },
+                { "field": "battlefield.creatures.count", "op": ">=", "value": 2 }
+              ]
+            },
+            "on_fail": "hold",
+            "reason": "Avoid deploying a multiplier onto an empty, non-functioning board."
+          }
+        ]
+      }
+    }
+  }
+}

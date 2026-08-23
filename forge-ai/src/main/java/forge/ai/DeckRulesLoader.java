@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import forge.ai.guidance.AiGuidanceProfile;
 import forge.deck.Deck;
 import forge.deck.DeckRulesConfig;
 import org.slf4j.Logger;
@@ -80,6 +81,61 @@ public final class DeckRulesLoader {
     /** Convenience overload — uses no base directory (absolute path only). */
     public static void loadIfNeeded(Deck deck) {
         loadIfNeeded(deck, null);
+    }
+
+    /**
+     * Parses the {@code deck_rules.ai_guidance} block of the same decklist-spec JSON file
+     * {@link #loadIfNeeded} already resolves via {@link Deck#getDecklistSpecPath()}, and returns
+     * it as an {@link AiGuidanceProfile}.
+     *
+     * <p>Deliberately <b>not</b> attached to {@code Deck}/{@code DeckRulesConfig} the way
+     * {@link DeckRulesConfig} itself is — {@code AiGuidanceProfile} is Gson-shaped and
+     * forge-core's {@code Deck} must stay Gson-free (see this class's own javadoc). Callers
+     * (currently only {@code AiController.initGuidanceProfile()}) hold the returned profile
+     * themselves, exactly as {@code AiController} already holds its own {@code ComboTracker}
+     * rather than storing it on {@code Deck}. Re-parses the file on every call, same as
+     * {@link #loadIfNeeded} does for {@code DeckRulesConfig} — called once per game setup, not
+     * per turn, so this is not a hot path. Returns {@code null} if there is no spec file, no
+     * {@code deck_rules.ai_guidance} block, or the file fails to parse.
+     */
+    public static AiGuidanceProfile loadAiGuidanceIfNeeded(Deck deck, File baseDir) {
+        if (deck == null) return null;
+
+        String specPath = deck.getDecklistSpecPath();
+        if (specPath == null || specPath.isEmpty()) return null;
+
+        File jsonFile = resolveSpecPath(specPath, baseDir);
+        if (jsonFile == null || !jsonFile.exists()) return null;
+
+        try {
+            return loadAiGuidanceFromFile(jsonFile);
+        } catch (Exception e) {
+            LOG.warn("Failed to load ai_guidance from {}: {}", jsonFile, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Convenience overload — uses no base directory (absolute path only). */
+    public static AiGuidanceProfile loadAiGuidanceIfNeeded(Deck deck) {
+        return loadAiGuidanceIfNeeded(deck, null);
+    }
+
+    static AiGuidanceProfile loadAiGuidanceFromFile(File file) throws IOException {
+        try (Reader reader = new FileReader(file)) {
+            JsonElement root = JsonParser.parseReader(reader);
+            if (!root.isJsonObject()) return null;
+            JsonObject rootObj = root.getAsJsonObject();
+
+            if (!rootObj.has("deck_rules") || !rootObj.get("deck_rules").isJsonObject()) return null;
+            JsonObject deckRulesObj = rootObj.getAsJsonObject("deck_rules");
+
+            if (!deckRulesObj.has("ai_guidance") || !deckRulesObj.get("ai_guidance").isJsonObject()) return null;
+
+            AiGuidanceProfile profile = AiGuidanceProfile.parse(deckRulesObj.getAsJsonObject("ai_guidance"));
+            LOG.info("Loaded ai_guidance from {} — {} card role binding(s), {} deployment constraint(s)",
+                    file.getName(), profile.cardRoleCount(), profile.deploymentConstraintCount());
+            return profile;
+        }
     }
 
     // ---- Internal ----

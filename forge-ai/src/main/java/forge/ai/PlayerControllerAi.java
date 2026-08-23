@@ -1408,6 +1408,8 @@ public class PlayerControllerAi extends PlayerController {
 
         // Initialize combo/anti-synergy tracker from deck rules (Commander Decklist Notation)
         brains.initComboTracker(myDeck);
+        // Initialize declarative ai_guidance policy (role deployment guards), if present
+        brains.initGuidanceProfile(myDeck);
 
         return brains.complainCardsCantPlayWell(myDeck);
     }
