@@ -96,6 +96,12 @@ public final class PredicateEvaluator {
                 boolean actual = target != null
                         && (target.hasKeyword("Indestructible") || target.hasKeyword("Hexproof"));
                 return actual == expected;
+            case "target.canonical_threat_tier":
+                return target != null && val != null
+                        && val.getAsString().equals(profile.canonicalThreatTierOf(target.getName()));
+            case "target.role":
+                return target != null && val != null
+                        && val.getAsString().equals(profile.roleOf(target.getName()));
             default:
                 // Fail OPEN (condition "satisfied") rather than reject the whole ai_guidance
                 // profile on one unrecognized field - matches both spec documents' documented

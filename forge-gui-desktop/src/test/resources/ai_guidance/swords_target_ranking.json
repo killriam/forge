@@ -1,0 +1,31 @@
+{
+  "deck_rules": {
+    "ai_guidance": {
+      "format": "mtg-ai-guidance",
+      "version": "1.0.0",
+      "canonical_threat_catalog": {
+        "mode": "fair_public_catalog",
+        "tier_2_engine": ["Korvold, Fae-Cursed King"]
+      },
+      "target_rankings": [
+        {
+          "id": "swords_removal_priority",
+          "source_card": "Swords to Plowshares",
+          "vetoes": [
+            {
+              "condition": { "field": "target.has_indestructible", "op": "==", "value": true },
+              "reason": "Do not expend exile removal on an indestructible permanent that combat could otherwise ignore anyway."
+            }
+          ],
+          "evaluation_ladder": [
+            {
+              "condition": { "field": "target.canonical_threat_tier", "op": "==", "value": "tier_2_engine" },
+              "score": 70,
+              "description": "Opponent engine hubs that generate compounding value"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

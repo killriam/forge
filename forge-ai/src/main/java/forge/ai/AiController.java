@@ -198,6 +198,11 @@ public class AiController {
         }
     }
 
+    /** May be {@code null} — no {@code ai_guidance} block, or {@link #initGuidanceProfile} never ran. */
+    public AiGuidanceProfile getGuidanceProfile() {
+        return guidanceProfile;
+    }
+
     public Combat getPredictedCombat() {
         if (predictedCombat == null) {
             AiAttackController aiAtk = new AiAttackController(player);

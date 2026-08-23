@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 import forge.StaticData;
+import forge.ai.guidance.AiGuidanceProfile;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.card.CardRules;
 import forge.card.CardStateName;
@@ -557,8 +558,28 @@ public class ComputerUtilCard {
     }
 
     public static Card getBestRemovalTargetAI(final Player ai, final Iterable<Card> list) {
+        return getBestRemovalTargetAI(ai, list, null);
+    }
+
+    /**
+     * As {@link #getBestRemovalTargetAI(Player, Iterable)}, but if {@code sa}'s host card has a
+     * declared {@code ai_guidance target_rankings} rule (see
+     * {@link AiGuidanceProfile#hasTargetRankingRule}), that rule's vetoes/ladder decide the
+     * target instead of {@link #evaluateRemovalTargetPriority}. {@code sa} may be {@code null}
+     * (falls back to vanilla evaluation) — most callers of the 2-arg overload above have no
+     * particular spell in mind (a generic "worst creature" query), so this is opt-in, not a
+     * silent behavior change. See forge-integration-guide.md §12.7 for which real call sites pass
+     * a non-null {@code sa} today.
+     */
+    public static Card getBestRemovalTargetAI(final Player ai, final Iterable<Card> list, final SpellAbility sa) {
         if (Iterables.isEmpty(list)) {
             return null;
+        }
+        if (sa != null && sa.getHostCard() != null && ai.getController() instanceof PlayerControllerAi pcai) {
+            AiGuidanceProfile profile = pcai.getAi().getGuidanceProfile();
+            if (profile != null && profile.hasTargetRankingRule(sa.getHostCard().getName())) {
+                return profile.chooseGuidedRemovalTarget(sa, ai, ai.getGame(), list);
+            }
         }
         return Aggregates.itemWithMax(list, c -> evaluateRemovalTargetPriority(ai, c));
     }
