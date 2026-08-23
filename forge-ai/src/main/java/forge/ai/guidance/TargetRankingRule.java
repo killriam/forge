@@ -18,16 +18,19 @@ import java.util.List;
  */
 public final class TargetRankingRule {
 
-    /** One step of {@code evaluation_ladder[]}: first matching condition (in list order) wins. */
-    public record LadderStep(JsonObject condition, int score) { }
+    /** One entry of {@code vetoes[]}: {@code reason} is the authored policy's own explanation, surfaced in L2 decision logging (forge-integration-guide.md §12.8). May be {@code null} if the author didn't write one. */
+    public record Veto(JsonObject condition, String reason) { }
+
+    /** One step of {@code evaluation_ladder[]}: first matching condition (in list order) wins. {@code description} is surfaced in L2 decision logging the same way {@link Veto#reason} is. */
+    public record LadderStep(JsonObject condition, int score, String description) { }
 
     private final String sourceCard;
-    private final List<JsonObject> vetoConditions;
+    private final List<Veto> vetoes;
     private final List<LadderStep> ladder;
 
-    TargetRankingRule(String sourceCard, List<JsonObject> vetoConditions, List<LadderStep> ladder) {
+    TargetRankingRule(String sourceCard, List<Veto> vetoes, List<LadderStep> ladder) {
         this.sourceCard = sourceCard;
-        this.vetoConditions = vetoConditions;
+        this.vetoes = vetoes;
         this.ladder = ladder;
     }
 
@@ -35,8 +38,8 @@ public final class TargetRankingRule {
         return sourceCard;
     }
 
-    public List<JsonObject> getVetoConditions() {
-        return vetoConditions;
+    public List<Veto> getVetoes() {
+        return vetoes;
     }
 
     public List<LadderStep> getLadder() {

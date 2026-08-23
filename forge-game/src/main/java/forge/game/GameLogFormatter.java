@@ -219,6 +219,15 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
     }
 
     @Override
+    public GameLogEntry visit(GameEventAiGuidanceDecision event) {
+        if (replayExporter != null) {
+            replayExporter.logGuidanceDecision(event.playerName(), event.cardName(), event.decisionType(),
+                    event.ruleId(), event.scoreDelta(), event.reason());
+        }
+        return new GameLogEntry(GameLogEntryType.AI_DECISION, event.toString());
+    }
+
+    @Override
     public GameLogEntry visit(GameEventCardModeChosen ev) {
         if (!ev.log()) {
             return null;

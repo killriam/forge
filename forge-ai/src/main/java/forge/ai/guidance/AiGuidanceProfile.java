@@ -7,6 +7,7 @@ import forge.ai.ComputerUtilCard;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
+import forge.game.event.GameEventAiGuidanceDecision;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
@@ -46,8 +47,11 @@ import java.util.Set;
  */
 public final class AiGuidanceProfile {
 
+    /** {@code condition} + the policy author's own {@code reason} text, surfaced in L2 decision logging (§12.8). */
+    private record DeploymentConstraint(JsonObject condition, String reason) { }
+
     private final Map<String, CardRoleBinding> cardRoles = new LinkedHashMap<>();
-    private final Map<String, JsonObject> deploymentConstraintsByRole = new LinkedHashMap<>();
+    private final Map<String, DeploymentConstraint> deploymentConstraintsByRole = new LinkedHashMap<>();
     private final Map<String, TargetRankingRule> targetRankingsBySourceCard = new LinkedHashMap<>();
     private final Set<String> tier1Combo = new HashSet<>();
     private final Set<String> tier2Engine = new HashSet<>();
@@ -96,9 +100,10 @@ public final class AiGuidanceProfile {
                 }
                 // "on_fail":"hold" is the only documented behavior (spec §4.3) - there is nothing
                 // else to branch on today, so it is read but intentionally not stored.
+                String reason = dc.has("reason") ? dc.get("reason").getAsString() : null;
                 profile.deploymentConstraintsByRole.put(
                         dc.get("applies_to_role").getAsString(),
-                        dc.getAsJsonObject("condition"));
+                        new DeploymentConstraint(dc.getAsJsonObject("condition"), reason));
             }
         }
     }
@@ -117,13 +122,18 @@ public final class AiGuidanceProfile {
             }
             String sourceCard = rule.get("source_card").getAsString();
 
-            List<JsonObject> vetoConditions = new ArrayList<>();
+            List<TargetRankingRule.Veto> vetoes = new ArrayList<>();
             if (rule.has("vetoes") && rule.get("vetoes").isJsonArray()) {
                 for (JsonElement v : rule.getAsJsonArray("vetoes")) {
-                    if (v.isJsonObject() && v.getAsJsonObject().has("condition")
-                            && v.getAsJsonObject().get("condition").isJsonObject()) {
-                        vetoConditions.add(v.getAsJsonObject().getAsJsonObject("condition"));
+                    if (!v.isJsonObject()) {
+                        continue;
                     }
+                    JsonObject vObj = v.getAsJsonObject();
+                    if (!vObj.has("condition") || !vObj.get("condition").isJsonObject()) {
+                        continue;
+                    }
+                    String reason = vObj.has("reason") ? vObj.get("reason").getAsString() : null;
+                    vetoes.add(new TargetRankingRule.Veto(vObj.getAsJsonObject("condition"), reason));
                 }
             }
 
@@ -137,13 +147,14 @@ public final class AiGuidanceProfile {
                     if (!step.has("condition") || !step.get("condition").isJsonObject() || !step.has("score")) {
                         continue;
                     }
+                    String description = step.has("description") ? step.get("description").getAsString() : null;
                     ladder.add(new TargetRankingRule.LadderStep(
-                            step.getAsJsonObject("condition"), step.get("score").getAsInt()));
+                            step.getAsJsonObject("condition"), step.get("score").getAsInt(), description));
                 }
             }
 
             profile.targetRankingsBySourceCard.put(sourceCard,
-                    new TargetRankingRule(sourceCard, vetoConditions, ladder));
+                    new TargetRankingRule(sourceCard, vetoes, ladder));
         }
     }
 
@@ -175,7 +186,9 @@ public final class AiGuidanceProfile {
     /**
      * True if {@code hostCard}'s declared role (if any) has no deployment constraint, or has one
      * that currently evaluates to true. False only when a constraint is declared for this card's
-     * role and it currently fails — i.e. this priority is not a legal moment to deploy it.
+     * role and it currently fails — i.e. this priority is not a legal moment to deploy it. Fires a
+     * {@link GameEventAiGuidanceDecision} (type {@code "deployment_guard_blocked"}) whenever it
+     * returns {@code false}, for L2 decision logging — see forge-integration-guide.md §12.8.
      */
     public boolean passesDeploymentGuard(Card hostCard, Player aiPlayer, Game game) {
         if (hostCard == null) {
@@ -185,11 +198,16 @@ public final class AiGuidanceProfile {
         if (role == null) {
             return true;
         }
-        JsonObject guard = deploymentConstraintsByRole.get(role);
-        if (guard == null) {
+        DeploymentConstraint constraint = deploymentConstraintsByRole.get(role);
+        if (constraint == null) {
             return true;
         }
-        return PredicateEvaluator.evaluate(guard, this, aiPlayer, game, null);
+        boolean passes = PredicateEvaluator.evaluate(constraint.condition(), this, aiPlayer, game, null);
+        if (!passes) {
+            game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), hostCard.getName(),
+                    "deployment_guard_blocked", role, null, constraint.reason()));
+        }
+        return passes;
     }
 
     /**
@@ -227,39 +245,55 @@ public final class AiGuidanceProfile {
      * @return the guided choice, or {@code null} if every candidate was vetoed
      */
     public Card chooseGuidedRemovalTarget(SpellAbility sa, Player aiPlayer, Game game, Iterable<Card> candidates) {
-        TargetRankingRule rule = targetRankingsBySourceCard.get(sa.getHostCard().getName());
+        String sourceCardName = sa.getHostCard().getName();
+        TargetRankingRule rule = targetRankingsBySourceCard.get(sourceCardName);
 
         CardCollection survivors = new CardCollection();
         for (Card c : candidates) {
-            boolean vetoed = false;
-            for (JsonObject vetoCondition : rule.getVetoConditions()) {
-                if (PredicateEvaluator.evaluate(vetoCondition, this, aiPlayer, game, c)) {
-                    vetoed = true;
+            TargetRankingRule.Veto matchedVeto = null;
+            for (TargetRankingRule.Veto veto : rule.getVetoes()) {
+                if (PredicateEvaluator.evaluate(veto.condition(), this, aiPlayer, game, c)) {
+                    matchedVeto = veto;
                     break;
                 }
             }
-            if (!vetoed) {
+            if (matchedVeto == null) {
                 survivors.add(c);
             }
         }
         if (survivors.isEmpty()) {
+            game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), sourceCardName,
+                    "target_all_vetoed", null, null,
+                    "every candidate target matched a veto condition"));
             return null;
         }
 
         Card best = null;
         int bestScore = Integer.MIN_VALUE;
+        String bestDescription = null;
         for (Card c : survivors) {
             for (TargetRankingRule.LadderStep step : rule.getLadder()) {
                 if (PredicateEvaluator.evaluate(step.condition(), this, aiPlayer, game, c)) {
                     if (step.score() > bestScore) {
                         bestScore = step.score();
                         best = c;
+                        bestDescription = step.description();
                     }
                     break; // first-matching-step-wins per candidate, spec §5.2
                 }
             }
         }
-        return best != null ? best : ComputerUtilCard.getWorstAI(survivors);
+        if (best != null) {
+            game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), best.getName(),
+                    "target_selected", bestDescription, bestScore, null));
+            return best;
+        }
+
+        Card fallback = ComputerUtilCard.getWorstAI(survivors);
+        game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), fallback.getName(),
+                "target_fallback", null, null,
+                "no evaluation_ladder step matched any non-vetoed candidate; chose by vanilla evaluation"));
+        return fallback;
     }
 
     public boolean isEmpty() {

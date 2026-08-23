@@ -140,9 +140,11 @@ public class L2Unit {
         private List<String> alternativeLines;
         private boolean keyMoment;
         private String teachingNotes;
+        private List<GuidanceDecision> guidanceDecisions;
 
         public Annotations() {
             this.alternativeLines = new ArrayList<>();
+            this.guidanceDecisions = new ArrayList<>();
         }
 
         public Object getDecisionQuality() { return decisionQuality; }
@@ -156,6 +158,44 @@ public class L2Unit {
 
         public String getTeachingNotes() { return teachingNotes; }
         public void setTeachingNotes(String teachingNotes) { this.teachingNotes = teachingNotes; }
+
+        public List<GuidanceDecision> getGuidanceDecisions() { return guidanceDecisions; }
+        public void setGuidanceDecisions(List<GuidanceDecision> guidanceDecisions) { this.guidanceDecisions = guidanceDecisions; }
+
+        /**
+         * One {@code ai_guidance} decision recorded this turn (mtg-replay-notation/spec/
+         * ai-play-guidance-spec.md, "Coaching Pipeline" — see
+         * {@code forge.game.event.GameEventAiGuidanceDecision} for the field meanings, which
+         * this mirrors exactly; kept as a separate, primitive-typed class here rather than
+         * reusing that event type directly since {@code forge.game.log.model} is a plain data
+         * model package with no dependency on {@code forge.game.event}.
+         */
+        public static class GuidanceDecision {
+            private String player;
+            private String cardName;
+            private String decisionType;
+            private String ruleId;
+            private Integer scoreDelta;
+            private String reason;
+
+            public String getPlayer() { return player; }
+            public void setPlayer(String player) { this.player = player; }
+
+            public String getCardName() { return cardName; }
+            public void setCardName(String cardName) { this.cardName = cardName; }
+
+            public String getDecisionType() { return decisionType; }
+            public void setDecisionType(String decisionType) { this.decisionType = decisionType; }
+
+            public String getRuleId() { return ruleId; }
+            public void setRuleId(String ruleId) { this.ruleId = ruleId; }
+
+            public Integer getScoreDelta() { return scoreDelta; }
+            public void setScoreDelta(Integer scoreDelta) { this.scoreDelta = scoreDelta; }
+
+            public String getReason() { return reason; }
+            public void setReason(String reason) { this.reason = reason; }
+        }
     }
 }
 

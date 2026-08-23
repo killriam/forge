@@ -1860,15 +1860,12 @@ public class AiController {
                 // ai_guidance deployment guard: e.g. don't drop a "multiplier"-role card (Doubling
                 // Season) with no active "engine_core"/"enabler" online yet. No-ops when the deck
                 // has no ai_guidance profile or this card has no declared role — see
-                // forge.ai.guidance.AiGuidanceProfile and forge-integration-guide.md §12.6.
+                // forge.ai.guidance.AiGuidanceProfile and forge-integration-guide.md §12.6/§12.8.
+                // passesDeploymentGuard() fires a GameEventAiGuidanceDecision itself when it
+                // returns false, which both produces the human-readable game-log line (via
+                // GameLogFormatter, same as AiDecisionLogger's own entries) and feeds L2 decision
+                // logging - no separate log call needed here.
                 if (guidanceProfile != null && !guidanceProfile.passesDeploymentGuard(sa.getHostCard(), player, game)) {
-                    // Not routed through AiDecisionLogger.logSkipDecision(): its isInterestingSkipReason()
-                    // whitelist would silently drop this (no AiPlayDecision value fits), and adding one
-                    // means editing that class's exhaustive switch - a bigger, unrelated blast radius
-                    // than a guidance-veto log line needs. See forge-integration-guide.md §12.6.
-                    game.getGameLog().add(GameLogEntryType.AI_DECISION,
-                            "[AI] " + player.getName() + " skips " + sa.getHostCard().getName()
-                                    + " | Reason: ai_guidance deployment guard not satisfied");
                     continue;
                 }
 

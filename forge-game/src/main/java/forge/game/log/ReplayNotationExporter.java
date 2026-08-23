@@ -62,6 +62,9 @@ public class ReplayNotationExporter {
     private final Map<String, Integer> turnAbilitiesActivated = new HashMap<>();
     private final Map<String, Integer> turnDamageDealt = new HashMap<>();
     private final Map<String, Integer> turnDamageReceived = new HashMap<>();
+    // ai_guidance decisions recorded this turn - drained into L2Unit.Annotations.guidanceDecisions
+    // in generateL2UnitForTurn(). See forge-integration-guide.md §12.8.
+    private final List<L2Unit.Annotations.GuidanceDecision> turnGuidanceDecisions = new ArrayList<>();
     // Game-wide accumulators
     private final Map<String, Integer> gameTotalCardsDrawn = new HashMap<>();
     private final Map<String, Integer> gameTotalSpellsCast = new HashMap<>();
@@ -1705,6 +1708,7 @@ public class ReplayNotationExporter {
         turnAbilitiesActivated.clear();
         turnDamageDealt.clear();
         turnDamageReceived.clear();
+        turnGuidanceDecisions.clear();
     }
 
     /**
@@ -1833,11 +1837,35 @@ public class ReplayNotationExporter {
         // Stack: empty for now (could be populated from events)
         unit.setStack(new ArrayList<>());
 
-        // Annotations: empty for now
-        unit.setAnnotations(new L2Unit.Annotations());
+        // Annotations: populated with any ai_guidance decisions recorded this turn (see
+        // logGuidanceDecision()); everything else on Annotations is still unpopulated - see
+        // forge-integration-guide.md §12.8.
+        L2Unit.Annotations annotations = new L2Unit.Annotations();
+        annotations.setGuidanceDecisions(new ArrayList<>(turnGuidanceDecisions));
+        unit.setAnnotations(annotations);
 
         // Add to replay log
         replayLog.addL2Unit(unit);
+    }
+
+    /**
+     * Records one {@code ai_guidance} decision (a deployment guard blocking a card, or a
+     * {@code target_rankings} veto/selection) for inclusion in the current turn's
+     * {@link L2Unit.Annotations#getGuidanceDecisions()}. Called from
+     * {@link forge.game.GameLogFormatter#visit(forge.game.event.GameEventAiGuidanceDecision)} —
+     * see that class for how the event reaches here, and forge-integration-guide.md §12.8 for
+     * the full design.
+     */
+    public void logGuidanceDecision(String playerName, String cardName, String decisionType,
+            String ruleId, Integer scoreDelta, String reason) {
+        L2Unit.Annotations.GuidanceDecision gd = new L2Unit.Annotations.GuidanceDecision();
+        gd.setPlayer(playerName);
+        gd.setCardName(cardName);
+        gd.setDecisionType(decisionType);
+        gd.setRuleId(ruleId);
+        gd.setScoreDelta(scoreDelta);
+        gd.setReason(reason);
+        turnGuidanceDecisions.add(gd);
     }
 
     // --- Tracking hooks called from log* methods ---
