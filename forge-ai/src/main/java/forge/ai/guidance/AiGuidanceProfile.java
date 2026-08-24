@@ -56,6 +56,7 @@ public final class AiGuidanceProfile {
     private final Set<String> tier1Combo = new HashSet<>();
     private final Set<String> tier2Engine = new HashSet<>();
     private final Set<String> tier3Stax = new HashSet<>();
+    private final List<TacticalSequence> tacticalSequences = new ArrayList<>();
 
     private AiGuidanceProfile() { }
 
@@ -73,6 +74,12 @@ public final class AiGuidanceProfile {
         }
         if (aiGuidanceRoot.has("canonical_threat_catalog") && aiGuidanceRoot.get("canonical_threat_catalog").isJsonObject()) {
             parseThreatCatalog(aiGuidanceRoot.getAsJsonObject("canonical_threat_catalog"), profile);
+        }
+        if (aiGuidanceRoot.has("play_preferences") && aiGuidanceRoot.get("play_preferences").isJsonObject()) {
+            JsonObject playPreferences = aiGuidanceRoot.getAsJsonObject("play_preferences");
+            if (playPreferences.has("tactical_sequences") && playPreferences.get("tactical_sequences").isJsonArray()) {
+                parseTacticalSequences(playPreferences.getAsJsonArray("tactical_sequences"), profile);
+            }
         }
         return profile;
     }
@@ -173,6 +180,45 @@ public final class AiGuidanceProfile {
         }
     }
 
+    private static void parseTacticalSequences(JsonArray sequences, AiGuidanceProfile profile) {
+        for (JsonElement el : sequences) {
+            if (!el.isJsonObject()) {
+                continue;
+            }
+            JsonObject seq = el.getAsJsonObject();
+            if (!seq.has("id") || !seq.has("trigger") || !seq.get("trigger").isJsonObject()) {
+                continue;
+            }
+            String id = seq.get("id").getAsString();
+            JsonObject trigger = seq.getAsJsonObject("trigger");
+            String reason = seq.has("reason") ? seq.get("reason").getAsString() : null;
+
+            // Stages are named stage_1, stage_2, ... (ai-play-guidance-spec.md §6.2's own worked
+            // example) rather than a JSON array - scan sequentially, stop at the first gap.
+            List<TacticalSequence.Stage> stages = new ArrayList<>();
+            for (int i = 1; seq.has("stage_" + i); i++) {
+                JsonObject stageObj = seq.getAsJsonObject("stage_" + i);
+                if (!stageObj.has("target_role")) {
+                    break;
+                }
+                String targetRole = stageObj.get("target_role").getAsString();
+                JsonObject abortIf = stageObj.has("abort_if") && stageObj.get("abort_if").isJsonObject()
+                        ? stageObj.getAsJsonObject("abort_if") : null;
+                String fallback = stageObj.has("fallback") ? stageObj.get("fallback").getAsString() : null;
+                stages.add(new TacticalSequence.Stage(targetRole, abortIf, fallback));
+            }
+            if (stages.isEmpty()) {
+                continue;
+            }
+
+            profile.tacticalSequences.add(new TacticalSequence(id, trigger, stages, reason));
+        }
+    }
+
+    public List<TacticalSequence> getTacticalSequences() {
+        return tacticalSequences;
+    }
+
     public CardRoleBinding getRoleBinding(String cardName) {
         return cardRoles.get(cardName);
     }
@@ -181,6 +227,11 @@ public final class AiGuidanceProfile {
     String roleOf(String cardName) {
         CardRoleBinding binding = cardRoles.get(cardName);
         return binding == null ? null : binding.getPrimaryRole();
+    }
+
+    /** True if {@code cardName}'s declared {@code primary_role} equals {@code role}. Convenience over {@link #roleOf} for callers (e.g. {@code AiController}'s tactical-sequence hook) that just need a yes/no match. */
+    public boolean cardHasRole(String cardName, String role) {
+        return role != null && role.equals(roleOf(cardName));
     }
 
     /**
@@ -297,7 +348,8 @@ public final class AiGuidanceProfile {
     }
 
     public boolean isEmpty() {
-        return cardRoles.isEmpty() && deploymentConstraintsByRole.isEmpty() && targetRankingsBySourceCard.isEmpty();
+        return cardRoles.isEmpty() && deploymentConstraintsByRole.isEmpty() && targetRankingsBySourceCard.isEmpty()
+                && tacticalSequences.isEmpty();
     }
 
     public int cardRoleCount() {

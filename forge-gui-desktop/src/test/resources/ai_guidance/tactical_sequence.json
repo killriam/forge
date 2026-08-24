@@ -1,0 +1,29 @@
+{
+  "deck_rules": {
+    "ai_guidance": {
+      "format": "mtg-ai-guidance",
+      "version": "1.0.0",
+      "role_bindings": {
+        "cards": {
+          "Elvish Visionary": { "primary_role": "enabler" },
+          "Ashnod's Altar": { "primary_role": "engine_core" }
+        }
+      },
+      "play_preferences": {
+        "tactical_sequences": [
+          {
+            "id": "bait_then_commit",
+            "trigger": { "field": "battlefield.creatures.count", "op": "==", "value": 0 },
+            "stage_1": { "target_role": "enabler" },
+            "stage_2": {
+              "target_role": "engine_core",
+              "abort_if": { "field": "opponent_open_mana", "op": ">=", "value": 4 },
+              "fallback": "pass_priority"
+            },
+            "reason": "Bait removal with the enabler before committing the engine core."
+          }
+        ]
+      }
+    }
+  }
+}

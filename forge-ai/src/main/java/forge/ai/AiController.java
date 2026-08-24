@@ -19,11 +19,13 @@ package forge.ai;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.eventbus.Subscribe;
 
 import forge.ai.AiCardMemory.MemorySet;
 import forge.ai.ability.ChangeZoneAi;
 import forge.ai.ability.LearnAi;
 import forge.ai.guidance.AiGuidanceProfile;
+import forge.ai.guidance.TacticalSequenceTracker;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.ai.simulation.OnePlaySafetyChecker;
 import forge.ai.simulation.SpellAbilityPicker;
@@ -44,6 +46,7 @@ import forge.game.card.*;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
 import forge.game.cost.*;
+import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.keyword.Keyword;
 import forge.game.mana.ManaCostBeingPaid;
 import forge.game.phase.PhaseType;
@@ -129,6 +132,8 @@ public class AiController {
     private ComboTracker comboTracker;
     /** Declarative ai_guidance policy (role deployment guards), if the deck's spec file has one. */
     private AiGuidanceProfile guidanceProfile;
+    /** Runtime progress through any in-flight ai_guidance tactical_sequences[]. */
+    private final TacticalSequenceTracker tacticalSequenceTracker = new TacticalSequenceTracker();
 
     public AiController(final Player computerPlayer, final Game game0) {
         player = computerPlayer;
@@ -195,12 +200,45 @@ public class AiController {
     public void initGuidanceProfile(Deck deck) {
         if (deck != null) {
             this.guidanceProfile = DeckRulesLoader.loadAiGuidanceIfNeeded(deck);
+            if (guidanceProfile != null && !guidanceProfile.getTacticalSequences().isEmpty()) {
+                // Only subscribe when there's something to react to - most AI players in most
+                // games have no tactical_sequences declared, and TacticalSequenceTracker.onCardCast
+                // is a no-op when nothing is active, but no reason to pay the event-dispatch cost
+                // for every card cast in the game if the profile can never use it.
+                game.subscribeToEvents(this);
+            }
         }
+    }
+
+    /**
+     * Advances any in-flight {@code ai_guidance} tactical sequence when this AI's own card is
+     * cast. Only subscribed (see {@link #initGuidanceProfile}) when the profile actually declares
+     * {@code tactical_sequences[]} — see {@code forge.ai.guidance.TacticalSequenceTracker} and
+     * forge-integration-guide.md §12.9.
+     */
+    @Subscribe
+    public void onGuidanceRelevantCast(GameEventSpellAbilityCast event) {
+        final SpellAbility realSa = event.realSa();
+        if (realSa == null || realSa.getHostCard() == null) {
+            return;
+        }
+        // event.si().getActivatingPlayer() is a PlayerView (a GUI-facing view type), which would
+        // never .equals() this.player (a real Player) even for the same seat - use realSa's own
+        // getActivatingPlayer() instead, which is Player-typed.
+        if (!player.equals(realSa.getActivatingPlayer())) {
+            return; // only this AiController's own player's casts advance its own sequence
+        }
+        tacticalSequenceTracker.onCardCast(realSa.getHostCard().getName(), guidanceProfile, player, game);
     }
 
     /** May be {@code null} — no {@code ai_guidance} block, or {@link #initGuidanceProfile} never ran. */
     public AiGuidanceProfile getGuidanceProfile() {
         return guidanceProfile;
+    }
+
+    /** For tests/diagnostics — the runtime state machine tracking any in-flight tactical_sequences[]. Never {@code null} (an inactive tracker is a valid, common state). */
+    public TacticalSequenceTracker getTacticalSequenceTracker() {
+        return tacticalSequenceTracker;
     }
 
     public Combat getPredictedCombat() {
@@ -1798,10 +1836,34 @@ public class AiController {
             //avoid ComputerUtil.aiLifeInDanger in loops as it slows down a lot.. call this outside loops will generally be fast...
             boolean isLifeInDanger = useLivingEnd && ComputerUtil.aiLifeInDanger(player, true, 0);
 
+            // ai_guidance tactical_sequences: if a scripted sequence currently wants a specific
+            // card role, and at least one of THIS priority's actual candidates has that role,
+            // steer toward it below by skipping every non-matching candidate. Soft by design: if
+            // the desired role isn't present among this priority's candidates at all (not drawn
+            // yet, already used, whatever), this stays null and normal play proceeds completely
+            // unaffected - never stalls the AI waiting on a card that isn't even here this turn.
+            // See forge.ai.guidance.TacticalSequenceTracker and forge-integration-guide.md §12.9.
+            String desiredTacticalRole = null;
+            if (guidanceProfile != null) {
+                String wantedRole = tacticalSequenceTracker.desiredRoleFor(guidanceProfile, player, game);
+                if (wantedRole != null) {
+                    for (SpellAbility check : all) {
+                        if (check.getHostCard() != null && guidanceProfile.cardHasRole(check.getHostCard().getName(), wantedRole)) {
+                            desiredTacticalRole = wantedRole;
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Collect playable alternatives for logging (up to 4: 1 chosen + 3 alternatives)
             List<SpellAbility> playableOptions = new ArrayList<>();
 
             for (final SpellAbility sa : ComputerUtilAbility.getOriginalAndAltCostAbilities(all, player)) {
+                if (desiredTacticalRole != null && (sa.getHostCard() == null
+                        || !guidanceProfile.cardHasRole(sa.getHostCard().getName(), desiredTacticalRole))) {
+                    continue;
+                }
                 // Don't add Counterspells to the "normal" playcard lookups
                 if (skipCounter && sa.getApi() == ApiType.Counter) {
                     continue;
