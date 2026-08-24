@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import forge.ai.ComputerUtilCard;
 import forge.ai.ComputerUtilMana;
 import forge.game.Game;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -177,6 +178,26 @@ public final class PredicateEvaluator {
                     }
                 }
                 return false;
+            case "target_spell.effect_types":
+                // Resolved per §12.11.4's decision: infer from the real, active SpellAbility's
+                // ApiType at cast/targeting time rather than static MaMo-side card metadata - the
+                // one already on the stack correctly reflects which mode a modal spell (Cryptic
+                // Command, etc.) actually chose, where static per-card metadata could not. A
+                // best-effort classification, not exhaustive: covers the effect types the spec's
+                // own worked examples reference (destroy/exile/bounce/counter/mass_removal/
+                // minus_x_minus_x) and nothing beyond them - see forge-integration-guide.md §12.12.
+                return targetSpell != null && compareSet(effectTypesOf(targetSpell), op, val);
+            case "state.game_stage":
+                // §12.11.1's "stage modifier overlay" decision, generic half: any existing
+                // condition (trigger, veto, ladder step, deployment guard) can gate on the current
+                // evaluation_profile stage directly, rather than this evaluator silently applying
+                // an implicit multiplier authors can't see or reason about. The multiplier half
+                // (evaluation_profile.stages.<stage>.weights scaling target_rankings ladder
+                // scores) lives in AiGuidanceProfile.chooseGuidedRemovalTarget/
+                // chooseGuidedCounterTarget instead, where a numeric score actually exists to
+                // scale - see forge-integration-guide.md §12.12.
+                String stage = profile.currentStage(game);
+                return stage != null && val != null && val.getAsString().equals(stage);
             default:
                 // Fail OPEN (condition "satisfied") rather than reject the whole ai_guidance
                 // profile on one unrecognized field - matches both spec documents' documented
@@ -207,6 +228,65 @@ public final class PredicateEvaluator {
             }
         }
         return roles;
+    }
+
+    /**
+     * Best-effort classification of {@code sa}'s effect(s) into the vocabulary
+     * ai-play-guidance-spec.md's own worked examples use (§5.1's veto example:
+     * {@code ["exile", "bounce", "minus_x_minus_x"]}). A single {@code SpellAbility} can map to
+     * more than one type (e.g. {@code Pump} with a negative toughness modifier is both
+     * {@code "minus_x_minus_x"} and, loosely, a debuff) - returns every type that applies, not
+     * just one.
+     */
+    private static Set<String> effectTypesOf(SpellAbility sa) {
+        Set<String> types = new HashSet<>();
+        ApiType api = sa.getApi();
+        if (api == null) {
+            return types;
+        }
+        switch (api) {
+            case Destroy:
+                types.add("destroy");
+                break;
+            case DestroyAll:
+                types.add("destroy");
+                types.add("mass_removal");
+                break;
+            case SacrificeAll:
+                types.add("mass_removal");
+                break;
+            case DamageAll:
+                // Board-wide damage is only "mass_removal" in intent, not guaranteed lethal to
+                // everything - a simplification, not a lethality check (would need per-creature
+                // toughness comparison against the damage amount, which the field name alone
+                // doesn't ask for).
+                types.add("mass_removal");
+                break;
+            case Counter:
+                types.add("counter");
+                break;
+            case ChangeZone:
+                String destination = sa.getParam("Destination");
+                if ("Exile".equals(destination)) {
+                    types.add("exile");
+                } else if ("Hand".equals(destination)) {
+                    types.add("bounce");
+                }
+                break;
+            case Pump:
+            case PumpAll:
+                // "-X/-X" detection is a string heuristic (does NumDef start with "-"?), not a
+                // real expression evaluation - covers the common literal/"-X" cases the spec's own
+                // examples use, not every possible SVar-driven toughness formula.
+                String numDef = sa.getParam("NumDef");
+                if (numDef != null && numDef.trim().startsWith("-")) {
+                    types.add("minus_x_minus_x");
+                }
+                break;
+            default:
+                break;
+        }
+        return types;
     }
 
     private static int maxOpponentUntappedLands(Player aiPlayer) {

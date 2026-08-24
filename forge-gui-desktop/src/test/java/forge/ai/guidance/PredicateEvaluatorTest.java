@@ -258,4 +258,63 @@ public class PredicateEvaluatorTest extends AITest {
         addCard("Runeclaw Bear", opponent);
         assertTrue(PredicateEvaluator.evaluate(ast, profile, ai, game, null));
     }
+
+    @Test
+    public void testTargetSpellEffectTypes() {
+        Game game = initAndCreateGame();
+        Player opponent = game.getPlayers().get(0);
+        AiGuidanceProfile profile = AiGuidanceProfile.parse(null);
+
+        forge.game.spellability.SpellAbility destroy = createCard("Doom Blade", opponent).getSpellAbilities().get(0);
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"target_spell.effect_types\",\"op\":\"contains\",\"value\":\"destroy\"}"),
+                profile, opponent, game, destroy));
+
+        forge.game.spellability.SpellAbility exile = createCard("Swords to Plowshares", opponent).getSpellAbilities().get(0);
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"target_spell.effect_types\",\"op\":\"contains\",\"value\":\"exile\"}"),
+                profile, opponent, game, exile));
+
+        forge.game.spellability.SpellAbility counter = createCard("Counterspell", opponent).getSpellAbilities().get(0);
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"target_spell.effect_types\",\"op\":\"contains\",\"value\":\"counter\"}"),
+                profile, opponent, game, counter));
+
+        // A vanilla creature spell has no destroy/exile/bounce/counter/mass_removal/minus_x_minus_x
+        // effect at all - effectTypesOf() should return an empty set, not guess.
+        forge.game.spellability.SpellAbility bear = createCard("Runeclaw Bear", opponent).getSpellAbilities().get(0);
+        assertFalse(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"target_spell.effect_types\",\"op\":\"contains\",\"value\":\"destroy\"}"),
+                profile, opponent, game, bear));
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"target_spell.effect_types\",\"op\":\"excludes_all\",\"value\":[\"exile\",\"bounce\",\"minus_x_minus_x\"]}"),
+                profile, opponent, game, destroy));
+    }
+
+    @Test
+    public void testStateGameStage() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+
+        JsonObject stagesJson = obj("{\"evaluation_profile\":{\"stages\":{"
+                + "\"early\":{\"turns\":[1,3],\"weights\":{}},"
+                + "\"late\":{\"turns\":[8,99],\"weights\":{}}"
+                + "}}}");
+        AiGuidanceProfile profile = AiGuidanceProfile.parse(stagesJson);
+
+        game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.MAIN1, ai, 2);
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"state.game_stage\",\"op\":\"==\",\"value\":\"early\"}"), profile, ai, game, null));
+
+        game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.MAIN1, ai, 10);
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"state.game_stage\",\"op\":\"==\",\"value\":\"late\"}"), profile, ai, game, null));
+
+        // Turn 5 falls in the gap between the two declared stages - no stage matches.
+        game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.MAIN1, ai, 5);
+        assertFalse(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"state.game_stage\",\"op\":\"==\",\"value\":\"early\"}"), profile, ai, game, null));
+        assertFalse(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"state.game_stage\",\"op\":\"==\",\"value\":\"late\"}"), profile, ai, game, null));
+    }
 }

@@ -57,6 +57,7 @@ public final class AiGuidanceProfile {
     private final Set<String> tier2Engine = new HashSet<>();
     private final Set<String> tier3Stax = new HashSet<>();
     private final List<TacticalSequence> tacticalSequences = new ArrayList<>();
+    private final List<EvaluationProfileStage> evaluationStages = new ArrayList<>();
 
     private AiGuidanceProfile() { }
 
@@ -81,7 +82,40 @@ public final class AiGuidanceProfile {
                 parseTacticalSequences(playPreferences.getAsJsonArray("tactical_sequences"), profile);
             }
         }
+        if (aiGuidanceRoot.has("evaluation_profile") && aiGuidanceRoot.get("evaluation_profile").isJsonObject()) {
+            JsonObject evaluationProfile = aiGuidanceRoot.getAsJsonObject("evaluation_profile");
+            if (evaluationProfile.has("stages") && evaluationProfile.get("stages").isJsonObject()) {
+                parseEvaluationStages(evaluationProfile.getAsJsonObject("stages"), profile);
+            }
+        }
         return profile;
+    }
+
+    private static void parseEvaluationStages(JsonObject stages, AiGuidanceProfile profile) {
+        for (Map.Entry<String, JsonElement> e : stages.entrySet()) {
+            if (!e.getValue().isJsonObject()) {
+                continue;
+            }
+            JsonObject stageObj = e.getValue().getAsJsonObject();
+            if (!stageObj.has("turns") || !stageObj.get("turns").isJsonArray()
+                    || !stageObj.has("weights") || !stageObj.get("weights").isJsonObject()) {
+                continue;
+            }
+            JsonArray turns = stageObj.getAsJsonArray("turns");
+            if (turns.size() != 2) {
+                continue;
+            }
+            int turnMin = turns.get(0).getAsInt();
+            int turnMax = turns.get(1).getAsInt();
+
+            Map<String, Double> weights = new LinkedHashMap<>();
+            for (Map.Entry<String, JsonElement> w : stageObj.getAsJsonObject("weights").entrySet()) {
+                if (w.getValue().isJsonPrimitive()) {
+                    weights.put(w.getKey(), w.getValue().getAsDouble());
+                }
+            }
+            profile.evaluationStages.add(new EvaluationProfileStage(e.getKey(), turnMin, turnMax, weights));
+        }
     }
 
     private static void parseRoleBindings(JsonObject roleBindings, AiGuidanceProfile profile) {
@@ -155,8 +189,9 @@ public final class AiGuidanceProfile {
                         continue;
                     }
                     String description = step.has("description") ? step.get("description").getAsString() : null;
+                    String dimension = step.has("dimension") ? step.get("dimension").getAsString() : null;
                     ladder.add(new TargetRankingRule.LadderStep(
-                            step.getAsJsonObject("condition"), step.get("score").getAsInt(), description));
+                            step.getAsJsonObject("condition"), step.get("score").getAsInt(), description, dimension));
                 }
             }
 
@@ -277,6 +312,55 @@ public final class AiGuidanceProfile {
         return null;
     }
 
+    /**
+     * The declared {@code evaluation_profile.stages} entry whose {@code turns} range contains the
+     * game's current turn, or {@code null} if there's no {@code evaluation_profile} at all, or the
+     * current turn falls in a gap between declared stages. Package-visible: only
+     * {@link PredicateEvaluator} needs this directly (to resolve {@code state.game_stage});
+     * {@link #stageWeightFor} is the entry point everything else should use.
+     */
+    EvaluationProfileStage currentStageEntry(Game game) {
+        int turn = game.getPhaseHandler().getTurn();
+        for (EvaluationProfileStage stage : evaluationStages) {
+            if (turn >= stage.turnMin() && turn <= stage.turnMax()) {
+                return stage;
+            }
+        }
+        return null;
+    }
+
+    /** The name of the current {@code evaluation_profile} stage (e.g. {@code "early"}/{@code "mid"}/{@code "late"}), or {@code null} — see {@link #currentStageEntry}. */
+    String currentStage(Game game) {
+        EvaluationProfileStage stage = currentStageEntry(game);
+        return stage != null ? stage.name() : null;
+    }
+
+    /**
+     * The current {@code evaluation_profile} stage's weight for {@code dimension}, or {@code 0.0}
+     * (a neutral, no-op scaling factor) if there's no {@code evaluation_profile}, the current turn
+     * matches no declared stage, or the matched stage doesn't declare a weight for this dimension.
+     * Used by {@link #chooseGuidedRemovalTarget}/{@link #chooseGuidedCounterTarget} to scale a
+     * {@link TargetRankingRule.LadderStep} that opted in via {@code dimension} — see
+     * forge-integration-guide.md §12.11.1/§12.12's "stage modifier overlay" decision.
+     */
+    double stageWeightFor(Game game, String dimension) {
+        EvaluationProfileStage stage = currentStageEntry(game);
+        return stage != null ? stage.weightFor(dimension) : 0.0;
+    }
+
+    /**
+     * {@code step}'s score, scaled by the current {@code evaluation_profile} stage's weight for
+     * its declared {@code dimension} (formula: {@code score * (1 + weight)}) — or the unscaled
+     * {@code score} unchanged if the step has no {@code dimension} (opt-in, not automatic; see
+     * {@link TargetRankingRule.LadderStep}'s own javadoc).
+     */
+    private int scaledScore(TargetRankingRule.LadderStep step, Game game) {
+        if (step.dimension() == null) {
+            return step.score();
+        }
+        return (int) Math.round(step.score() * (1.0 + stageWeightFor(game, step.dimension())));
+    }
+
     public boolean hasTargetRankingRule(String sourceCardName) {
         return sourceCardName != null && targetRankingsBySourceCard.containsKey(sourceCardName);
     }
@@ -325,8 +409,9 @@ public final class AiGuidanceProfile {
         for (Card c : survivors) {
             for (TargetRankingRule.LadderStep step : rule.getLadder()) {
                 if (PredicateEvaluator.evaluate(step.condition(), this, aiPlayer, game, c)) {
-                    if (step.score() > bestScore) {
-                        bestScore = step.score();
+                    int score = scaledScore(step, game);
+                    if (score > bestScore) {
+                        bestScore = score;
                         best = c;
                         bestDescription = step.description();
                     }
@@ -398,8 +483,9 @@ public final class AiGuidanceProfile {
         for (SpellAbility candidate : survivors) {
             for (TargetRankingRule.LadderStep step : rule.getLadder()) {
                 if (PredicateEvaluator.evaluate(step.condition(), this, aiPlayer, game, candidate)) {
-                    if (step.score() > bestScore) {
-                        bestScore = step.score();
+                    int score = scaledScore(step, game);
+                    if (score > bestScore) {
+                        bestScore = score;
                         best = candidate;
                         bestDescription = step.description();
                     }
@@ -424,7 +510,7 @@ public final class AiGuidanceProfile {
 
     public boolean isEmpty() {
         return cardRoles.isEmpty() && deploymentConstraintsByRole.isEmpty() && targetRankingsBySourceCard.isEmpty()
-                && tacticalSequences.isEmpty();
+                && tacticalSequences.isEmpty() && evaluationStages.isEmpty();
     }
 
     public int cardRoleCount() {

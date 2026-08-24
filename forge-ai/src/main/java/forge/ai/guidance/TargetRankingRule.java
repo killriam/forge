@@ -21,8 +21,17 @@ public final class TargetRankingRule {
     /** One entry of {@code vetoes[]}: {@code reason} is the authored policy's own explanation, surfaced in L2 decision logging (forge-integration-guide.md §12.8). May be {@code null} if the author didn't write one. */
     public record Veto(JsonObject condition, String reason) { }
 
-    /** One step of {@code evaluation_ladder[]}: first matching condition (in list order) wins. {@code description} is surfaced in L2 decision logging the same way {@link Veto#reason} is. */
-    public record LadderStep(JsonObject condition, int score, String description) { }
+    /**
+     * One step of {@code evaluation_ladder[]}: first matching condition (in list order) wins.
+     * {@code description} is surfaced in L2 decision logging the same way {@link Veto#reason} is.
+     * {@code dimension} is optional (may be {@code null}) — when present, it names one of
+     * ai-play-guidance-spec.md §7.1's 10 evaluation dimensions, and {@code score} is scaled by the
+     * current {@code evaluation_profile} stage's weight for that dimension before comparison
+     * (forge-integration-guide.md §12.11.1/§12.12's "stage modifier overlay" decision). A step
+     * with no {@code dimension} is unaffected by stage — the field is opt-in per step, not
+     * automatic for every ladder.
+     */
+    public record LadderStep(JsonObject condition, int score, String description, String dimension) { }
 
     private final String sourceCard;
     private final List<Veto> vetoes;

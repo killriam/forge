@@ -1,0 +1,33 @@
+{
+  "deck_rules": {
+    "ai_guidance": {
+      "format": "mtg-ai-guidance",
+      "version": "1.0.0",
+      "canonical_threat_catalog": {
+        "mode": "fair_public_catalog",
+        "tier_2_engine": ["Korvold, Fae-Cursed King"]
+      },
+      "evaluation_profile": {
+        "stages": {
+          "early": { "turns": [1, 3], "weights": { "synergy_gameplan": -0.5 } },
+          "mid": { "turns": [4, 7], "weights": { "synergy_gameplan": 0.0 } },
+          "late": { "turns": [8, 99], "weights": { "synergy_gameplan": 1.0 } }
+        }
+      },
+      "target_rankings": [
+        {
+          "id": "swords_removal_priority_staged",
+          "source_card": "Swords to Plowshares",
+          "evaluation_ladder": [
+            {
+              "condition": { "field": "target.canonical_threat_tier", "op": "==", "value": "tier_2_engine" },
+              "score": 100,
+              "dimension": "synergy_gameplan",
+              "description": "Opponent engine hubs, stage-scaled by synergy_gameplan weight"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
