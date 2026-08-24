@@ -87,6 +87,33 @@ public class AiGuidanceTargetRankingTest extends AITest {
     }
 
     @Test
+    public void targetRankingWorksForNonCreaturePermanentsToo() {
+        // §12.7.3 originally flagged non-creature targets as blocked on a nonexistent
+        // ComputerUtilCard.evaluatePermanent() — that conflated the *original spec's* proposed
+        // "decorate evaluateCreature()/evaluatePermanent()" hook (which would need it) with what
+        // this slice actually built: chooseGuidedRemovalTarget()'s veto/ladder logic is plain
+        // Card-generic (PredicateEvaluator's target.* fields don't check card type), and its
+        // vanilla-evaluation fallback is ComputerUtilCard.getWorstAI() -> getWorstPermanentAI(),
+        // which already handles any mix of creatures/artifacts/enchantments/lands. This test
+        // proves it rather than continuing to assume the caveat was accurate.
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        attachGuidance(ai, "swords_target_ranking.json");
+
+        Card altar = addCard("Ashnod's Altar", opponent); // an ARTIFACT (not a creature), tagged "engine_core" in this fixture
+        Card bear = addCard("Runeclaw Bear", opponent);    // untagged
+        CardCollection candidates = new CardCollection();
+        candidates.add(altar);
+        candidates.add(bear);
+
+        Card chosen = ComputerUtilCard.getBestRemovalTargetAI(ai, candidates, swordsToPlowshares(ai));
+
+        AssertJUnit.assertEquals("Ashnod's Altar (target.role==engine_core, +60) should be chosen over the untagged Bear",
+                altar, chosen);
+    }
+
+    @Test
     public void vetoesTheIndestructibleTargetAndTakesTheOtherOne() {
         Game game = initAndCreateGame();
         Player ai = game.getPlayers().get(1);

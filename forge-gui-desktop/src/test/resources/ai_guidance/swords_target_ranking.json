@@ -7,6 +7,11 @@
         "mode": "fair_public_catalog",
         "tier_2_engine": ["Korvold, Fae-Cursed King"]
       },
+      "role_bindings": {
+        "cards": {
+          "Ashnod's Altar": { "primary_role": "engine_core" }
+        }
+      },
       "target_rankings": [
         {
           "id": "swords_removal_priority",
@@ -22,6 +27,11 @@
               "condition": { "field": "target.canonical_threat_tier", "op": "==", "value": "tier_2_engine" },
               "score": 70,
               "description": "Opponent engine hubs that generate compounding value"
+            },
+            {
+              "condition": { "field": "target.role", "op": "==", "value": "engine_core" },
+              "score": 60,
+              "description": "Declared engine-core role, independent of the canonical threat catalog"
             }
           ]
         }

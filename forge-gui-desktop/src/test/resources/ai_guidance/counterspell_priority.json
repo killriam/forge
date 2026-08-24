@@ -1,0 +1,31 @@
+{
+  "deck_rules": {
+    "ai_guidance": {
+      "format": "mtg-ai-guidance",
+      "version": "1.0.0",
+      "canonical_threat_catalog": {
+        "mode": "fair_public_catalog",
+        "tier_1_combo": ["Thassa's Oracle"]
+      },
+      "target_rankings": [
+        {
+          "id": "counterspell_priority",
+          "source_card": "Counterspell",
+          "vetoes": [
+            {
+              "condition": { "field": "target_spell.cmc", "op": "<=", "value": 1 },
+              "reason": "Do not expend a premium counterspell on a low-impact 1-mana spell."
+            }
+          ],
+          "evaluation_ladder": [
+            {
+              "condition": { "field": "target_spell.canonical_threat_tier", "op": "==", "value": "tier_1_combo" },
+              "score": 100,
+              "description": "Immediate game-ending combo piece"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

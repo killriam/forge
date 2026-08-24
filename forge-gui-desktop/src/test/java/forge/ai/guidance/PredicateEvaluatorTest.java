@@ -176,4 +176,86 @@ public class PredicateEvaluatorTest extends AITest {
         assertTrue(PredicateEvaluator.evaluate(ast, profile, ai, game, colossus));
         assertFalse(PredicateEvaluator.evaluate(ast, profile, ai, game, bear));
     }
+
+    @Test
+    public void testHandHasRolesAllIsTheSameSetAsHandRoles() {
+        // ai-play-guidance-spec.md §6.2's bait_countermagic_sequence example uses the field name
+        // "hand.has_roles_all" (op contains_all) for exactly what §4.3's own "hand.roles" field
+        // already computes - one more field-naming disagreement between the spec's own worked
+        // examples, not two different features. See PredicateEvaluator's own class javadoc.
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        addCardToZone("Ashnod's Altar", ai, ZoneType.Hand);
+        addCardToZone("Heroic Intervention", ai, ZoneType.Hand);
+
+        JsonObject cardsJson = obj("{\"role_bindings\":{\"cards\":{"
+                + "\"Ashnod's Altar\":{\"primary_role\":\"engine_core\"},"
+                + "\"Heroic Intervention\":{\"primary_role\":\"protection\"}"
+                + "}}}");
+        AiGuidanceProfile profile = AiGuidanceProfile.parse(cardsJson);
+
+        JsonObject bothPresent = obj("{\"field\":\"hand.has_roles_all\",\"op\":\"contains_all\","
+                + "\"value\":[\"engine_core\",\"protection\"]}");
+        assertTrue(PredicateEvaluator.evaluate(bothPresent, profile, ai, game, null));
+
+        JsonObject missingOne = obj("{\"field\":\"hand.has_roles_all\",\"op\":\"contains_all\","
+                + "\"value\":[\"engine_core\",\"enabler\"]}");
+        assertFalse(PredicateEvaluator.evaluate(missingOne, profile, ai, game, null));
+    }
+
+    @Test
+    public void testResourcesAvailableMana() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        addCards("Forest", 3, ai);
+        AiGuidanceProfile profile = AiGuidanceProfile.parse(null);
+
+        assertTrue(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"resources.available_mana\",\"op\":\">=\",\"value\":3}"), profile, ai, game, null));
+        assertFalse(PredicateEvaluator.evaluate(
+                obj("{\"field\":\"resources.available_mana\",\"op\":\">=\",\"value\":4}"), profile, ai, game, null));
+    }
+
+    @Test
+    public void testTargetSpellTargetsOurRole() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        forge.game.card.Card altar = addCard("Ashnod's Altar", ai);
+
+        JsonObject cardsJson = obj("{\"role_bindings\":{\"cards\":{"
+                + "\"Ashnod's Altar\":{\"primary_role\":\"engine_core\"}"
+                + "}}}");
+        AiGuidanceProfile profile = AiGuidanceProfile.parse(cardsJson);
+
+        // A real targeted removal spell, its target set the same way DestroyAi itself does
+        // (sa.getTargets().add(card)) - reads the target off the real, resolved TargetChoices,
+        // not a guess at what the spell "would" target.
+        forge.game.spellability.SpellAbility shatter = createCard("Vandalblast", opponent).getSpellAbilities().get(0);
+        shatter.setActivatingPlayer(opponent);
+        shatter.resetTargets();
+        shatter.getTargets().add(altar);
+
+        JsonObject ast = obj("{\"field\":\"target_spell.targets_our_role\",\"op\":\"==\",\"value\":\"engine_core\"}");
+        assertTrue(PredicateEvaluator.evaluate(ast, profile, ai, game, shatter));
+
+        JsonObject wrongRole = obj("{\"field\":\"target_spell.targets_our_role\",\"op\":\"==\",\"value\":\"payoff\"}");
+        assertFalse(PredicateEvaluator.evaluate(wrongRole, profile, ai, game, shatter));
+    }
+
+    @Test
+    public void testStateSelfBoardPresenceAhead() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        AiGuidanceProfile profile = AiGuidanceProfile.parse(null);
+        JsonObject ast = obj("{\"field\":\"state.self_board_presence_ahead\",\"op\":\"==\",\"value\":true}");
+
+        // Empty board on both sides: not strictly ahead
+        assertFalse(PredicateEvaluator.evaluate(ast, profile, ai, game, null));
+
+        addCard("Grave Titan", ai);
+        addCard("Runeclaw Bear", opponent);
+        assertTrue(PredicateEvaluator.evaluate(ast, profile, ai, game, null));
+    }
 }

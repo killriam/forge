@@ -16,25 +16,40 @@ import forge.game.player.Player;
  */
 public final class TacticalSequenceTracker {
 
+    /**
+     * A stage that's been the active one for this many of the AI's own turns without advancing
+     * gets given up on (deactivated, {@code "tactical_sequence_gave_up"} fired) rather than left
+     * to starve every other candidate role indefinitely. Mirrors the existing forced-play-sequence
+     * mechanism's own turn-based give-up logic (see {@code AiController.chooseSpellAbilityToPlay()}
+     * 's {@code forcedSeqHeadFirstSeenTurn} handling) rather than inventing an unrelated policy.
+     * Not configurable per sequence today — a fixed default, not a per-JSON field; see
+     * forge-integration-guide.md §12.10.
+     */
+    static final int GIVE_UP_AFTER_OWN_TURNS = 3;
+
     private TacticalSequence activeSequence;
     private int activeStageIndex;
+    private int stageStartedTurn = -1;
 
     /**
      * Call once per priority window (not per candidate) when {@code guidanceProfile != null}. If
      * no sequence is active, scans for one whose {@code trigger} now evaluates true and activates
-     * it. If one is active, re-checks the current stage's {@code abort_if} (re-evaluated every
-     * call, per ai-play-guidance-spec.md §6.2's own "abortable priority states" framing) and
-     * deactivates if it now fires.
+     * it. If one is active: gives up on it (see {@link #GIVE_UP_AFTER_OWN_TURNS}) if the current
+     * stage has been active too long without advancing; otherwise re-checks the current stage's
+     * {@code abort_if} (re-evaluated every call, per ai-play-guidance-spec.md §6.2's own
+     * "abortable priority states" framing) and deactivates if it now fires.
      *
      * @return the {@code target_role} the AI should currently prefer, or {@code null} if no
      *         sequence is active/relevant this priority
      */
     public String desiredRoleFor(AiGuidanceProfile profile, Player aiPlayer, Game game) {
+        int currentTurn = game.getPhaseHandler().getTurn();
         if (activeSequence == null) {
             for (TacticalSequence candidate : profile.getTacticalSequences()) {
                 if (PredicateEvaluator.evaluate(candidate.getTrigger(), profile, aiPlayer, game, null)) {
                     activeSequence = candidate;
                     activeStageIndex = 0;
+                    stageStartedTurn = currentTurn;
                     game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), null,
                             "tactical_sequence_started", activeSequence.getId(), null, activeSequence.getReason()));
                     break;
@@ -43,6 +58,16 @@ public final class TacticalSequenceTracker {
             if (activeSequence == null) {
                 return null;
             }
+        }
+
+        if (currentTurn - stageStartedTurn >= GIVE_UP_AFTER_OWN_TURNS) {
+            String sequenceId = activeSequence.getId();
+            int stageNumber = activeStageIndex + 1;
+            game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), null,
+                    "tactical_sequence_gave_up", sequenceId, null,
+                    "stage " + stageNumber + " never advanced within " + GIVE_UP_AFTER_OWN_TURNS + " turns"));
+            deactivate();
+            return null;
         }
 
         TacticalSequence.Stage stage = activeSequence.getStages().get(activeStageIndex);
@@ -82,6 +107,7 @@ public final class TacticalSequenceTracker {
                     "tactical_sequence_completed", activeSequence.getId(), null, null));
             deactivate();
         } else {
+            stageStartedTurn = game.getPhaseHandler().getTurn();
             TacticalSequence.Stage nextStage = activeSequence.getStages().get(activeStageIndex);
             game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), cardName,
                     "tactical_sequence_stage_advanced", activeSequence.getId(), null,
@@ -92,6 +118,7 @@ public final class TacticalSequenceTracker {
     private void deactivate() {
         activeSequence = null;
         activeStageIndex = 0;
+        stageStartedTurn = -1;
     }
 
     /** For tests/diagnostics only — the id of the in-flight sequence, or {@code null}. */

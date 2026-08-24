@@ -347,6 +347,81 @@ public final class AiGuidanceProfile {
         return fallback;
     }
 
+    /**
+     * As {@link #chooseGuidedRemovalTarget}, but for choosing which spell on the stack to counter
+     * — a {@code target_rankings} rule for a counterspell's own {@code source_card} written with
+     * {@code target_spell.*} condition fields (ai-play-guidance-spec.md §5.2's
+     * {@code counterspell_priority} example) instead of {@code target.*}. Reuses the same
+     * {@code targetRankingsBySourceCard} map — nothing about the rule storage or lookup needs to
+     * know in advance whether a card's rule will be applied to {@code Card} or
+     * {@code SpellAbility} candidates, only the rule's own authored condition fields need to match
+     * what's actually passed to {@link PredicateEvaluator#evaluate}. See
+     * forge-integration-guide.md §12.10.
+     *
+     * <p>Falls back to the first non-vetoed survivor (in iteration order) when no ladder step
+     * matches any of them, rather than a vanilla-evaluation call like
+     * {@link #chooseGuidedRemovalTarget} does — {@code CounterAi.chooseTargetSpellAbility()}'s own
+     * vanilla "best option" comparison is an unfinished stub (a hardcoded
+     * {@code betterThanBest = false}, confirmed by reading the source — first legal candidate
+     * found always wins today), so falling back to it would not actually add anything a plain
+     * first-survivor fallback doesn't already give.</p>
+     *
+     * @return the guided choice, or {@code null} if every candidate was vetoed
+     */
+    public SpellAbility chooseGuidedCounterTarget(SpellAbility sa, Player aiPlayer, Game game, Iterable<SpellAbility> candidates) {
+        String sourceCardName = sa.getHostCard().getName();
+        TargetRankingRule rule = targetRankingsBySourceCard.get(sourceCardName);
+
+        List<SpellAbility> survivors = new ArrayList<>();
+        for (SpellAbility candidate : candidates) {
+            boolean vetoed = false;
+            for (TargetRankingRule.Veto veto : rule.getVetoes()) {
+                if (PredicateEvaluator.evaluate(veto.condition(), this, aiPlayer, game, candidate)) {
+                    vetoed = true;
+                    break;
+                }
+            }
+            if (!vetoed) {
+                survivors.add(candidate);
+            }
+        }
+        if (survivors.isEmpty()) {
+            game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), sourceCardName,
+                    "target_all_vetoed", null, null,
+                    "every candidate spell matched a veto condition"));
+            return null;
+        }
+
+        SpellAbility best = null;
+        int bestScore = Integer.MIN_VALUE;
+        String bestDescription = null;
+        for (SpellAbility candidate : survivors) {
+            for (TargetRankingRule.LadderStep step : rule.getLadder()) {
+                if (PredicateEvaluator.evaluate(step.condition(), this, aiPlayer, game, candidate)) {
+                    if (step.score() > bestScore) {
+                        bestScore = step.score();
+                        best = candidate;
+                        bestDescription = step.description();
+                    }
+                    break; // first-matching-step-wins per candidate, spec §5.2
+                }
+            }
+        }
+        if (best != null) {
+            game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(),
+                    best.getHostCard() != null ? best.getHostCard().getName() : null,
+                    "target_selected", bestDescription, bestScore, null));
+            return best;
+        }
+
+        SpellAbility fallback = survivors.get(0);
+        game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(),
+                fallback.getHostCard() != null ? fallback.getHostCard().getName() : null,
+                "target_fallback", null, null,
+                "no evaluation_ladder step matched any non-vetoed candidate; chose the first survivor"));
+        return fallback;
+    }
+
     public boolean isEmpty() {
         return cardRoles.isEmpty() && deploymentConstraintsByRole.isEmpty() && targetRankingsBySourceCard.isEmpty()
                 && tacticalSequences.isEmpty();

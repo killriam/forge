@@ -174,6 +174,33 @@ public class TacticalSequenceTrackerTest extends AITest {
     }
 
     @Test
+    public void stageThatNeverAdvancesGetsGivenUpOnAfterEnoughTurns() {
+        // Without this, a stage whose target_role never gets cast (card never drawn, say) would
+        // starve every other candidate role indefinitely for the rest of the game - see
+        // forge-integration-guide.md §12.9.3's own "sequences that never resolve" caveat, closed
+        // by this give-up timeout.
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Capture capture = new Capture();
+        game.subscribeToEvents(capture);
+        AiGuidanceProfile profile = loadProfile();
+        TacticalSequenceTracker tracker = new TacticalSequenceTracker();
+
+        game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.MAIN1, ai, 1);
+        AssertJUnit.assertEquals("enabler", tracker.desiredRoleFor(profile, ai, game)); // activates on turn 1, never advances
+
+        game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.MAIN1, ai, 1 + TacticalSequenceTracker.GIVE_UP_AFTER_OWN_TURNS - 1);
+        AssertJUnit.assertEquals("Still within the give-up window", "enabler", tracker.desiredRoleFor(profile, ai, game));
+
+        game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.MAIN1, ai, 1 + TacticalSequenceTracker.GIVE_UP_AFTER_OWN_TURNS);
+        String desired = tracker.desiredRoleFor(profile, ai, game);
+
+        AssertJUnit.assertNull("Should have given up by now", desired);
+        AssertJUnit.assertNull(tracker.getActiveSequenceId());
+        AssertJUnit.assertTrue(capture.events.stream().anyMatch(e -> "tactical_sequence_gave_up".equals(e.decisionType())));
+    }
+
+    @Test
     public void realCastAdvancesTheControllersOwnTracker() {
         Game game = initAndCreateGame();
         Player ai = game.getPlayers().get(1);

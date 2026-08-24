@@ -1,5 +1,6 @@
 package forge.ai.ability;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -8,6 +9,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import forge.ai.*;
+import forge.ai.guidance.AiGuidanceProfile;
 import forge.game.Game;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
@@ -298,6 +300,43 @@ public class CounterAi extends SpellAbilityAi {
     }
 
     public Pair<SpellAbility, Boolean> chooseTargetSpellAbility(Game game, SpellAbility sa, Player ai, boolean mandatory) {
+        // ai_guidance target_rankings for counterspells (target_spell.* condition fields,
+        // ai-play-guidance-spec.md §5.2's counterspell_priority example) - only engages when the
+        // deck's profile actually declares a rule for this counterspell's own card name, and only
+        // among the same "legitimate opponent target" candidates the vanilla loop below would
+        // itself consider (excludes uncounterable/own-stuff, matching that loop's own filtering).
+        // Falls through to the unmodified vanilla loop otherwise - see
+        // forge-integration-guide.md §12.10 for why counters, not vetoes, guard this branch.
+        if (ai.getController() instanceof PlayerControllerAi pcai) {
+            AiGuidanceProfile profile = pcai.getAi().getGuidanceProfile();
+            if (profile != null && profile.hasTargetRankingRule(sa.getHostCard().getName())) {
+                List<SpellAbility> guidedCandidates = new ArrayList<>();
+                for (SpellAbilityStackInstance guidedSi : game.getStack()) {
+                    SpellAbility candidate = guidedSi.getSpellAbility();
+                    if (!sa.canTargetSpellAbility(candidate)) {
+                        continue;
+                    }
+                    if (candidate.isSpell() && !candidate.isCounterableBy(sa)) {
+                        continue;
+                    }
+                    if (!candidate.getActivatingPlayer().isOpponentOf(ai)) {
+                        continue;
+                    }
+                    guidedCandidates.add(candidate);
+                }
+                if (!guidedCandidates.isEmpty()) {
+                    SpellAbility chosen = profile.chooseGuidedCounterTarget(sa, ai, game, guidedCandidates);
+                    if (chosen != null) {
+                        return new ImmutablePair<>(chosen, true);
+                    }
+                    // every legitimate candidate was vetoed - fall through to the vanilla loop's
+                    // own leastBadOption handling below rather than returning null outright, since
+                    // "no candidate we're willing to guidance-pick" isn't the same as "no legal
+                    // target at all" (the vetoed spells are still real, legal counter targets).
+                }
+            }
+        }
+
         SpellAbility tgtSA;
         SpellAbility leastBadOption = null;
         SpellAbility bestOption = null;
