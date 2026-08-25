@@ -33,6 +33,14 @@ public class GameEventSerializationTest {
             GameEventSubgameEnd.class
     );
 
+    // Known per-field exceptions: individual record components that intentionally
+    // hold a non-serializable engine object alongside otherwise-serializable
+    // sibling fields, for in-process consumers (e.g. AiController) that need the
+    // real object rather than the network-safe View. Never sent over the network.
+    private static final Set<String> EXCLUDED_FIELDS = Set.of(
+            "GameEventSpellAbilityCast.realSa"
+    );
+
     @Test
     public void testAllGameEventFieldsAreSerializable() throws Exception {
         List<Class<?>> eventClasses = findGameEventClasses();
@@ -49,6 +57,9 @@ public class GameEventSerializationTest {
                 continue;
             }
             for (RecordComponent rc : cls.getRecordComponents()) {
+                if (EXCLUDED_FIELDS.contains(cls.getSimpleName() + "." + rc.getName())) {
+                    continue;
+                }
                 if (!isSerializableType(rc.getGenericType())) {
                     violations.add(cls.getSimpleName() + "." + rc.getName()
                             + " has non-serializable type: " + rc.getGenericType().getTypeName());

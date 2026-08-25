@@ -74,7 +74,7 @@ public class DeckRulesConfigTest {
     @Test
     public void testFromInlineHints_Combo() {
         Set<String> hints = new LinkedHashSet<>();
-        hints.add("Combo$combo1:Doubling Season,Atraxa, Praetors' Voice");
+        hints.add("Combo$combo1:Doubling Season;Atraxa, Praetors' Voice");
 
         DeckRulesConfig config = DeckRulesConfig.fromInlineHints(hints);
         assertNotNull(config);
@@ -82,12 +82,14 @@ public class DeckRulesConfigTest {
         assertEquals(config.getCombos().size(), 1);
         assertEquals(config.getCombos().get(0).getId(), "combo1");
         assertEquals(config.getCombos().get(0).getPieces().size(), 2);
+        assertEquals(config.getCombos().get(0).getPieces().get(0), "Doubling Season");
+        assertEquals(config.getCombos().get(0).getPieces().get(1), "Atraxa, Praetors' Voice");
     }
 
     @Test
     public void testFromInlineHints_DontCombo() {
         Set<String> hints = new LinkedHashSet<>();
-        hints.add("DontCombo$dc1:Rule of Law,Thousand-Year Storm:critical");
+        hints.add("DontCombo$dc1:Rule of Law;Thousand-Year Storm:critical");
 
         DeckRulesConfig config = DeckRulesConfig.fromInlineHints(hints);
         assertNotNull(config);

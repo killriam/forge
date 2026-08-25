@@ -254,8 +254,8 @@ public class DeckRulesConfig {
      * <ul>
      *   <li>{@code MulliganThreshold$<round>:<min_value>[;<round>:<min_value>...]}
      *   <li>{@code MulliganOverride$<CardName>:<value>[;<CardName>:<value>...]}
-     *   <li>{@code Combo$<id>:<Card1>,<Card2>[,<Card3>...]}
-     *   <li>{@code DontCombo$<id>:<Card1>,<Card2>[:<severity>]}
+     *   <li>{@code Combo$<id>:<Card1>;<Card2>[;<Card3>...]}
+     *   <li>{@code DontCombo$<id>:<Card1>;<Card2>[:<severity>]}
      * </ul>
      */
     public static DeckRulesConfig fromInlineHints(java.util.Set<String> aiHints) {
@@ -327,11 +327,13 @@ public class DeckRulesConfig {
     }
 
     private static void parseCombo(DeckRulesConfig config, String value) {
-        // Format: combo_id:Card1,Card2,Card3
+        // Format: combo_id:Card1;Card2;Card3
+        // Piece separator is ';' (not ',') because real card names can contain
+        // a comma (e.g. "Atraxa, Praetors' Voice").
         int colonPos = value.indexOf(':');
         if (colonPos <= 0) return;
         String id = value.substring(0, colonPos).trim();
-        String[] pieces = value.substring(colonPos + 1).split(",");
+        String[] pieces = value.substring(colonPos + 1).split(";");
         if (pieces.length < 1) return;
 
         ComboDeclaration combo = new ComboDeclaration();
@@ -348,12 +350,14 @@ public class DeckRulesConfig {
     }
 
     private static void parseDontCombo(DeckRulesConfig config, String value) {
-        // Format: dc_id:Card1,Card2[:severity]
+        // Format: dc_id:Card1;Card2[:severity]
+        // Piece separator is ';' (not ',') because real card names can contain
+        // a comma (e.g. "Atraxa, Praetors' Voice").
         String[] segments = value.split(":");
         if (segments.length < 2) return;
 
         String id = segments[0].trim();
-        String[] pieces = segments[1].split(",");
+        String[] pieces = segments[1].split(";");
 
         AntiSynergy as = new AntiSynergy();
         as.setId(id);
