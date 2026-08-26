@@ -195,7 +195,9 @@ final class CardFace implements ICardFace, Cloneable {
                     //Rudimentary name replacement. Can't do pronouns, ability words, or flavored keywords. Need to define variant text manually for that.
                     //Regex here checks for the name following either a word boundary or a literal "\n" string, since those haven't yet been converted to line breaks.
                     String flavoredText = this.oracleText.replaceAll("(?<=\\b|\\\\n)" + this.name + "\\b", variant.flavorName);
-                    flavoredText = flavoredText.replaceAll("(?<=\\b|\\\\n)" + lang.getNickName(this.name) + "\\b", lang.getNickName(variant.flavorName));
+                    if (lang != null) {
+                        flavoredText = flavoredText.replaceAll("(?<=\\b|\\\\n)" + lang.getNickName(this.name) + "\\b", lang.getNickName(variant.flavorName));
+                    }
                     variant.oracleText = flavoredText;
                 }
                 catch (PatternSyntaxException ignored) {
