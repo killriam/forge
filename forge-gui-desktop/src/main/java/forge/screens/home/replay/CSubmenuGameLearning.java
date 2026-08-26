@@ -128,7 +128,14 @@ public enum CSubmenuGameLearning implements ICDoc, IMenuProvider {
             int life = entry.getValue();
             int hand = turn.handSizes.getOrDefault(pid, 0);
             int lib = turn.librarySizes.getOrDefault(pid, 0);
-            sb.append("  ").append(name).append(": ")
+            sb.append("  ").append(name);
+            if (currentParser != null && currentParser.getPlayers().containsKey(pid)) {
+                Integer t = currentParser.getPlayers().get(pid).team;
+                if (t != null) {
+                    sb.append(" [Team ").append(t).append("]");
+                }
+            }
+            sb.append(": ")
               .append(life).append(" life | ")
               .append("Hand: ").append(hand).append(" | ")
               .append("Library: ").append(lib).append("\n");

@@ -166,4 +166,83 @@ public class DemoPlaySequenceExtractorTest {
         assertEquals("ACTIVATE", events.get(1).getAsJsonObject().get("type").getAsString());
         assertEquals("Walking Bulwark", events.get(1).getAsJsonObject().getAsJsonObject("data").get("card_name").getAsString());
     }
+
+    @Test
+    public void testParseTeams() throws IOException {
+        File tempDir = Files.createTempDirectory("replay-team-test").toFile();
+        File jsonFile = new File(tempDir, "replay_team.json");
+        String content = "{\n" +
+                "  \"format\": \"mtg-replay\",\n" +
+                "  \"version\": \"1.9.0\",\n" +
+                "  \"meta\": {\n" +
+                "    \"game_id\": \"game-123\",\n" +
+                "    \"timestamp\": \"2026-08-24T18:19:31Z\",\n" +
+                "    \"game_type\": \"Constructed\",\n" +
+                "    \"players\": {\n" +
+                "      \"P1\": {\"name\": \"Eli\", \"team\": 1, \"is_ai\": false, \"player_type\": \"Human\", \"starting_life\": 40},\n" +
+                "      \"P2\": {\"name\": \"Erikarn\", \"team\": 2, \"is_ai\": true, \"player_type\": \"AI\", \"starting_life\": 40},\n" +
+                "      \"P3\": {\"name\": \"Ryodan\", \"team\": 2, \"is_ai\": true, \"player_type\": \"AI\", \"starting_life\": 40}\n" +
+                "    },\n" +
+                "    \"winner\": \"P1\",\n" +
+                "    \"turns\": 24\n" +
+                "  }\n" +
+                "}";
+
+        try (FileWriter fw = new FileWriter(jsonFile)) {
+            fw.write(content);
+        }
+
+        ReplayLogParser parser = new ReplayLogParser(jsonFile);
+        assertTrue(parser.parse());
+        assertTrue(parser.isTeamGame());
+
+        ReplayLogParser.PlayerInfo p1 = parser.getPlayers().get("P1");
+        assertNotNull(p1);
+        assertEquals(Integer.valueOf(1), p1.team);
+        assertEquals(0, p1.getForgeTeam());
+
+        ReplayLogParser.PlayerInfo p2 = parser.getPlayers().get("P2");
+        assertNotNull(p2);
+        assertEquals(Integer.valueOf(2), p2.team);
+        assertEquals(1, p2.getForgeTeam());
+
+        ReplayLogParser.PlayerInfo p3 = parser.getPlayers().get("P3");
+        assertNotNull(p3);
+        assertEquals(Integer.valueOf(2), p3.team);
+        assertEquals(1, p3.getForgeTeam());
+    }
+
+    @Test
+    public void testNonTeamGame() throws IOException {
+        File tempDir = Files.createTempDirectory("replay-ffa-test").toFile();
+        File jsonFile = new File(tempDir, "replay_ffa.json");
+        String content = "{\n" +
+                "  \"format\": \"mtg-replay\",\n" +
+                "  \"version\": \"1.9.0\",\n" +
+                "  \"meta\": {\n" +
+                "    \"game_id\": \"game-456\",\n" +
+                "    \"timestamp\": \"2026-08-24T18:19:31Z\",\n" +
+                "    \"game_type\": \"Constructed\",\n" +
+                "    \"players\": {\n" +
+                "      \"P1\": {\"name\": \"Alice\", \"is_ai\": false, \"player_type\": \"Human\", \"starting_life\": 20},\n" +
+                "      \"P2\": {\"name\": \"Bob\", \"is_ai\": true, \"player_type\": \"AI\", \"starting_life\": 20}\n" +
+                "    },\n" +
+                "    \"winner\": \"P1\",\n" +
+                "    \"turns\": 10\n" +
+                "  }\n" +
+                "}";
+
+        try (FileWriter fw = new FileWriter(jsonFile)) {
+            fw.write(content);
+        }
+
+        ReplayLogParser parser = new ReplayLogParser(jsonFile);
+        assertTrue(parser.parse());
+        assertFalse(parser.isTeamGame());
+
+        ReplayLogParser.PlayerInfo p1 = parser.getPlayers().get("P1");
+        assertNotNull(p1);
+        assertNull(p1.team);
+        assertEquals(-1, p1.getForgeTeam());
+    }
 }

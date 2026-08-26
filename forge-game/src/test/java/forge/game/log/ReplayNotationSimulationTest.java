@@ -371,6 +371,33 @@ public class ReplayNotationSimulationTest {
     }
 
     @Test
+    public void testTeamSerialization() {
+        ReplayLog log = new ReplayLog();
+        log.getMeta().setGameId("team-test");
+        log.getMeta().setGameType("Constructed");
+
+        ReplayMeta.PlayerMeta p1 = new ReplayMeta.PlayerMeta();
+        p1.setName("Alice");
+        p1.setTeam(1);
+        log.getMeta().getPlayers().put("P1", p1);
+
+        ReplayMeta.PlayerMeta p2 = new ReplayMeta.PlayerMeta();
+        p2.setName("Bob");
+        p2.setTeam(2);
+        log.getMeta().getPlayers().put("P2", p2);
+
+        ReplayMeta.PlayerMeta p3 = new ReplayMeta.PlayerMeta();
+        p3.setName("Charlie");
+        p3.setTeam(2);
+        log.getMeta().getPlayers().put("P3", p3);
+
+        String json = ReplayJsonSerializer.toJson(log);
+        assertNotNull(json);
+        assertTrue("Should serialize team for P1", json.contains("\"team\": 1"));
+        assertTrue("Should serialize team for P2/P3", json.contains("\"team\": 2"));
+    }
+
+    @Test
     public void testEventTypes() {
         System.out.println("\n=== Testing Event Types ===");
 

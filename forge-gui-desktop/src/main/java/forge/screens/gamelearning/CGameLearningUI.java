@@ -398,14 +398,19 @@ public enum CGameLearningUI implements ICDoc {
             firstPlayer = turn.activePlayerId;
         }
 
-        // Build deck names from parser
+        // Build deck names and teams from parser
         Map<String, String> deckNames = null;
+        Map<String, Integer> playerTeams = null;
         if (currentParser != null && currentParser.getPlayers() != null) {
             deckNames = new java.util.LinkedHashMap<>();
+            playerTeams = new java.util.LinkedHashMap<>();
             for (Map.Entry<String, ReplayLogParser.PlayerInfo> entry : currentParser.getPlayers().entrySet()) {
                 ReplayLogParser.PlayerInfo pi = entry.getValue();
                 if (pi.deckName != null && !pi.deckName.isEmpty()) {
                     deckNames.put(entry.getKey(), pi.deckName);
+                }
+                if (pi.team != null) {
+                    playerTeams.put(entry.getKey(), pi.team);
                 }
             }
         }
@@ -413,6 +418,7 @@ public enum CGameLearningUI implements ICDoc {
         view.getGameInitPanel().setGameInitInfo(
                 names,
                 deckNames,
+                playerTeams,
                 turn.handSizes,
                 playOrder,
                 firstPlayer,

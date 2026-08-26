@@ -62,6 +62,19 @@ public class GameInitPanel extends JPanel {
                                  List<String> playOrder,
                                  String firstPlayer,
                                  String firstPlayerDecision) {
+        setGameInitInfo(playerNames, deckNames, null, startingHands, playOrder, firstPlayer, firstPlayerDecision);
+    }
+
+    /**
+     * Display game initialization information with team assignments.
+     */
+    public void setGameInitInfo(Map<String, String> playerNames,
+                                 Map<String, String> deckNames,
+                                 Map<String, Integer> playerTeams,
+                                 Map<String, Integer> startingHands,
+                                 List<String> playOrder,
+                                 String firstPlayer,
+                                 String firstPlayerDecision) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("═══ PLAYERS ═══\n");
@@ -69,11 +82,18 @@ public class GameInitPanel extends JPanel {
             String pid = entry.getKey();
             String name = entry.getValue();
             String deckName = deckNames != null ? deckNames.get(pid) : null;
+            Integer team = playerTeams != null ? playerTeams.get(pid) : null;
             int handSize = startingHands != null ? startingHands.getOrDefault(pid, 7) : 7;
 
             sb.append("\n").append(name);
+            if (team != null) {
+                sb.append(" [Team ").append(team).append("]");
+            }
             if (deckName != null && !deckName.isEmpty()) {
                 sb.append(" — ").append(deckName);
+            }
+            if (team != null) {
+                sb.append("\n  Team: Team ").append(team);
             }
             sb.append("\n  Starting hand: ").append(handSize).append(" cards");
             if (pid.equals(firstPlayer)) {

@@ -116,6 +116,15 @@ public class ReplayNotationExporter {
             allPlayersOrdered.add(p);
         }
 
+        // Determine if this is a team game (i.e. at least two players share a team or variant requires teams)
+        Set<Integer> uniqueTeams = new HashSet<>();
+        for (Player p : game.getPlayers()) {
+            uniqueTeams.add(p.getTeam());
+        }
+        boolean isTeamGame = uniqueTeams.size() < game.getPlayers().size()
+                || (game.getRules() != null && (game.getRules().getGameType() == forge.game.GameType.Archenemy
+                || game.getRules().getGameType() == forge.game.GameType.ArchenemyRumble));
+
         // Add player metadata
         for (Player player : game.getPlayers()) {
             ReplayMeta.PlayerMeta playerMeta = new ReplayMeta.PlayerMeta();
@@ -126,10 +135,9 @@ public class ReplayNotationExporter {
             playerMeta.setPlayerType(player.isAI() ? "AI" : "Human");
             playerMeta.setStartingLife(player.getStartingLife());
 
-            // Team information for multiplayer team games
-            int teamNumber = player.getTeam();
-            if (teamNumber >= 0) {
-                playerMeta.setTeam(teamNumber);
+            // Team information for multiplayer team games (1-indexed per spec v1.9.0)
+            if (isTeamGame && player.getTeam() >= 0) {
+                playerMeta.setTeam(player.getTeam() + 1);
             }
             // Note: team remains null for non-team games (1v1, free-for-all)
 

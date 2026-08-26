@@ -233,13 +233,32 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             sb.append(ts);
         }
 
-        // Deck names (comma-separated)
+        // Deck names
         sb.append(" | ");
-        boolean first = true;
-        for (PlayerInfo p : parser.getPlayers().values()) {
-            if (!first) sb.append(", ");
-            sb.append(p.deckName != null ? p.deckName : "Unknown Deck");
-            first = false;
+        if (parser.isTeamGame()) {
+            Map<Integer, List<PlayerInfo>> byTeam = new LinkedHashMap<>();
+            for (PlayerInfo p : parser.getPlayers().values()) {
+                int t = p.team != null ? p.team : 1;
+                byTeam.computeIfAbsent(t, k -> new ArrayList<>()).add(p);
+            }
+            boolean firstTeam = true;
+            for (Map.Entry<Integer, List<PlayerInfo>> teamEntry : byTeam.entrySet()) {
+                if (!firstTeam) sb.append(" vs ");
+                boolean firstMember = true;
+                for (PlayerInfo member : teamEntry.getValue()) {
+                    if (!firstMember) sb.append(", ");
+                    sb.append(member.deckName != null ? member.deckName : "Unknown Deck");
+                    firstMember = false;
+                }
+                firstTeam = false;
+            }
+        } else {
+            boolean first = true;
+            for (PlayerInfo p : parser.getPlayers().values()) {
+                if (!first) sb.append(", ");
+                sb.append(p.deckName != null ? p.deckName : "Unknown Deck");
+                first = false;
+            }
         }
 
         // Turn count
@@ -258,7 +277,14 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             if (winnerId.equals(firstPlayerId)) {
                 sb.append("Win");
             } else {
-                sb.append("Loss");
+                PlayerInfo humanInfo = parser.getPlayers().get(firstPlayerId);
+                PlayerInfo winnerInfo = parser.getPlayers().get(winnerId);
+                if (humanInfo != null && winnerInfo != null && humanInfo.team != null
+                        && humanInfo.team.equals(winnerInfo.team)) {
+                    sb.append("Win");
+                } else {
+                    sb.append("Loss");
+                }
             }
         }
 
@@ -314,6 +340,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
         for (Map.Entry<String, PlayerInfo> entry : parser.getPlayers().entrySet()) {
             PlayerInfo p = entry.getValue();
             sb.append("\n").append(entry.getKey()).append(": ").append(p.name);
+            if (p.team != null) {
+                sb.append(" [Team ").append(p.team).append("]");
+            }
             if (p.deckName != null) {
                 sb.append("\n  Deck: ").append(p.deckName);
             }
@@ -325,6 +354,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             }
             sb.append("\n  Starting Life: ").append(p.startingLife);
             sb.append("\n  Type: ").append(p.isAi ? "AI" : "Human");
+            if (p.team != null) {
+                sb.append("\n  Team: Team ").append(p.team);
+            }
             if (parser.getWinner() != null && parser.getWinner().equals(entry.getKey())) {
                 sb.append(" [WINNER]");
             }
@@ -538,6 +570,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
                 }
 
                 rp.setStartingLife(pInfo.startingLife);
+                if (pInfo.team != null) {
+                    rp.setTeamNumber(pInfo.getForgeTeam());
+                }
 
                 // First player slot: human (user plays), rest: AI
                 if (playerIndex == 0) {
@@ -631,6 +666,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
                         RegisteredPlayer rp = new RegisteredPlayer(new Deck("Replay"));
                         rp.setStartingHand(0);
                         rp.setStartingLife(pInfo.startingLife);
+                        if (pInfo.team != null) {
+                            rp.setTeamNumber(pInfo.getForgeTeam());
+                        }
                         if (pIdx == 0) {
                             rp.setPlayer(GamePlayerUtil.getGuiPlayer());
                             puzzleHuman = rp;

@@ -24,9 +24,11 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Parses a replay JSON log file and extracts metadata, deck lists, and player info.
@@ -611,6 +613,21 @@ public class ReplayLogParser {
     public ScenarioInfo getScenarioInfo() { return scenarioInfo; }
 
     /**
+     * Returns true if this replay represents a team game.
+     */
+    public boolean isTeamGame() {
+        Set<Integer> teams = new HashSet<>();
+        int countWithTeam = 0;
+        for (PlayerInfo p : players.values()) {
+            if (p.team != null) {
+                teams.add(p.team);
+                countWithTeam++;
+            }
+        }
+        return countWithTeam > 0 && (teams.size() < players.size() || "Two-Headed Giant".equalsIgnoreCase(gameType));
+    }
+
+    /**
      * Scans {@code ForgeConstants.SCENARIO_DIR} for {@code *.json} files, parses each, and
      * returns only the ones that are scenarios ({@link #isScenario()}), newest first. Demo-play
      * recordings also live in this folder but are plain {@code mode: full_game} replays, so they
@@ -980,6 +997,18 @@ public class ReplayLogParser {
         public Deck deck;
         /** v1.9.0: Team number for multiplayer team games. Null for non-team games. */
         public Integer team;
+
+        /**
+         * Get 0-indexed Forge team number for RegisteredPlayer.
+         * Maps 1-indexed team (1 -> 0, 2 -> 1) or 0-indexed team (0 -> 0).
+         * Returns -1 if team is null.
+         */
+        public int getForgeTeam() {
+            if (team == null) {
+                return -1;
+            }
+            return team > 0 ? team - 1 : 0;
+        }
 
         @Override
         public String toString() {

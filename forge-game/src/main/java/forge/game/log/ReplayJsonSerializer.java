@@ -226,6 +226,9 @@ public class ReplayJsonSerializer {
             json.append(", \"is_ai\": ").append(pm.isAi());
             json.append(", \"player_type\": \"").append(escape(pm.getPlayerType() != null ? pm.getPlayerType() : "unknown")).append("\"");
             json.append(", \"starting_life\": ").append(pm.getStartingLife());
+            if (pm.getTeam() != null) {
+                json.append(", \"team\": ").append(pm.getTeam());
+            }
 
             json.append("}");
             first = false;

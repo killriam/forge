@@ -24,9 +24,11 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -123,6 +125,14 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
         meta.setTimestamp(now);
         meta.setGameType(game.getRules().getGameType().name());
 
+        Set<Integer> uniqueTeams = new HashSet<>();
+        for (Player p : players) {
+            uniqueTeams.add(p.getTeam());
+        }
+        boolean isTeamGame = uniqueTeams.size() < players.size()
+                || (game.getRules() != null && (game.getRules().getGameType() == forge.game.GameType.Archenemy
+                || game.getRules().getGameType() == forge.game.GameType.ArchenemyRumble));
+
         for (int i = 0; i < players.size(); i++) {
             Player p = players.get(i);
             String pid = "P" + (i + 1);
@@ -131,6 +141,9 @@ public class ReplayEventLogger extends IGameEventVisitor.Base<Void> {
             pm.setAi(p.getController().isAI());
             pm.setStartingLife(p.getStartingLife());
             pm.setPlayerType(pm.isAi() ? "AI" : "Human");
+            if (isTeamGame && p.getTeam() >= 0) {
+                pm.setTeam(p.getTeam() + 1);
+            }
             meta.getPlayers().put(pid, pm);
             gameStats.put(pid, new int[6]);
         }
