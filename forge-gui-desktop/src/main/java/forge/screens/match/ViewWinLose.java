@@ -281,7 +281,8 @@ public class ViewWinLose implements IWinLoseView<FButton> {
     }
 
     /**
-     * When playing in Replay Mode, show the original game's outcome alongside the current result.
+     * When playing in Replay Mode, show the original game's outcome alongside the current result
+     * and persist the outcome back to the replay log.
      */
     private void showReplayComparison() {
         String replayLogPath = game.getGame().getRules().getReplayLogPath();
@@ -299,14 +300,74 @@ public class ViewWinLose implements IWinLoseView<FButton> {
             }
 
             String currentWinner = game.getWinningPlayerName();
+            int currentWinningTeam = game.getWinningTeam();
+            int currentTurns = game.getGame().getOutcome() != null ? game.getGame().getOutcome().getLastTurnNumber()
+                    : game.getGame().getPhaseHandler().getTurn();
+            Integer originalTurns = parser.getTurns();
 
-            StringBuilder sb = new StringBuilder("Original game: ");
-            sb.append(originalWinnerName != null ? originalWinnerName + " won" : "draw");
+            // Determine if human player (P1) won this replay
+            String humanPlayerId = parser.getPlayers().isEmpty() ? "P1" : parser.getPlayers().keySet().iterator().next();
+            ReplayLogParser.PlayerInfo humanInfo = parser.getPlayers().get(humanPlayerId);
+            boolean humanWon = false;
+            boolean isDraw = (currentWinner == null || currentWinner.isEmpty())
+                    || (game.getGame().getOutcome() != null && game.getGame().getOutcome().isDraw());
+
+            if (!isDraw) {
+                if (humanInfo != null && currentWinner != null && humanInfo.name.equals(currentWinner)) {
+                    humanWon = true;
+                } else if (humanInfo != null && humanInfo.team != null && currentWinningTeam != -1
+                        && humanInfo.getForgeTeam() == currentWinningTeam) {
+                    humanWon = true;
+                }
+            }
+
+            String replayedOutcome = isDraw ? "draw" : (humanWon ? "win" : "loss");
+            String replayedWinnerId;
+            if (isDraw) {
+                replayedWinnerId = "draw";
+            } else if (humanWon) {
+                replayedWinnerId = humanPlayerId;
+            } else {
+                replayedWinnerId = null;
+                for (Map.Entry<String, ReplayLogParser.PlayerInfo> pe : parser.getPlayers().entrySet()) {
+                    if (currentWinner != null && currentWinner.equals(pe.getValue().name)) {
+                        replayedWinnerId = pe.getKey();
+                        break;
+                    }
+                }
+                if (replayedWinnerId == null) {
+                    replayedWinnerId = "P2";
+                }
+            }
+
+            // Persist the replay outcome to the original replay log
+            parser.recordReplayResult(replayedWinnerId, replayedOutcome, currentTurns);
+
+            // Build display comparison
+            StringBuilder sb = new StringBuilder("Original: ");
+            boolean origLoss = parser.isOriginalLoss();
+            sb.append(originalWinnerName != null ? (origLoss ? "Loss" : "Win") : "Draw");
+            if (originalTurns != null) {
+                sb.append(" (").append(originalTurns).append(" turns)");
+            }
             sb.append("  |  This replay: ");
-            sb.append((currentWinner != null && !currentWinner.isEmpty()) ? currentWinner + " won" : "draw");
+            sb.append(humanWon ? "Win" : (isDraw ? "Draw" : "Loss"));
+            sb.append(" (").append(currentTurns).append(" turns)");
 
-            boolean different = !java.util.Objects.equals(originalWinnerName, currentWinner);
-            if (different) sb.append("  \u2605 Different outcome!");
+            if (origLoss && humanWon) {
+                sb.append("  ★ Turned Loss into Win!");
+            } else if (origLoss && !humanWon && !isDraw && originalTurns != null) {
+                int diff = currentTurns - originalTurns;
+                if (diff > 0) {
+                    sb.append("  (Survived +").append(diff).append(" more turns)");
+                } else if (diff < 0) {
+                    sb.append("  (").append(Math.abs(diff)).append(" fewer turns)");
+                } else {
+                    sb.append("  (Same turn count)");
+                }
+            } else if (!java.util.Objects.equals(originalWinnerName, currentWinner)) {
+                sb.append("  ★ Different outcome!");
+            }
 
             pnlOutcomes.add(new FLabel.Builder().text(sb.toString()).fontSize(12).build(), "h 20!");
         } catch (Exception ignored) {

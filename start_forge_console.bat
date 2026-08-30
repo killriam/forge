@@ -3,7 +3,7 @@ REM Setze das Arbeitsverzeichnis auf forge-gui-desktop, damit ../forge-gui/ korr
 cd /d "%~dp0forge-gui-desktop"
 
 REM Suche das gebaute jar
-for /f "delims=" %%i in ('dir /b "target\forge-gui-desktop-*-SNAPSHOT-jar-with-dependencies.jar" 2^>nul') do set JAR=%%i
+for /f "delims=" %%i in ('dir /b "target\forge-gui-desktop-*-jar-with-dependencies.jar" 2^>nul') do set JAR=%%i
 
 if "%JAR%"=="" (
     echo FEHLER: Kein gebautes jar in forge-gui-desktop\target\ gefunden.

@@ -269,18 +269,21 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
         // Outcome for the user (first player = P1)
         sb.append(" | ");
         String winnerId = parser.getWinner();
+        boolean originalWin = false;
         if (winnerId == null) {
             sb.append("Unknown");
         } else {
             // The first player key is the human player
             String firstPlayerId = parser.getPlayers().keySet().iterator().next();
             if (winnerId.equals(firstPlayerId)) {
+                originalWin = true;
                 sb.append("Win");
             } else {
                 PlayerInfo humanInfo = parser.getPlayers().get(firstPlayerId);
                 PlayerInfo winnerInfo = parser.getPlayers().get(winnerId);
                 if (humanInfo != null && winnerInfo != null && humanInfo.team != null
                         && humanInfo.team.equals(winnerInfo.team)) {
+                    originalWin = true;
                     sb.append("Win");
                 } else {
                     sb.append("Loss");
@@ -290,7 +293,25 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
 
         // Mark games that have already been replayed
         if (parser.isReplayed()) {
-            sb.append(" [Replayed]");
+            if (!originalWin && parser.isReplayWon()) {
+                sb.append(" → Win [Replayed]");
+            } else if (parser.getReplayedOutcome() != null) {
+                if ("loss".equalsIgnoreCase(parser.getReplayedOutcome())) {
+                    if (parser.getReplayedTurns() != null) {
+                        sb.append(" [Replayed: Loss, ").append(parser.getReplayedTurns()).append(" turns]");
+                    } else {
+                        sb.append(" [Replayed: Loss]");
+                    }
+                } else if ("win".equalsIgnoreCase(parser.getReplayedOutcome())) {
+                    sb.append(" [Replayed: Win]");
+                } else if ("draw".equalsIgnoreCase(parser.getReplayedOutcome())) {
+                    sb.append(" [Replayed: Draw]");
+                } else {
+                    sb.append(" [Replayed]");
+                }
+            } else {
+                sb.append(" [Replayed]");
+            }
         }
 
         return sb.toString();
@@ -361,6 +382,49 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
                 sb.append(" [WINNER]");
             }
             sb.append("\n");
+        }
+
+        if (parser.isReplayed()) {
+            sb.append("\n--- Replay Statistics ---\n");
+            if (parser.getReplayedAt() != null) {
+                sb.append("Replayed At: ").append(parser.getReplayedAt().replace("T", " ").replace("Z", "")).append("\n");
+            }
+            if (parser.getReplayedOutcome() != null) {
+                boolean origLoss = parser.isOriginalLoss();
+                boolean repWon = parser.isReplayWon();
+                String repOutcomeText = parser.getReplayedOutcome().toUpperCase();
+                sb.append("Replay Result: ").append(repOutcomeText);
+                if (parser.getReplayedTurns() != null) {
+                    sb.append(" (Turn ").append(parser.getReplayedTurns()).append(")");
+                }
+                if (origLoss && repWon) {
+                    sb.append("  ★ Turned Loss into Win!");
+                }
+                sb.append("\n");
+
+                sb.append("\nTurn Comparison:\n");
+                sb.append("  • Original Game: ").append(parser.getTurns() != null ? parser.getTurns() : "?")
+                  .append(" turns (").append(origLoss ? "Loss" : "Win").append(")\n");
+                sb.append("  • Replayed Game: ").append(parser.getReplayedTurns() != null ? parser.getReplayedTurns() : "?")
+                  .append(" turns (").append(repWon ? "Win" : repOutcomeText).append(")\n");
+
+                if (parser.getTurns() != null && parser.getReplayedTurns() != null) {
+                    int diff = parser.getReplayedTurns() - parser.getTurns();
+                    if (diff > 0) {
+                        sb.append("  • Difference:    +").append(diff).append(" turns");
+                        if (origLoss && !repWon) {
+                            sb.append(" (survived longer)");
+                        }
+                    } else if (diff < 0) {
+                        sb.append("  • Difference:    ").append(diff).append(" turns");
+                    } else {
+                        sb.append("  • Difference:    Same turn count (").append(parser.getTurns()).append(" turns)");
+                    }
+                    sb.append("\n");
+                }
+            } else {
+                sb.append("Status: Replayed (Outcome not recorded)\n");
+            }
         }
 
         sb.append("\n--- Replay Mode ---\n");

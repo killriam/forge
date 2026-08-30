@@ -245,4 +245,90 @@ public class DemoPlaySequenceExtractorTest {
         assertNull(p1.team);
         assertEquals(-1, p1.getForgeTeam());
     }
+
+    @Test
+    public void testReplayOutcomeFields() throws IOException {
+        File tempDir = Files.createTempDirectory("replay-outcome-test").toFile();
+        File jsonFile = new File(tempDir, "replay_outcome.json");
+        String content = "{\n" +
+                "  \"format\": \"mtg-replay\",\n" +
+                "  \"version\": \"1.9.0\",\n" +
+                "  \"meta\": {\n" +
+                "    \"game_id\": \"game-789\",\n" +
+                "    \"timestamp\": \"2026-08-24T18:19:31Z\",\n" +
+                "    \"game_type\": \"Constructed\",\n" +
+                "    \"players\": {\n" +
+                "      \"P1\": {\"name\": \"Alice\", \"is_ai\": false, \"player_type\": \"Human\", \"starting_life\": 20},\n" +
+                "      \"P2\": {\"name\": \"Bob\", \"is_ai\": true, \"player_type\": \"AI\", \"starting_life\": 20}\n" +
+                "    },\n" +
+                "    \"winner\": \"P2\",\n" +
+                "    \"turns\": 24,\n" +
+                "    \"replayed_at\": \"2026-08-30T14:15:00Z\",\n" +
+                "    \"replayed_winner\": \"P1\",\n" +
+                "    \"replayed_outcome\": \"win\",\n" +
+                "    \"replayed_turns\": 18\n" +
+                "  }\n" +
+                "}";
+
+        try (FileWriter fw = new FileWriter(jsonFile)) {
+            fw.write(content);
+        }
+
+        ReplayLogParser parser = new ReplayLogParser(jsonFile);
+        assertTrue(parser.parse());
+        assertTrue(parser.isReplayed());
+        assertTrue(parser.isOriginalLoss());
+        assertTrue(parser.isReplayWon());
+        assertEquals("2026-08-30T14:15:00Z", parser.getReplayedAt());
+        assertEquals("P1", parser.getReplayedWinner());
+        assertEquals("win", parser.getReplayedOutcome());
+        assertEquals(Integer.valueOf(18), parser.getReplayedTurns());
+        assertEquals(Integer.valueOf(24), parser.getTurns());
+    }
+
+    @Test
+    public void testRecordReplayResult() throws IOException {
+        File tempDir = Files.createTempDirectory("replay-record-test").toFile();
+        File jsonFile = new File(tempDir, "replay_record.json");
+        String content = "{\n" +
+                "  \"format\": \"mtg-replay\",\n" +
+                "  \"version\": \"1.9.0\",\n" +
+                "  \"meta\": {\n" +
+                "    \"game_id\": \"game-999\",\n" +
+                "    \"timestamp\": \"2026-08-24T18:19:31Z\",\n" +
+                "    \"game_type\": \"Constructed\",\n" +
+                "    \"players\": {\n" +
+                "      \"P1\": {\"name\": \"Alice\", \"is_ai\": false, \"player_type\": \"Human\", \"starting_life\": 20},\n" +
+                "      \"P2\": {\"name\": \"Bob\", \"is_ai\": true, \"player_type\": \"AI\", \"starting_life\": 20}\n" +
+                "    },\n" +
+                "    \"winner\": \"P2\",\n" +
+                "    \"turns\": 20\n" +
+                "  }\n" +
+                "}";
+
+        try (FileWriter fw = new FileWriter(jsonFile)) {
+            fw.write(content);
+        }
+
+        ReplayLogParser parser = new ReplayLogParser(jsonFile);
+        assertTrue(parser.parse());
+        assertFalse(parser.isReplayed());
+        assertTrue(parser.isOriginalLoss());
+
+        // Record a replay outcome where player survived 28 turns but still lost
+        parser.recordReplayResult("P2", "loss", 28);
+        assertTrue(parser.isReplayed());
+        assertFalse(parser.isReplayWon());
+        assertEquals("loss", parser.getReplayedOutcome());
+        assertEquals("P2", parser.getReplayedWinner());
+        assertEquals(Integer.valueOf(28), parser.getReplayedTurns());
+
+        // Reload fresh from file to verify persistence
+        ReplayLogParser reloaded = new ReplayLogParser(jsonFile);
+        assertTrue(reloaded.parse());
+        assertTrue(reloaded.isReplayed());
+        assertEquals("loss", reloaded.getReplayedOutcome());
+        assertEquals("P2", reloaded.getReplayedWinner());
+        assertEquals(Integer.valueOf(28), reloaded.getReplayedTurns());
+    }
 }

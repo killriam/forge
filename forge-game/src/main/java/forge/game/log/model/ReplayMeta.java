@@ -18,6 +18,12 @@ public class ReplayMeta {
     private Integer durationSeconds;
     /** v1.8.0: ISO 8601 timestamp when this file was replayed. Set by replay launcher. */
     private String replayedAt;
+    /** v1.9.0: Winning player ID or 'draw' in the replayed game. */
+    private String replayedWinner;
+    /** v1.9.0: Outcome for the human player ("win", "loss", "draw") in the replayed game. */
+    private String replayedOutcome;
+    /** v1.9.0: Turn count in the replayed game. */
+    private Integer replayedTurns;
 
     public ReplayMeta() {
         this.players = new HashMap<>();
@@ -53,6 +59,15 @@ public class ReplayMeta {
 
     public String getReplayedAt() { return replayedAt; }
     public void setReplayedAt(String replayedAt) { this.replayedAt = replayedAt; }
+
+    public String getReplayedWinner() { return replayedWinner; }
+    public void setReplayedWinner(String replayedWinner) { this.replayedWinner = replayedWinner; }
+
+    public String getReplayedOutcome() { return replayedOutcome; }
+    public void setReplayedOutcome(String replayedOutcome) { this.replayedOutcome = replayedOutcome; }
+
+    public Integer getReplayedTurns() { return replayedTurns; }
+    public void setReplayedTurns(Integer replayedTurns) { this.replayedTurns = replayedTurns; }
 
     // -------------------------------------------------------------------------
     // Inner class: PlayerMeta

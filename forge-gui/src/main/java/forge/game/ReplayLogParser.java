@@ -50,6 +50,10 @@ public class ReplayLogParser {
     private Integer turns;
     private Integer durationSeconds;
     private boolean replayed = false;
+    private String replayedAt = null;
+    private String replayedWinner = null;
+    private String replayedOutcome = null;
+    private Integer replayedTurns = null;
     private final Map<String, PlayerInfo> players = new LinkedHashMap<>();
     /** v1.3.0: player ID who takes the first turn (from game_start.starting_player). */
     private String startingPlayer = null;
@@ -103,6 +107,16 @@ public class ReplayLogParser {
                 // Check if this replay has already been used to start a game
                 if (meta.has("replayed_at") && !meta.get("replayed_at").isJsonNull()) {
                     replayed = true;
+                    replayedAt = getStringField(meta, "replayed_at");
+                }
+                if (meta.has("replayed_winner") && !meta.get("replayed_winner").isJsonNull()) {
+                    replayedWinner = getStringField(meta, "replayed_winner");
+                }
+                if (meta.has("replayed_outcome") && !meta.get("replayed_outcome").isJsonNull()) {
+                    replayedOutcome = getStringField(meta, "replayed_outcome");
+                }
+                if (meta.has("replayed_turns") && !meta.get("replayed_turns").isJsonNull()) {
+                    replayedTurns = meta.get("replayed_turns").getAsInt();
                 }
 
                 // Parse player metadata
@@ -599,6 +613,38 @@ public class ReplayLogParser {
     public Integer getTurns() { return turns; }
     public Integer getDurationSeconds() { return durationSeconds; }
     public boolean isReplayed() { return replayed; }
+    public String getReplayedAt() { return replayedAt; }
+    public String getReplayedWinner() { return replayedWinner; }
+    public String getReplayedOutcome() { return replayedOutcome; }
+    public Integer getReplayedTurns() { return replayedTurns; }
+
+    /** Returns true if the human player (P1) lost in the original game. */
+    public boolean isOriginalLoss() {
+        if (winner == null || players.isEmpty()) return false;
+        String firstPlayerId = players.keySet().iterator().next();
+        if (winner.equals(firstPlayerId)) return false;
+        PlayerInfo human = players.get(firstPlayerId);
+        PlayerInfo winP = players.get(winner);
+        if (human != null && winP != null && human.team != null && human.team.equals(winP.team)) {
+            return false;
+        }
+        return true;
+    }
+
+    /** Returns true if the human player (P1) won the replayed match. */
+    public boolean isReplayWon() {
+        if ("win".equalsIgnoreCase(replayedOutcome)) return true;
+        if (replayedWinner != null && !players.isEmpty()) {
+            String firstPlayerId = players.keySet().iterator().next();
+            if (replayedWinner.equals(firstPlayerId)) return true;
+            PlayerInfo human = players.get(firstPlayerId);
+            PlayerInfo winP = players.get(replayedWinner);
+            if (human != null && winP != null && human.team != null && human.team.equals(winP.team)) {
+                return true;
+            }
+        }
+        return false;
+    }
     public Map<String, PlayerInfo> getPlayers() { return players; }
     public File getReplayFile() { return replayFile; }
     /** Returns the parsed JSON root object, or null if {@link #parse()} has not been called. */
@@ -717,9 +763,47 @@ public class ReplayLogParser {
                 gson.toJson(root, fw);
             }
             replayed = true;
+            replayedAt = now;
             LOG.info("Marked replay as used: {} (replayed_at={})", replayFile.getName(), now);
         } catch (IOException e) {
             LOG.warn("Could not mark replay as used: {}", replayFile, e);
+        }
+    }
+
+    /**
+     * Records the outcome of a replayed match into the JSON file's meta section.
+     */
+    public void recordReplayResult(String replayedWinner, String replayedOutcome, int replayedTurns) {
+        if (root == null) return;
+        try {
+            JsonObject meta = root.has("meta") && root.get("meta").isJsonObject()
+                    ? root.getAsJsonObject("meta") : new JsonObject();
+            String now = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                    .withZone(ZoneOffset.UTC)
+                    .format(Instant.now());
+            meta.addProperty("replayed_at", now);
+            if (replayedWinner != null) {
+                meta.addProperty("replayed_winner", replayedWinner);
+            }
+            if (replayedOutcome != null) {
+                meta.addProperty("replayed_outcome", replayedOutcome);
+            }
+            meta.addProperty("replayed_turns", replayedTurns);
+            root.add("meta", meta);
+
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            try (FileWriter fw = new FileWriter(replayFile)) {
+                gson.toJson(root, fw);
+            }
+            this.replayed = true;
+            this.replayedAt = now;
+            this.replayedWinner = replayedWinner;
+            this.replayedOutcome = replayedOutcome;
+            this.replayedTurns = replayedTurns;
+            LOG.info("Recorded replay outcome for {}: outcome={}, winner={}, turns={}",
+                    replayFile.getName(), replayedOutcome, replayedWinner, replayedTurns);
+        } catch (IOException e) {
+            LOG.warn("Could not record replay outcome for {}: {}", replayFile, e.getMessage());
         }
     }
 

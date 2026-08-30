@@ -254,8 +254,20 @@ public class ReplayJsonSerializer {
         json.append("    \"conceded\": ").append(meta.isConceded()).append(",\n");
 
         json.append("    \"turns\": ").append(meta.getTurns() != null ? meta.getTurns() : "null").append(",\n");
-        json.append("    \"duration_seconds\": ").append(meta.getDurationSeconds() != null ? meta.getDurationSeconds() : "null").append("\n");
-        json.append("  }");
+        json.append("    \"duration_seconds\": ").append(meta.getDurationSeconds() != null ? meta.getDurationSeconds() : "null");
+        if (meta.getReplayedAt() != null) {
+            json.append(",\n    \"replayed_at\": \"").append(escape(meta.getReplayedAt())).append("\"");
+        }
+        if (meta.getReplayedWinner() != null) {
+            json.append(",\n    \"replayed_winner\": \"").append(escape(meta.getReplayedWinner())).append("\"");
+        }
+        if (meta.getReplayedOutcome() != null) {
+            json.append(",\n    \"replayed_outcome\": \"").append(escape(meta.getReplayedOutcome())).append("\"");
+        }
+        if (meta.getReplayedTurns() != null) {
+            json.append(",\n    \"replayed_turns\": ").append(meta.getReplayedTurns());
+        }
+        json.append("\n  }");
     }
 
     private static void appendCardIndex(StringBuilder json, Map<String, CardDefinition> cardIndex) {
