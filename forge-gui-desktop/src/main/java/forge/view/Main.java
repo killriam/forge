@@ -45,6 +45,7 @@ public final class Main {
         private String playerTwoDeck;
         private GuiDeckFormat format = GuiDeckFormat.COMMANDER;
         private String pendingReplayPath;
+        private boolean pendingReplayShuffle = false;
     }
 
     /**
@@ -151,11 +152,14 @@ public final class Main {
 
             case "replay":
                 if (args.length < 2) {
-                    System.out.println("Error: Missing replay file path.\nUsage: java -jar <jar> replay <path-to-replay.json>");
+                    System.out.println("Error: Missing replay file path.\nUsage: java -jar <jar> replay <path-to-replay.json> [--shuffle|-s]");
                     System.exit(1);
                 }
                 final GuiLaunchOptions replayOptions = new GuiLaunchOptions();
                 replayOptions.pendingReplayPath = args[1];
+                if (args.length > 2 && ("--shuffle".equalsIgnoreCase(args[2]) || "-s".equalsIgnoreCase(args[2]))) {
+                    replayOptions.pendingReplayShuffle = true;
+                }
                 startGui(replayOptions);
                 return; // GUI stays alive on its own non-daemon thread; skip the System.exit(0) below
 
@@ -191,7 +195,8 @@ public final class Main {
         // startReplayFromPath, which are all invoked from Swing UI callbacks already on the EDT.
         if (options != null && options.pendingReplayPath != null) {
             final String replayPath = options.pendingReplayPath;
-            SwingUtilities.invokeLater(() -> CSubmenuReplay.SINGLETON_INSTANCE.startReplayFromPath(replayPath));
+            final boolean shuffle = options.pendingReplayShuffle;
+            SwingUtilities.invokeLater(() -> CSubmenuReplay.SINGLETON_INSTANCE.startReplayFromPath(replayPath, shuffle));
         }
     }
 

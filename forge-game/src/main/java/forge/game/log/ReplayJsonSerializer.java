@@ -267,6 +267,9 @@ public class ReplayJsonSerializer {
         if (meta.getReplayedTurns() != null) {
             json.append(",\n    \"replayed_turns\": ").append(meta.getReplayedTurns());
         }
+        if (meta.getReplayedMode() != null) {
+            json.append(",\n    \"replayed_mode\": \"").append(escape(meta.getReplayedMode())).append("\"");
+        }
         json.append("\n  }");
     }
 

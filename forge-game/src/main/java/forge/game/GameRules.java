@@ -214,6 +214,20 @@ public class GameRules {
     }
 
     /**
+     * When true: this is a Shuffle Replay — the human player plays with a normally shuffled deck
+     * rather than the predetermined draw sequence from the original replay.
+     */
+    private boolean shuffleReplay = false;
+
+    public boolean isShuffleReplay() {
+        return shuffleReplay;
+    }
+
+    public void setShuffleReplay(final boolean shuffleReplay) {
+        this.shuffleReplay = shuffleReplay;
+    }
+
+    /**
      * Forced library order for Replay Mode: maps player lobby-name to ordered list of card names.
      * Index 0 = top of library (next draw).
      */

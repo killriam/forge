@@ -420,6 +420,30 @@ public class ReplayNotationSimulationTest {
     }
 
     @Test
+    public void testShuffleReplayOutcomeSerialization() {
+        System.out.println("\n=== Testing Shuffle Replay Outcome Serialization ===");
+
+        ReplayLog log = new ReplayLog();
+        log.getMeta().setGameId("test-shuffle-replay-outcome");
+        log.getMeta().setGameType("Constructed");
+        log.getMeta().setTurns(24);
+        log.getMeta().setWinner("P2");
+        log.getMeta().setReplayedAt("2026-08-30T19:30:00Z");
+        log.getMeta().setReplayedWinner("P1");
+        log.getMeta().setReplayedOutcome("win");
+        log.getMeta().setReplayedTurns(15);
+        log.getMeta().setReplayedMode("shuffle");
+
+        String json = ReplayJsonSerializer.toJson(log);
+        assertNotNull(json);
+        assertTrue("Should serialize replayed_at", json.contains("\"replayed_at\": \"2026-08-30T19:30:00Z\""));
+        assertTrue("Should serialize replayed_winner", json.contains("\"replayed_winner\": \"P1\""));
+        assertTrue("Should serialize replayed_outcome", json.contains("\"replayed_outcome\": \"win\""));
+        assertTrue("Should serialize replayed_turns", json.contains("\"replayed_turns\": 15"));
+        assertTrue("Should serialize replayed_mode", json.contains("\"replayed_mode\": \"shuffle\""));
+    }
+
+    @Test
     public void testEventTypes() {
         System.out.println("\n=== Testing Event Types ===");
 

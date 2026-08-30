@@ -24,6 +24,8 @@ public class ReplayMeta {
     private String replayedOutcome;
     /** v1.9.0: Turn count in the replayed game. */
     private Integer replayedTurns;
+    /** v1.9.0: Replay mode: "deterministic" or "shuffle" (human with shuffled deck). */
+    private String replayedMode;
 
     public ReplayMeta() {
         this.players = new HashMap<>();
@@ -68,6 +70,11 @@ public class ReplayMeta {
 
     public Integer getReplayedTurns() { return replayedTurns; }
     public void setReplayedTurns(Integer replayedTurns) { this.replayedTurns = replayedTurns; }
+
+    public String getReplayedMode() { return replayedMode; }
+    public void setReplayedMode(String replayedMode) { this.replayedMode = replayedMode; }
+
+    public boolean isShuffleReplay() { return "shuffle".equalsIgnoreCase(replayedMode); }
 
     // -------------------------------------------------------------------------
     // Inner class: PlayerMeta

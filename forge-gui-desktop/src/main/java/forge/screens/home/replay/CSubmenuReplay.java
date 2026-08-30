@@ -5,6 +5,7 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,13 +56,19 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
 
     /** Set before Forge GUI starts to auto-launch a replay on first home screen show. */
     private static String pendingReplayPath = null;
+    private static boolean pendingReplayShuffle = false;
 
     /**
      * Called from Main.java (CLI mode "replay") before Forge initializes the GUI.
      * The replay will be started automatically once the home screen is first shown.
      */
     public static void setPendingReplayPath(String path) {
+        setPendingReplayPath(path, false);
+    }
+
+    public static void setPendingReplayPath(String path, boolean shuffle) {
         pendingReplayPath = path;
+        pendingReplayShuffle = shuffle;
     }
 
     private final VSubmenuReplay view = VSubmenuReplay.SINGLETON_INSTANCE;
@@ -85,6 +92,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
         view.getBtnStart().addActionListener(e -> startReplayGame());
         view.getBtnView().addActionListener(e -> openGameLearningViewer());
         view.getBtnView().setEnabled(false);
+        view.getCbShuffleHumanDeck().addActionListener(e -> updateReplayInfo());
 
         // Sync days-filter combo with stored preference
         String storedDays = "2";
@@ -189,16 +197,31 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
                         view.getModel().addElement(entry.getKey());
                     }
 
-                    // Count replayed games and update the counter label
+                    // Count replayed games (deterministic vs shuffle) and update the counter label
                     int replayedCount = 0;
+                    int shuffleReplayedCount = 0;
                     for (ReplayLogParser p : replayParsers.values()) {
-                        if (p.isReplayed()) replayedCount++;
+                        if (p.isReplayed()) {
+                            if (p.isShuffleReplay()) {
+                                shuffleReplayedCount++;
+                            } else {
+                                replayedCount++;
+                            }
+                        }
                     }
                     int total = replayParsers.size();
-                    view.getLblCount().setText(total + " game" + (total != 1 ? "s" : "")
-                            + "  |  " + replayedCount + " replayed");
+                    StringBuilder countText = new StringBuilder();
+                    countText.append(total).append(" game").append(total != 1 ? "s" : "");
+                    if (replayedCount > 0 || shuffleReplayedCount > 0) {
+                        countText.append("  |  ").append(replayedCount).append(" replayed");
+                        if (shuffleReplayedCount > 0) {
+                            countText.append(" (").append(shuffleReplayedCount).append(" shuffled)");
+                        }
+                    }
+                    view.getLblCount().setText(countText.toString());
 
-                    LOG.info("Found {} valid replay files ({} replayed, recap days: {})", total, replayedCount, recapDays);
+                    LOG.info("Found {} valid replay files ({} deterministic replayed, {} shuffle replayed, recap days: {})",
+                            total, replayedCount, shuffleReplayedCount, recapDays);
                 } catch (Exception e) {
                     LOG.error("Failed to load replay files", e);
                     view.getLblCount().setText("Error loading replays");
@@ -293,24 +316,26 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
 
         // Mark games that have already been replayed
         if (parser.isReplayed()) {
+            boolean isShuffled = parser.isShuffleReplay();
+            String tag = isShuffled ? "Shuffle Replayed" : "Replayed";
             if (!originalWin && parser.isReplayWon()) {
-                sb.append(" → Win [Replayed]");
+                sb.append(" → Win [").append(tag).append("]");
             } else if (parser.getReplayedOutcome() != null) {
                 if ("loss".equalsIgnoreCase(parser.getReplayedOutcome())) {
                     if (parser.getReplayedTurns() != null) {
-                        sb.append(" [Replayed: Loss, ").append(parser.getReplayedTurns()).append(" turns]");
+                        sb.append(" [").append(tag).append(": Loss, ").append(parser.getReplayedTurns()).append(" turns]");
                     } else {
-                        sb.append(" [Replayed: Loss]");
+                        sb.append(" [").append(tag).append(": Loss]");
                     }
                 } else if ("win".equalsIgnoreCase(parser.getReplayedOutcome())) {
-                    sb.append(" [Replayed: Win]");
+                    sb.append(" [").append(tag).append(": Win]");
                 } else if ("draw".equalsIgnoreCase(parser.getReplayedOutcome())) {
-                    sb.append(" [Replayed: Draw]");
+                    sb.append(" [").append(tag).append(": Draw]");
                 } else {
-                    sb.append(" [Replayed]");
+                    sb.append(" [").append(tag).append("]");
                 }
             } else {
-                sb.append(" [Replayed]");
+                sb.append(" [").append(tag).append("]");
             }
         }
 
@@ -385,7 +410,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
         }
 
         if (parser.isReplayed()) {
+            boolean isShuffled = parser.isShuffleReplay();
             sb.append("\n--- Replay Statistics ---\n");
+            sb.append("Replay Mode: ").append(isShuffled ? "Shuffle Replay (Human with shuffled deck)" : "Deterministic (Fixed Draw Order)").append("\n");
             if (parser.getReplayedAt() != null) {
                 sb.append("Replayed At: ").append(parser.getReplayedAt().replace("T", " ").replace("Z", "")).append("\n");
             }
@@ -406,7 +433,8 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
                 sb.append("  • Original Game: ").append(parser.getTurns() != null ? parser.getTurns() : "?")
                   .append(" turns (").append(origLoss ? "Loss" : "Win").append(")\n");
                 sb.append("  • Replayed Game: ").append(parser.getReplayedTurns() != null ? parser.getReplayedTurns() : "?")
-                  .append(" turns (").append(repWon ? "Win" : repOutcomeText).append(")\n");
+                  .append(" turns (").append(repWon ? "Win" : repOutcomeText)
+                  .append(isShuffled ? " [Shuffled]" : "").append(")\n");
 
                 if (parser.getTurns() != null && parser.getReplayedTurns() != null) {
                     int diff = parser.getReplayedTurns() - parser.getTurns();
@@ -429,7 +457,11 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
 
         sb.append("\n--- Replay Mode ---\n");
         sb.append("You will play as the first human player.\n");
-        sb.append("The library order will match the original game.\n");
+        if (view.getCbShuffleHumanDeck() != null && view.getCbShuffleHumanDeck().isSelected()) {
+            sb.append("Mode: Shuffle Replay (Your library will be shuffled normally).\n");
+        } else {
+            sb.append("Mode: Deterministic Replay (The library order will match the original game).\n");
+        }
         sb.append("AI opponents keep the same decks.\n");
 
         view.getReplayInfo().setText(sb.toString());
@@ -441,6 +473,10 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
      * Does not require the file to be in the game log directory.
      */
     public void startReplayFromPath(String replayFilePath) {
+        startReplayFromPath(replayFilePath, pendingReplayShuffle);
+    }
+
+    public void startReplayFromPath(String replayFilePath, boolean shuffleHumanDeck) {
         File file = new File(replayFilePath);
         if (!file.exists() || !file.isFile()) {
             SOptionPane.showMessageDialog(
@@ -466,7 +502,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             }
         }
 
-        launchReplay(parser);
+        launchReplay(parser, !shuffleHumanDeck, 1, null, shuffleHumanDeck);
     }
 
     /**
@@ -496,7 +532,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             return;
         }
 
-        launchReplay(parser, enforceDrawOrder, branchTurn, originalSummary);
+        launchReplay(parser, enforceDrawOrder, branchTurn, originalSummary, !enforceDrawOrder);
     }
 
     /**
@@ -518,7 +554,8 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             return false;
         }
 
-        boolean started = launchReplay(parser);
+        boolean shuffleHumanDeck = view.getCbShuffleHumanDeck() != null && view.getCbShuffleHumanDeck().isSelected();
+        boolean started = launchReplay(parser, !shuffleHumanDeck, 1, null, shuffleHumanDeck);
         if (started) {
             // Remove from current UI list immediately
             view.getModel().removeElement(selected);
@@ -544,7 +581,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
      * Core launch logic shared by GUI selection and CLI path mode.
      */
     private boolean launchReplay(ReplayLogParser parser) {
-        return launchReplay(parser, true, 1, null);
+        return launchReplay(parser, true, 1, null, false);
     }
 
     /**
@@ -557,6 +594,12 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
      */
     private boolean launchReplay(ReplayLogParser parser, boolean enforceDrawOrder,
                                   int branchTurn, OriginalGameSummary originalSummary) {
+        return launchReplay(parser, enforceDrawOrder, branchTurn, originalSummary, false);
+    }
+
+    private boolean launchReplay(ReplayLogParser parser, boolean enforceDrawOrder,
+                                  int branchTurn, OriginalGameSummary originalSummary,
+                                  boolean shuffleHumanDeck) {
         // Covers all three launch paths (list Start, CLI direct path, Game Learning Viewer's
         // "Replay from here") - no-op if updateReplayInfo() already reconstructed this parser.
         parser.ensureDecksReconstructed();
@@ -655,13 +698,23 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             GameRules rules = new GameRules(resolvedGameType);
             rules.setGamesPerMatch(1);
             rules.setReplayLogPath(parser.getReplayFile().getAbsolutePath());
+            rules.setShuffleReplay(shuffleHumanDeck);
 
             // Replay Mode: force original library order based on user choice
-            if (enforceDrawOrder) {
+            if (enforceDrawOrder && !shuffleHumanDeck) {
                 rules.setReplayMode(true);
                 Map<String, List<String>> libOrder = parser.getInitialLibraryOrder();
                 if (!libOrder.isEmpty()) {
                     rules.setForcedLibraryOrder(libOrder);
+                }
+                rules.setShuffleRestore("always");
+            } else if (shuffleHumanDeck) {
+                rules.setReplayMode(true);
+                Map<String, List<String>> libOrder = parser.getInitialLibraryOrder();
+                if (!libOrder.isEmpty()) {
+                    Map<String, List<String>> aiLibOrder = new HashMap<>(libOrder);
+                    aiLibOrder.remove("P1");
+                    rules.setForcedLibraryOrder(aiLibOrder);
                 }
                 rules.setShuffleRestore("always");
             } else {
@@ -699,7 +752,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             }
 
             // Mark the source log as replayed
-            parser.markAsReplayed();
+            parser.markAsReplayed(shuffleHumanDeck ? "shuffle" : "deterministic");
 
             // Start match — use different setup depending on whether we branch mid-game
             final HostedMatch hostedMatch = GuiBase.getInterface().hostMatch();

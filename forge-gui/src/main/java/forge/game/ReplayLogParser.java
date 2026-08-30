@@ -54,6 +54,7 @@ public class ReplayLogParser {
     private String replayedWinner = null;
     private String replayedOutcome = null;
     private Integer replayedTurns = null;
+    private String replayedMode = null;
     private final Map<String, PlayerInfo> players = new LinkedHashMap<>();
     /** v1.3.0: player ID who takes the first turn (from game_start.starting_player). */
     private String startingPlayer = null;
@@ -117,6 +118,9 @@ public class ReplayLogParser {
                 }
                 if (meta.has("replayed_turns") && !meta.get("replayed_turns").isJsonNull()) {
                     replayedTurns = meta.get("replayed_turns").getAsInt();
+                }
+                if (meta.has("replayed_mode") && !meta.get("replayed_mode").isJsonNull()) {
+                    replayedMode = getStringField(meta, "replayed_mode");
                 }
 
                 // Parse player metadata
@@ -617,6 +621,9 @@ public class ReplayLogParser {
     public String getReplayedWinner() { return replayedWinner; }
     public String getReplayedOutcome() { return replayedOutcome; }
     public Integer getReplayedTurns() { return replayedTurns; }
+    public String getReplayedMode() { return replayedMode; }
+    /** Returns true if this game was replayed with a freshly shuffled deck (Shuffle Replay). */
+    public boolean isShuffleReplay() { return "shuffle".equalsIgnoreCase(replayedMode); }
 
     /** Returns true if the human player (P1) lost in the original game. */
     public boolean isOriginalLoss() {
@@ -746,6 +753,10 @@ public class ReplayLogParser {
      * from the replay selection list.
      */
     public void markAsReplayed() {
+        markAsReplayed("deterministic");
+    }
+
+    public void markAsReplayed(String mode) {
         if (root == null) return;
         try {
             // Add replayed_at to meta
@@ -755,6 +766,9 @@ public class ReplayLogParser {
                     .withZone(ZoneOffset.UTC)
                     .format(Instant.now());
             meta.addProperty("replayed_at", now);
+            if (mode != null) {
+                meta.addProperty("replayed_mode", mode);
+            }
             root.add("meta", meta);
 
             // Write the modified JSON back to the file
@@ -764,7 +778,8 @@ public class ReplayLogParser {
             }
             replayed = true;
             replayedAt = now;
-            LOG.info("Marked replay as used: {} (replayed_at={})", replayFile.getName(), now);
+            replayedMode = mode;
+            LOG.info("Marked replay as used: {} (replayed_at={}, mode={})", replayFile.getName(), now, mode);
         } catch (IOException e) {
             LOG.warn("Could not mark replay as used: {}", replayFile, e);
         }
@@ -774,6 +789,10 @@ public class ReplayLogParser {
      * Records the outcome of a replayed match into the JSON file's meta section.
      */
     public void recordReplayResult(String replayedWinner, String replayedOutcome, int replayedTurns) {
+        recordReplayResult(replayedWinner, replayedOutcome, replayedTurns, "deterministic");
+    }
+
+    public void recordReplayResult(String replayedWinner, String replayedOutcome, int replayedTurns, String mode) {
         if (root == null) return;
         try {
             JsonObject meta = root.has("meta") && root.get("meta").isJsonObject()
@@ -789,6 +808,9 @@ public class ReplayLogParser {
                 meta.addProperty("replayed_outcome", replayedOutcome);
             }
             meta.addProperty("replayed_turns", replayedTurns);
+            if (mode != null) {
+                meta.addProperty("replayed_mode", mode);
+            }
             root.add("meta", meta);
 
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -800,8 +822,9 @@ public class ReplayLogParser {
             this.replayedWinner = replayedWinner;
             this.replayedOutcome = replayedOutcome;
             this.replayedTurns = replayedTurns;
-            LOG.info("Recorded replay outcome for {}: outcome={}, winner={}, turns={}",
-                    replayFile.getName(), replayedOutcome, replayedWinner, replayedTurns);
+            this.replayedMode = mode;
+            LOG.info("Recorded replay outcome for {}: outcome={}, winner={}, turns={}, mode={}",
+                    replayFile.getName(), replayedOutcome, replayedWinner, replayedTurns, mode);
         } catch (IOException e) {
             LOG.warn("Could not record replay outcome for {}: {}", replayFile, e.getMessage());
         }

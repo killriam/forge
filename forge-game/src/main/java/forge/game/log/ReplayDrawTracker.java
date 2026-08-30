@@ -70,6 +70,10 @@ public class ReplayDrawTracker {
      *                      (equals the hand size before this mulligan)
      */
     public void onMulliganShuffle(Player player, int cardsReturned) {
+        if (player.getGame().getRules() != null && player.getGame().getRules().isShuffleReplay()
+                && (player.getGame().getPlayers().indexOf(player) == 0 || !player.isAI())) {
+            return;
+        }
         String playerId = getPlayerId(player);
         List<String> fullOrder = drawOrder.get(playerId);
         if (fullOrder == null || fullOrder.isEmpty()) {

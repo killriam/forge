@@ -16,6 +16,7 @@ import forge.screens.home.IVSubmenu;
 import forge.screens.home.StartButton;
 import forge.screens.home.VHomeUI;
 import forge.toolbox.FButton;
+import forge.toolbox.FCheckBox;
 import forge.toolbox.FList;
 import forge.toolbox.FScrollPane;
 import forge.util.Localizer;
@@ -43,6 +44,7 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
 
     private final StartButton btnStart = new StartButton();
     private final FButton btnView = new FButton();
+    private final FCheckBox cbShuffleHumanDeck = new FCheckBox("Human with shuffled deck");
 
     /** Days-filter combo: 0=all, 1,2,3,5,7,14,30 */
     private final JComboBox<String> cmbDays = new JComboBox<>(
@@ -142,6 +144,10 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         return progressBar;
     }
 
+    public FCheckBox getCbShuffleHumanDeck() {
+        return cbShuffleHumanDeck;
+    }
+
     @Override
     public void populate() {
         final JPanel container = VHomeUI.SINGLETON_INSTANCE.getPnlDisplay();
@@ -167,11 +173,13 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         container.add(replayListPane, "w 96%!, h 45%, gap 2% 2% 0 0");
         container.add(replayInfoPane, "w 96%!, h 25%, gap 2% 2% 0 0");
 
-        // Buttons row: [Replay] [View]
-        final JPanel btnPanel = new JPanel(new net.miginfocom.swing.MigLayout("insets 0, gap 5"));
+        // Buttons row: [Replay] [View] [ ] Human with shuffled deck
+        final JPanel btnPanel = new JPanel(new net.miginfocom.swing.MigLayout("insets 0, gap 8"));
         btnPanel.setOpaque(false);
         btnPanel.add(btnStart, "w 200px!, h 30px!");
         btnPanel.add(btnView, "w 120px!, h 30px!");
+        cbShuffleHumanDeck.setToolTipText("When checked, you play with a freshly shuffled deck instead of predetermined draws.");
+        btnPanel.add(cbShuffleHumanDeck, "gapleft 12, aligny center");
         container.add(btnPanel, "gap 2% 2% 10px 10px");
 
         if (container.isShowing()) {

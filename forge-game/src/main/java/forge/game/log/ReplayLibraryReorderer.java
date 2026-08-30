@@ -173,19 +173,26 @@ public class ReplayLibraryReorderer {
                 return;
             }
 
+            boolean isShuffleReplay = game.getRules() != null && game.getRules().isShuffleReplay();
             List<Player> players = game.getPlayers();
             for (int i = 0; i < players.size(); i++) {
+                Player p = players.get(i);
+                // In Shuffle Replay mode, the human player plays with a normally shuffled deck
+                if (isShuffleReplay && (i == 0 || !p.isAI())) {
+                    LOG.info("Shuffle Replay: keeping {}'s library shuffled normally", p.getName());
+                    continue;
+                }
                 String playerId = "P" + (i + 1);
                 List<String> playerDrawOrder = drawOrder.get(playerId);
                 if (playerDrawOrder != null && !playerDrawOrder.isEmpty()) {
-                    reorderLibrary(players.get(i), playerDrawOrder);
+                    reorderLibrary(p, playerDrawOrder);
                 } else {
                     LOG.debug("No draw order for {} in replay log", playerId);
                 }
             }
 
-            LOG.info("Library reorder complete for {} players from replay: {}",
-                    players.size(), replayJsonPath);
+            LOG.info("Library reorder complete for {} players from replay: {} (shuffleReplay={})",
+                    players.size(), replayJsonPath, isShuffleReplay);
         } catch (IOException e) {
             LOG.error("Failed to load replay log for library reordering: {}", replayJsonPath, e);
         }

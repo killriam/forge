@@ -340,8 +340,11 @@ public class ViewWinLose implements IWinLoseView<FButton> {
                 }
             }
 
+            boolean isShuffleReplay = game.getGame().getRules() != null && game.getGame().getRules().isShuffleReplay();
+            String mode = isShuffleReplay ? "shuffle" : "deterministic";
+
             // Persist the replay outcome to the original replay log
-            parser.recordReplayResult(replayedWinnerId, replayedOutcome, currentTurns);
+            parser.recordReplayResult(replayedWinnerId, replayedOutcome, currentTurns, mode);
 
             // Build display comparison
             StringBuilder sb = new StringBuilder("Original: ");
@@ -350,7 +353,7 @@ public class ViewWinLose implements IWinLoseView<FButton> {
             if (originalTurns != null) {
                 sb.append(" (").append(originalTurns).append(" turns)");
             }
-            sb.append("  |  This replay: ");
+            sb.append(isShuffleReplay ? "  |  Shuffle Replay: " : "  |  This replay: ");
             sb.append(humanWon ? "Win" : (isDraw ? "Draw" : "Loss"));
             sb.append(" (").append(currentTurns).append(" turns)");
 

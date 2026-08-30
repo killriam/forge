@@ -1632,9 +1632,14 @@ public class Player extends GameEntity implements Comparable<Player> {
                 && game.getRules().getForcedLibraryOrder() != null) {
             int idx = game.getPlayers().indexOf(this);
             if (idx >= 0) {
-                java.util.List<String> forced = game.getRules().getForcedLibraryOrder().get("P" + (idx + 1));
-                if (forced != null) {
-                    forge.game.log.ReplayLibraryReorderer.reorderLibrary(this, forced);
+                // In Shuffle Replay mode, human player's library is not force-reordered
+                if (game.getRules().isShuffleReplay() && (idx == 0 || !this.isAI())) {
+                    // keep shuffled
+                } else {
+                    java.util.List<String> forced = game.getRules().getForcedLibraryOrder().get("P" + (idx + 1));
+                    if (forced != null) {
+                        forge.game.log.ReplayLibraryReorderer.reorderLibrary(this, forced);
+                    }
                 }
             }
         }
