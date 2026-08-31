@@ -78,14 +78,15 @@ jobs:
             echo "**Built from:** \`${{ github.sha }}\`"
             echo "**Build date:** $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo ""
-            echo "## Installation"
-            echo "- **Fresh install:** download \`MaMoForge-portable.zip\`, extract it, and run \`java -jar ${{ steps.find_jar.outputs.jar_name }}\` from inside the extracted folder. This bundles the \`res/\` folder the JAR needs at runtime - a bare JAR alone will crash on launch."
-            echo "- **Existing install:** if you already have a \`res/\` folder from a previous extract, you can just drop in the smaller \`${{ steps.find_jar.outputs.jar_name }}\` to update (grab the standalone \`CHANGES.txt\` asset too if you want the in-app Release Notes screen to reflect this build)."
+            echo "## Installation & Updating"
+            echo "- **Incremental Update (Recommended for existing installs & Connector):** download \`MaMoForge-patch.zip\`, extract it over your existing Forge folder. It contains the new JAR and only the resource files under \`res/\` that changed in this build."
+            echo "- **Fresh install:** download \`MaMoForge-portable.zip\`, extract it, and run \`java -jar ${{ steps.find_jar.outputs.jar_name }}\` from inside the extracted folder. This bundles the full \`res/\` folder."
+            echo "- **Standalone JAR:** if your \`res/\` folder is already up to date, you can download \`${{ steps.find_jar.outputs.jar_name }}\` directly."
             echo "- Configure via the MaMo Connector setup wizard."
           } > release_notes.md
           cat release_notes.md
 
-      - name: Package portable build (JAR + res/ + CHANGES.txt)
+      - name: Package portable build (Full JAR + all res/ + CHANGES.txt)
         id: package
         run: |
           # The fat JAR loads card images/sounds/skins etc. from a `res/` folder next to it at
@@ -105,6 +106,42 @@ jobs:
           echo "zip_path=$ZIP_NAME" >> $GITHUB_OUTPUT
           echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
           echo "Packaged: $ZIP_NAME ($(du -sh "$ZIP_NAME" | cut -f1))"
+
+      - name: Package incremental patch (JAR + only changed res/ + CHANGES.txt)
+        id: patch
+        run: |
+          PREV_SHA=$(git rev-parse replay-features-latest 2>/dev/null || echo "")
+          PATCH_STAGE="MaMoForge-patch"
+          mkdir -p "$PATCH_STAGE"
+          cp "${{ steps.find_jar.outputs.jar_path }}" "$PATCH_STAGE/"
+          cp CHANGES.txt "$PATCH_STAGE/"
+
+          if [ -n "$PREV_SHA" ]; then
+            CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT "$PREV_SHA"..HEAD -- forge-gui/res)
+            if [ -n "$CHANGED_FILES" ]; then
+              echo "Packaging changed resource files into patch:"
+              echo "$CHANGED_FILES"
+              echo "$CHANGED_FILES" > "$PATCH_STAGE/CHANGED_RESOURCES.txt"
+              while IFS= read -r file; do
+                if [ -f "$file" ]; then
+                  rel_path="${file#forge-gui/res/}"
+                  target_dir="$PATCH_STAGE/res/$(dirname "$rel_path")"
+                  mkdir -p "$target_dir"
+                  cp "$file" "$target_dir/"
+                fi
+              done <<< "$CHANGED_FILES"
+            else
+              echo "No resource files modified since last release ($PREV_SHA)."
+            fi
+          else
+            echo "No previous release SHA found. Patch includes JAR and CHANGES.txt."
+          fi
+
+          PATCH_ZIP="MaMoForge-patch.zip"
+          zip -rq "$PATCH_ZIP" "$PATCH_STAGE"
+          echo "patch_path=$PATCH_ZIP" >> $GITHUB_OUTPUT
+          echo "patch_name=$PATCH_ZIP" >> $GITHUB_OUTPUT
+          echo "Packaged: $PATCH_ZIP ($(du -sh "$PATCH_ZIP" | cut -f1))"
 
       - name: Delete existing replay-features-latest release and tag
         env:
@@ -130,5 +167,6 @@ jobs:
             --notes-file release_notes.md \
             --prerelease \
             "${{ steps.find_jar.outputs.jar_path }}#${{ steps.find_jar.outputs.jar_name }}" \
+            "${{ steps.patch.outputs.patch_path }}#${{ steps.patch.outputs.patch_name }}" \
             "${{ steps.package.outputs.zip_path }}#${{ steps.package.outputs.zip_name }}" \
             "CHANGES.txt#CHANGES.txt"
