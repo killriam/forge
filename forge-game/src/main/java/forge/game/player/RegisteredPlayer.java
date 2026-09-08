@@ -39,6 +39,7 @@ public class RegisteredPlayer {
     private Integer id = null;
     private boolean randomFoil = false;
     private boolean enableETBCountersEffect = false;
+    private boolean guaranteeCardsUnderTestTop10 = false;
 
     public RegisteredPlayer(Deck deck0) {
         originalDeck = deck0;
@@ -260,5 +261,13 @@ public class RegisteredPlayer {
     }
     public void setDecklistConfigPath(String path) {
         this.decklistConfigPath = path;
+    }
+
+    public boolean isGuaranteeCardsUnderTestTop10() {
+        return guaranteeCardsUnderTestTop10;
+    }
+    public RegisteredPlayer setGuaranteeCardsUnderTestTop10(boolean guaranteeCardsUnderTestTop10) {
+        this.guaranteeCardsUnderTestTop10 = guaranteeCardsUnderTestTop10;
+        return this;
     }
 }

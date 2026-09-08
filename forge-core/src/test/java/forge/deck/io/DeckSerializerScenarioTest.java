@@ -138,4 +138,19 @@ public class DeckSerializerScenarioTest {
         assertEquals("Arcane Signet", dh.getNewCardsSinceLastRevision().get(0));
         assertEquals("Mana Drain", dh.getNewCardsSinceLastRevision().get(1));
     }
+
+    @Test
+    public void testCopyTo_preservesCardsUnderTestAndScenarioIds() {
+        Deck d = new Deck("Original");
+        d.setScenarioIds("scen-1");
+        d.addCardUnderTest("Sol Ring");
+        d.addNewCardSinceLastRevision("Mana Drain");
+
+        Deck copy = (Deck) d.copyTo("Cloned");
+        assertEquals("scen-1", copy.getScenarioIds());
+        assertEquals(1, copy.getCardsUnderTest().size());
+        assertTrue(copy.isCardUnderTest("Sol Ring"));
+        assertEquals(1, copy.getNewCardsSinceLastRevision().size());
+        assertTrue(copy.isNewCardSinceLastRevision("Mana Drain"));
+    }
 }

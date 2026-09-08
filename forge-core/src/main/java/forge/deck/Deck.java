@@ -286,6 +286,15 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
         result.deckRulesResolved = this.deckRulesResolved;
         result.deckUrl = this.deckUrl;
         result.evalScenarioIds = this.evalScenarioIds;
+        result.scenarioIds = this.scenarioIds;
+        result.cardsUnderTest.clear();
+        if (this.cardsUnderTest != null) {
+            result.cardsUnderTest.addAll(this.cardsUnderTest);
+        }
+        result.newCardsSinceLastRevision.clear();
+        if (this.newCardsSinceLastRevision != null) {
+            result.newCardsSinceLastRevision.addAll(this.newCardsSinceLastRevision);
+        }
         result.setDeckFormat(deckFormat);
         result.setSourceUrl(sourceUrl);
         //noinspection ConstantValue

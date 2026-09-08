@@ -2368,6 +2368,9 @@ public class GameAction {
 
             game.setAge(GameStage.Mulligan);
             for (final Player p1 : game.getPlayers()) {
+                p1.ensureCardsUnderTestInTop10();
+            }
+            for (final Player p1 : game.getPlayers()) {
                 // FIX: In scenario mode, draw the number of cards defined in scenario starting_hand
                 int handSize = p1.getStartingHandSize();  // default: 7
 

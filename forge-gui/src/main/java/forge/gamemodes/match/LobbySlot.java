@@ -29,6 +29,7 @@ public final class LobbySlot implements Serializable {
     private String PlanarDeckName;
     private String DeckName;
     private String aiProfile;
+    private boolean isGuaranteeCardsUnderTestTop10;
     /** id/filename of the scenario file attached to this seat, resolved via
      *  {@code forge.game.ReplayLogParser#resolveScenarioByIdOrFilename(String)}. Empty string
      *  means "None" explicitly chosen (not the same as null/absent - {@link #apply} treats a
@@ -45,6 +46,7 @@ public final class LobbySlot implements Serializable {
         this.isArchenemy = isArchenemy;
         this.isReady = isReady;
         this.isDevMode = false;
+        this.isGuaranteeCardsUnderTestTop10 = false;
         this.setAiOptions(aiOptions);
     }
 
@@ -58,6 +60,7 @@ public final class LobbySlot implements Serializable {
         changed |= setIfChanged(data.getArchenemy(),       this.isArchenemy,    this::setIsArchenemy);
         changed |= setIfChanged(data.getReady(),           this.isReady,        this::setIsReady);
         changed |= setIfChanged(data.getDevMode(),         this.isDevMode,      this::setIsDevMode);
+        changed |= setIfChanged(data.getGuaranteeCardsUnderTestTop10(), this.isGuaranteeCardsUnderTestTop10, this::setIsGuaranteeCardsUnderTestTop10);
         changed |= setIfChanged(data.getAiOptions(),       this.aiOptions,      this::setAiOptions);
         changed |= setIfChanged(data.getSchemeDeckName(),  this.SchemeDeckName, this::setSchemeDeckName);
         changed |= setIfChanged(data.getAvatarVanguard(),  this.AvatarVanguard, this::setAvatarVanguard);
@@ -178,5 +181,12 @@ public final class LobbySlot implements Serializable {
     }
     public void setAiProfile(String aiProfile) {
         this.aiProfile = aiProfile;
+    }
+
+    public boolean isGuaranteeCardsUnderTestTop10() {
+        return isGuaranteeCardsUnderTestTop10;
+    }
+    public void setIsGuaranteeCardsUnderTestTop10(final boolean value) {
+        this.isGuaranteeCardsUnderTestTop10 = value;
     }
 }

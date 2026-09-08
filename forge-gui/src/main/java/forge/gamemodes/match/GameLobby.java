@@ -535,6 +535,7 @@ public abstract class GameLobby implements IHasGameType {
                 rp = RegisteredPlayer.forVariants(activeSlots.size(), variantTypes, deck, schemes, isArchenemy, planes, avatarPool);
             }
 
+            rp.setGuaranteeCardsUnderTestTop10(slot.isGuaranteeCardsUnderTestTop10());
             rp.setTeamNumber(team);
             players.add(rp.setPlayer(lobbyPlayer));
 

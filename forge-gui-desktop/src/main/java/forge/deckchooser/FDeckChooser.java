@@ -19,6 +19,7 @@ import forge.localinstance.properties.ForgePreferences;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
 import forge.screens.match.controllers.CDetailPicture;
+import forge.toolbox.FCheckBox;
 import forge.toolbox.FLabel;
 import forge.toolbox.FOptionPane;
 import forge.toolbox.FTextField;
@@ -65,6 +66,7 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
     private final FLabel btnViewDeck = new FLabel.ButtonBuilder().text(localizer.getMessage("lblViewDeck")).fontSize(14).build();
     private final FLabel btnRandom = new FLabel.ButtonBuilder().fontSize(14).build();
+    private final FCheckBox cbCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in top 10");
     private JPanel pnlDeckUrl;
     private FTextField txtDeckUrl;
     private FLabel btnReloadUrl;
@@ -393,10 +395,13 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
                 result.setStartingLife(qec.getAiLife());
             }
             result.addExtraCardsOnBattlefield(QuestUtil.getComputerStartingCards(event));
+            result.setGuaranteeCardsUnderTestTop10(cbCardsUnderTestTop10.isSelected());
             return result;
         }
 
-        return new RegisteredPlayer(getDeck());
+        final RegisteredPlayer result = new RegisteredPlayer(getDeck());
+        result.setGuaranteeCardsUnderTestTop10(cbCardsUnderTestTop10.isSelected());
+        return result;
     }
 
     public void populate() {
@@ -413,13 +418,38 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
         decksComboBox.addTo(this, "w 100%, h 30px!, gapbottom 5px, spanx 2, wrap");
         this.add(pnlDeckUrl, "w 100%, h 30px!, gapbottom 5px, spanx 2, wrap");
         this.add(lstDecksContainer, "w 100%, growy, pushy, spanx 2, wrap");
+        this.add(cbCardsUnderTestTop10, "w 100%, h 25px!, gaptop 3px, gapbottom 3px, spanx 2, wrap");
         this.add(btnViewDeck, "w 50%-3px, h 30px!, gaptop 5px, gapright 6px");
         this.add(btnRandom, "w 50%-3px, h 30px!, gaptop 5px");
         updateDeckUrlPanelVisibility();
+        updateCardsUnderTestVisibility();
         if (isShowing()) {
             revalidate();
             repaint();
         }
+    }
+
+    public void updateCardsUnderTestVisibility() {
+        final Deck selectedDeck = getDeck();
+        final boolean hasUnderTest = selectedDeck != null && !selectedDeck.getCardsUnderTest().isEmpty();
+        cbCardsUnderTestTop10.setVisible(hasUnderTest);
+        if (hasUnderTest) {
+            cbCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", selectedDeck.getCardsUnderTest()) + ") in top 10 cards of library");
+        } else {
+            cbCardsUnderTestTop10.setSelected(false);
+        }
+    }
+
+    public boolean isGuaranteeCardsUnderTestTop10() {
+        return cbCardsUnderTestTop10.isSelected();
+    }
+
+    public void setGuaranteeCardsUnderTestTop10(boolean value) {
+        cbCardsUnderTestTop10.setSelected(value);
+    }
+
+    public FCheckBox getCbCardsUnderTestTop10() {
+        return cbCardsUnderTestTop10;
     }
 
     private void initializeDeckUrlPanel() {
@@ -457,6 +487,7 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
             return;
         }
         syncUrlFieldWithSelectedDeck();
+        updateCardsUnderTestVisibility();
         if (deckSelectionCommand != null) {
             deckSelectionCommand.run();
         }

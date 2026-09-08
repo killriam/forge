@@ -551,6 +551,10 @@ public class VLobby implements ILobbyView {
             // Not a create(...) parameter (unlike aiProfile) to avoid widening that factory's
             // signature for its other caller (forge-gui-mobile's LobbyScreen) - set separately.
             event.setScenarioFileName(getPlayerPanel(index).getScenarioFileName());
+            final FDeckChooser chooser = getPlayerPanel(index).getDeckChooser();
+            if (chooser != null) {
+                event.setGuaranteeCardsUnderTestTop10(chooser.isGuaranteeCardsUnderTestTop10());
+            }
             playerChangeListener.update(index, event);
         }
     }
@@ -594,6 +598,12 @@ public class VLobby implements ILobbyView {
         decks[index] = copy;
         if (playerChangeListener != null) {
             playerChangeListener.update(index, UpdateLobbyPlayerEvent.deckUpdate(section, cards));
+        }
+    }
+
+    public void fireCardsUnderTestTop10ChangeListener(final int index, final boolean value) {
+        if (playerChangeListener != null) {
+            playerChangeListener.update(index, UpdateLobbyPlayerEvent.cardsUnderTestTop10Update(value));
         }
     }
 
@@ -677,6 +687,7 @@ public class VLobby implements ILobbyView {
                 getPlayerPanel(playerIndex).setDeckSelectorButtonText(text);
             }
             fireDeckChangeListener(playerIndex, deck);
+            fireCardsUnderTestTop10ChangeListener(playerIndex, mainChooser.isGuaranteeCardsUnderTestTop10());
         }
         mainChooser.saveState();
     }
@@ -1206,6 +1217,7 @@ public class VLobby implements ILobbyView {
             final FDeckChooser fdc = new FDeckChooser(null, ai, gameType, forCommander);
             fdc.initialize(prefKey, deckType);
             fdc.setDeckSelectionCommand(() -> selectMainDeck(fdc, iSlot, forCommander));
+            fdc.getCbCardsUnderTestTop10().addActionListener(e -> fireCardsUnderTestTop10ChangeListener(iSlot, fdc.isGuaranteeCardsUnderTestTop10()));
             return fdc;
         });
     }

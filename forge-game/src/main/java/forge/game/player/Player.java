@@ -24,6 +24,7 @@ import forge.StaticData;
 import forge.card.*;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
+import forge.deck.Deck;
 import forge.game.*;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityKey;
@@ -1634,7 +1635,7 @@ public class Player extends GameEntity implements Comparable<Player> {
             if (idx >= 0) {
                 // In Shuffle Replay mode, human player's library is not force-reordered
                 if (game.getRules().isShuffleReplay() && (idx == 0 || !this.isAI())) {
-                    // keep shuffled
+                    ensureCardsUnderTestInTop10();
                 } else {
                     java.util.List<String> forced = game.getRules().getForcedLibraryOrder().get("P" + (idx + 1));
                     if (forced != null) {
@@ -1642,6 +1643,8 @@ public class Player extends GameEntity implements Comparable<Player> {
                     }
                 }
             }
+        } else {
+            ensureCardsUnderTestInTop10();
         }
 
         // Always Run triggers (701.20e)
@@ -1651,6 +1654,65 @@ public class Player extends GameEntity implements Comparable<Player> {
 
         // Play the shuffle sound
         game.fireEvent(new GameEventShuffle(this));
+    }
+
+    public boolean isGuaranteeCardsUnderTestTop10() {
+        try {
+            final RegisteredPlayer rp = getRegisteredPlayer();
+            return rp != null && rp.isGuaranteeCardsUnderTestTop10();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public void ensureCardsUnderTestInTop10() {
+        if (!isGuaranteeCardsUnderTestTop10()) {
+            return;
+        }
+        final RegisteredPlayer rp = getRegisteredPlayer();
+        final Deck deck = rp != null ? rp.getDeck() : null;
+        if (deck == null || deck.getCardsUnderTest().isEmpty()) {
+            return;
+        }
+        final PlayerZone libZone = getZone(ZoneType.Library);
+        if (libZone == null || libZone.isEmpty()) {
+            return;
+        }
+        final List<Card> currentLib = new ArrayList<>(libZone.getCards());
+        final int libSize = currentLib.size();
+        final int topWindow = Math.min(10, libSize);
+        final List<String> targetNames = deck.getCardsUnderTest();
+
+        // Collect all cards in library matching any of targetNames
+        final List<Card> underTestInLib = new ArrayList<>();
+        for (Card c : currentLib) {
+            if (targetNames.contains(c.getName())) {
+                underTestInLib.add(c);
+            }
+        }
+        if (underTestInLib.isEmpty()) {
+            return;
+        }
+
+        // For each card not in the top window (index >= topWindow), swap it with a random card in the top window
+        // that is NOT itself a card under test
+        for (Card c : underTestInLib) {
+            int currentIdx = currentLib.indexOf(c);
+            if (currentIdx >= topWindow) {
+                List<Integer> candidateIndices = new ArrayList<>();
+                for (int i = 0; i < topWindow; i++) {
+                    Card candidate = currentLib.get(i);
+                    if (!targetNames.contains(candidate.getName())) {
+                        candidateIndices.add(i);
+                    }
+                }
+                if (!candidateIndices.isEmpty()) {
+                    int swapIdx = candidateIndices.get(MyRandom.getRandom().nextInt(candidateIndices.size()));
+                    Collections.swap(currentLib, swapIdx, currentIdx);
+                }
+            }
+        }
+        libZone.setCards(currentLib);
     }
 
     public final Card playLand(final Card land, SpellAbility cause) {
@@ -2433,7 +2495,14 @@ public class Player extends GameEntity implements Comparable<Player> {
     }
 
     public final RegisteredPlayer getRegisteredPlayer() {
-        return game.getMatch().getPlayers().get(game.getRegisteredPlayers().indexOf(this));
+        if (game == null || game.getMatch() == null || game.getMatch().getPlayers() == null) {
+            return null;
+        }
+        int idx = game.getRegisteredPlayers().indexOf(this);
+        if (idx < 0 || idx >= game.getMatch().getPlayers().size()) {
+            return null;
+        }
+        return game.getMatch().getPlayers().get(idx);
     }
 
     public final PlayerOutcome getOutcome() {
