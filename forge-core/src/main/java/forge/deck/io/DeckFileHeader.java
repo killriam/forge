@@ -60,6 +60,10 @@ public class DeckFileHeader {
     public static final String EVAL_SCENARIO = "EvalScenario";
     /** Comma-separated opening_hand_test scenario ids/filenames (docs/SCENARIO_STARTING_HAND_FORMAT.md). */
     public static final String SCENARIO = "Scenario";
+    /** Semicolon-separated list of card names marked under test in MaMo. */
+    public static final String CARDS_UNDER_TEST = "CardsUnderTest";
+    /** Semicolon-separated list of card names added since the previous revision. */
+    public static final String NEW_CARDS_SINCE_LAST_REVISION = "NewCardsSinceLastRevision";
 
     private final DeckFormat deckType;
     private final String sourceUrl;
@@ -71,6 +75,8 @@ public class DeckFileHeader {
     private final Set<String> tags;
     private final HashMap<String, String> draftNotes;
     private final List<String> keyCards;
+    private final List<String> cardsUnderTest;
+    private final List<String> newCardsSinceLastRevision;
 
     private final boolean intendedForAi;
     private final String aiHints;
@@ -120,6 +126,26 @@ public class DeckFileHeader {
             for (String k: rawKeyCards.split(";"))
                 if (StringUtils.isNotBlank(k))
                     keyCards.add(k.trim());
+        }
+
+        this.cardsUnderTest = new ArrayList<>();
+        String rawCardsUnderTest = kvPairs.get(DeckFileHeader.CARDS_UNDER_TEST);
+        if (StringUtils.isNotBlank(rawCardsUnderTest)) {
+            for (String k : rawCardsUnderTest.split(";")) {
+                if (StringUtils.isNotBlank(k)) {
+                    cardsUnderTest.add(k.trim());
+                }
+            }
+        }
+
+        this.newCardsSinceLastRevision = new ArrayList<>();
+        String rawNewCards = kvPairs.get(DeckFileHeader.NEW_CARDS_SINCE_LAST_REVISION);
+        if (StringUtils.isNotBlank(rawNewCards)) {
+            for (String k : rawNewCards.split(";")) {
+                if (StringUtils.isNotBlank(k)) {
+                    newCardsSinceLastRevision.add(k.trim());
+                }
+            }
         }
     }
 
@@ -193,5 +219,13 @@ public class DeckFileHeader {
 
     public final int getSleeveArtOffset() {
         return sleeveArtOffset;
+    }
+
+    public final List<String> getCardsUnderTest() {
+        return cardsUnderTest;
+    }
+
+    public final List<String> getNewCardsSinceLastRevision() {
+        return newCardsSinceLastRevision;
     }
 }

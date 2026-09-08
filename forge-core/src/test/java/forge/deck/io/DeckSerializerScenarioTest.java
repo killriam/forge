@@ -84,4 +84,58 @@ public class DeckSerializerScenarioTest {
 
         assertEquals("perfect-draw-1", dh.getScenario());
     }
+
+    @Test
+    public void testCardsUnderTest_roundTripsThroughFile() throws IOException {
+        Deck d = new Deck("Cards Under Test Deck");
+        d.addCardUnderTest("Cyclonic Rift");
+        d.addCardUnderTest("Rhystic Study");
+        d.addCardUnderTest("Sol Ring");
+
+        File f = tempDeckFile();
+        DeckSerializer.writeDeck(d, f);
+        Deck reloaded = DeckSerializer.fromFile(f);
+
+        assertNotNull(reloaded);
+        assertEquals(3, reloaded.getCardsUnderTest().size());
+        assertTrue(reloaded.isCardUnderTest("Cyclonic Rift"));
+        assertTrue(reloaded.isCardUnderTest("Rhystic Study"));
+        assertTrue(reloaded.isCardUnderTest("Sol Ring"));
+        assertFalse(reloaded.isCardUnderTest("Black Lotus"));
+    }
+
+    @Test
+    public void testNewCardsSinceLastRevision_roundTripsThroughFile() throws IOException {
+        Deck d = new Deck("New Cards Deck");
+        d.addNewCardSinceLastRevision("Arcane Signet");
+        d.addNewCardSinceLastRevision("Mana Drain");
+
+        File f = tempDeckFile();
+        DeckSerializer.writeDeck(d, f);
+        Deck reloaded = DeckSerializer.fromFile(f);
+
+        assertNotNull(reloaded);
+        assertEquals(2, reloaded.getNewCardsSinceLastRevision().size());
+        assertTrue(reloaded.isNewCardSinceLastRevision("Arcane Signet"));
+        assertTrue(reloaded.isNewCardSinceLastRevision("Mana Drain"));
+        assertFalse(reloaded.isNewCardSinceLastRevision("Sol Ring"));
+    }
+
+    @Test
+    public void testDeckFileHeader_parsesCardsUnderTestAndNewCardsDirectly() {
+        FileSectionManual kvPairs = new FileSectionManual();
+        kvPairs.put(DeckFileHeader.NAME, "killriam - Atraxa Superfriends (2026-09-08)");
+        kvPairs.put(DeckFileHeader.CARDS_UNDER_TEST, "Cyclonic Rift; Rhystic Study; Sol Ring");
+        kvPairs.put(DeckFileHeader.NEW_CARDS_SINCE_LAST_REVISION, "Arcane Signet; Mana Drain");
+        DeckFileHeader dh = new DeckFileHeader(kvPairs);
+
+        assertEquals(3, dh.getCardsUnderTest().size());
+        assertEquals("Cyclonic Rift", dh.getCardsUnderTest().get(0));
+        assertEquals("Rhystic Study", dh.getCardsUnderTest().get(1));
+        assertEquals("Sol Ring", dh.getCardsUnderTest().get(2));
+
+        assertEquals(2, dh.getNewCardsSinceLastRevision().size());
+        assertEquals("Arcane Signet", dh.getNewCardsSinceLastRevision().get(0));
+        assertEquals("Mana Drain", dh.getNewCardsSinceLastRevision().get(1));
+    }
 }

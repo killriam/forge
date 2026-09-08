@@ -77,6 +77,12 @@ public class DeckSerializer {
         if (d.getScenarioIds() != null && !d.getScenarioIds().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.SCENARIO, "=", d.getScenarioIds()));
         }
+        if (!d.getCardsUnderTest().isEmpty()) {
+            out.add(TextUtil.concatNoSpace(DeckFileHeader.CARDS_UNDER_TEST, "=", StringUtils.join(d.getCardsUnderTest(), "; ")));
+        }
+        if (!d.getNewCardsSinceLastRevision().isEmpty()) {
+            out.add(TextUtil.concatNoSpace(DeckFileHeader.NEW_CARDS_SINCE_LAST_REVISION, "=", StringUtils.join(d.getNewCardsSinceLastRevision(), "; ")));
+        }
         if (!d.getSleeveArtKey().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.SLEEVE_ART, "=", d.getSleeveArtKey()));
             if (d.getSleeveArtOffset() != Deck.DEFAULT_SLEEVE_OFFSET) {
@@ -128,6 +134,12 @@ public class DeckSerializer {
         d.setDraftNotes(dh.getDraftNotes());
         for (String keyCard : dh.getKeyCards()) {
             d.addKeyCard(keyCard);
+        }
+        for (String c : dh.getCardsUnderTest()) {
+            d.addCardUnderTest(c);
+        }
+        for (String c : dh.getNewCardsSinceLastRevision()) {
+            d.addNewCardSinceLastRevision(c);
         }
         if (dh.getDeckUrl() != null)       d.setDeckUrl(dh.getDeckUrl());
         if (dh.getEvalScenario() != null)  d.setEvalScenarioIds(dh.getEvalScenario());

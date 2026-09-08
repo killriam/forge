@@ -83,6 +83,10 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
     private String evalScenarioIds = null;
     /** Comma-separated opening_hand_test scenario ids/filenames (docs/SCENARIO_STARTING_HAND_FORMAT.md). */
     private String scenarioIds = null;
+    /** Semicolon-separated card names marked under test in MaMo. */
+    private final List<String> cardsUnderTest = new ArrayList<>();
+    /** Semicolon-separated card names added since the previous revision. */
+    private final List<String> newCardsSinceLastRevision = new ArrayList<>();
 
     public Deck() {
         this("");
@@ -642,6 +646,58 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
             return false;
         }
         return keyCards.contains(cardName.trim());
+    }
+
+    public List<String> getCardsUnderTest() {
+        return new ArrayList<>(cardsUnderTest);
+    }
+
+    public void addCardUnderTest(String cardName) {
+        if (cardName != null && !cardName.trim().isEmpty()) {
+            String trimmed = cardName.trim();
+            if (!cardsUnderTest.contains(trimmed)) {
+                cardsUnderTest.add(trimmed);
+            }
+        }
+    }
+
+    public void removeCardUnderTest(String cardName) {
+        if (cardName != null) {
+            cardsUnderTest.remove(cardName.trim());
+        }
+    }
+
+    public boolean isCardUnderTest(String cardName) {
+        if (cardName == null) {
+            return false;
+        }
+        return cardsUnderTest.contains(cardName.trim());
+    }
+
+    public List<String> getNewCardsSinceLastRevision() {
+        return new ArrayList<>(newCardsSinceLastRevision);
+    }
+
+    public void addNewCardSinceLastRevision(String cardName) {
+        if (cardName != null && !cardName.trim().isEmpty()) {
+            String trimmed = cardName.trim();
+            if (!newCardsSinceLastRevision.contains(trimmed)) {
+                newCardsSinceLastRevision.add(trimmed);
+            }
+        }
+    }
+
+    public void removeNewCardSinceLastRevision(String cardName) {
+        if (cardName != null) {
+            newCardsSinceLastRevision.remove(cardName.trim());
+        }
+    }
+
+    public boolean isNewCardSinceLastRevision(String cardName) {
+        if (cardName == null) {
+            return false;
+        }
+        return newCardsSinceLastRevision.contains(cardName.trim());
     }
 
     public void setDraftNotes(Map<String, String> draftNotes) {
