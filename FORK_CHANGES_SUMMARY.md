@@ -118,3 +118,18 @@ Implements Commander Decklist Notation `deck_rules` consumption in the AI:
 | `ComputerUtil.java` | forge-ai | `wantMulligan()` uses deck-rules evaluator when available |
 | `DecklistMulliganEvaluator.java` | forge-ai | +`fromDeckRules()` factory method |
 | `docs/FEATURE_DECKLIST_MULLIGAN.md` | docs | Updated with Phase 2 combo/anti-synergy docs |
+
+---
+## Deck Metadata: CardsUnderTest & NewCardsSinceLastRevision (September 2026)
+
+Adds informational deck metadata keys to `[metadata]` for integration with external deckbuilders/testers (e.g. MaMo):
+
+### Modified Files
+| File | Module | Change |
+|------|--------|--------|
+| `DeckFileHeader.java` | forge-core | Added `CARDS_UNDER_TEST`, `NEW_CARDS_SINCE_LAST_REVISION` constants, parsing & getters |
+| `Deck.java` | forge-core | Added `cardsUnderTest`, `newCardsSinceLastRevision` collections, helpers, and checkers |
+| `DeckSerializer.java` | forge-core | Serializes and deserializes `CardsUnderTest=` and `NewCardsSinceLastRevision=` in `[metadata]` |
+| `DeckSerializerScenarioTest.java` | forge-core (test) | Added round-trip and header parsing tests |
+| `docs/DECK_METADATA_CARDS_UNDER_TEST.md` | docs | Full format specification and architecture documentation |
+
