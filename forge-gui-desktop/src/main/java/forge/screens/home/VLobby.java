@@ -429,6 +429,8 @@ public class VLobby implements ILobbyView {
                 panel.setMayControl(lobby.mayControl(i));
                 panel.setMayRemove(lobby.mayRemove(i));
                 panel.setAiProfile(slot.getAiProfile());
+                panel.setGuaranteeCardsUnderTestTop10(slot.isGuaranteeCardsUnderTestTop10());
+                panel.refreshCardsUnderTestFromDeck(slotDeck);
                 panel.update();
 
                 final boolean isSlotAI = slot.getType() == LobbySlotType.AI;
@@ -551,10 +553,7 @@ public class VLobby implements ILobbyView {
             // Not a create(...) parameter (unlike aiProfile) to avoid widening that factory's
             // signature for its other caller (forge-gui-mobile's LobbyScreen) - set separately.
             event.setScenarioFileName(getPlayerPanel(index).getScenarioFileName());
-            final FDeckChooser chooser = getPlayerPanel(index).getDeckChooser();
-            if (chooser != null) {
-                event.setGuaranteeCardsUnderTestTop10(chooser.isGuaranteeCardsUnderTestTop10());
-            }
+            event.setGuaranteeCardsUnderTestTop10(getPlayerPanel(index).isGuaranteeCardsUnderTestTop10());
             playerChangeListener.update(index, event);
         }
     }
@@ -569,6 +568,7 @@ public class VLobby implements ILobbyView {
         decks[index] = deck;
         getPlayerPanel(index).refreshSleeveFromDeck(deck);
         getPlayerPanel(index).refreshScenarioOptionsFromDeck(deck);
+        getPlayerPanel(index).refreshCardsUnderTestFromDeck(deck);
         if (playerChangeListener != null) {
             playerChangeListener.update(index, UpdateLobbyPlayerEvent.deckUpdate(deck));
 
@@ -1217,7 +1217,13 @@ public class VLobby implements ILobbyView {
             final FDeckChooser fdc = new FDeckChooser(null, ai, gameType, forCommander);
             fdc.initialize(prefKey, deckType);
             fdc.setDeckSelectionCommand(() -> selectMainDeck(fdc, iSlot, forCommander));
-            fdc.getCbCardsUnderTestTop10().addActionListener(e -> fireCardsUnderTestTop10ChangeListener(iSlot, fdc.isGuaranteeCardsUnderTestTop10()));
+            fdc.getCbCardsUnderTestTop10().addActionListener(e -> {
+                final boolean val = fdc.isGuaranteeCardsUnderTestTop10();
+                if (iSlot < playerPanels.size()) {
+                    playerPanels.get(iSlot).getChkCardsUnderTestTop10().setSelected(val);
+                }
+                fireCardsUnderTestTop10ChangeListener(iSlot, val);
+            });
             return fdc;
         });
     }

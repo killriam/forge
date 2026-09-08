@@ -95,6 +95,10 @@ public class PlayerPanel extends FPanel {
     private FComboBoxWrapper<Object> scenarioPickerComboBox = new FComboBoxWrapper<>();
     private static final String SCENARIO_NONE = "None";
 
+    // Cards under test guarantee checkbox
+    private final FCheckBox chkCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in top 10");
+    private boolean hasCardsUnderTest = false;
+
     private final FComboBoxWrapper<Object> teamComboBox = new FComboBoxWrapper<>();
     private final FComboBoxWrapper<Object> aeTeamComboBox = new FComboBoxWrapper<>();
 
@@ -221,6 +225,13 @@ public class PlayerPanel extends FPanel {
         // run) operated on a still-empty, unparented combo box and left it rendering blank.
         this.setScenarioFileName(slot == null ? null : slot.getScenarioFileName());
 
+        // Cards under test checkbox: hidden (hidemode 3 -> zero space) until the selected deck has CardsUnderTest
+        this.add(chkCardsUnderTestTop10, variantBtnConstraints + ", cell 2 8, pushx, growx, wmax 100%-153px, spanx 4, wrap");
+        chkCardsUnderTestTop10.addActionListener(cardsUnderTestTop10Listener);
+        chkCardsUnderTestTop10.setVisible(false);
+        this.setGuaranteeCardsUnderTestTop10(slot == null ? false : slot.isGuaranteeCardsUnderTestTop10());
+        refreshCardsUnderTestFromDeck(slot == null ? null : slot.getDeck());
+
         addHandlersToVariantsControls();
 
         this.addMouseListener(new FMouseAdapter() {
@@ -276,6 +287,11 @@ public class PlayerPanel extends FPanel {
         scenarioPickerLabel.setVisible(enableScenarioPicker);
         scenarioPickerComboBox.setVisible(enableScenarioPicker);
         scenarioPickerComboBox.setEnabled(enableScenarioPicker);
+
+        boolean enableCardsUnderTest = mayEdit && hasCardsUnderTest
+                && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
+        chkCardsUnderTestTop10.setVisible(enableCardsUnderTest);
+        chkCardsUnderTestTop10.setEnabled(enableCardsUnderTest);
 
         teamComboBox.setEnabled(mayEdit);
         deckLabel.setVisible(mayEdit);
@@ -609,6 +625,30 @@ public class PlayerPanel extends FPanel {
     public void refreshScenarioOptionsFromDeck(final Deck deck) {
         populateScenarioComboBox(deck);
     }
+
+    public void refreshCardsUnderTestFromDeck(final Deck deck) {
+        hasCardsUnderTest = deck != null && !deck.getCardsUnderTest().isEmpty();
+        if (hasCardsUnderTest) {
+            chkCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", deck.getCardsUnderTest()) + ") in top 10 cards of library");
+        } else {
+            chkCardsUnderTestTop10.setSelected(false);
+        }
+        final boolean showCheckbox = hasCardsUnderTest && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
+        chkCardsUnderTestTop10.setVisible(showCheckbox);
+        chkCardsUnderTestTop10.setEnabled(showCheckbox && mayEdit);
+    }
+
+    private final ActionListener cardsUnderTestTop10Listener = new ActionListener() {
+        @Override
+        public void actionPerformed(final ActionEvent e) {
+            final boolean selected = chkCardsUnderTestTop10.isSelected();
+            if (deckChooser != null) {
+                deckChooser.setGuaranteeCardsUnderTestTop10(selected);
+            }
+            lobby.changePlayerFocus(index);
+            lobby.fireCardsUnderTestTop10ChangeListener(index, selected);
+        }
+    };
 
     public String getScenarioFileName() {
         return scenarioFileName;
@@ -1129,9 +1169,29 @@ public class PlayerPanel extends FPanel {
 
     void setDeckChooser(final FDeckChooser deckChooser) {
         this.deckChooser = deckChooser;
-        // Seed scenario options from whatever deck this chooser already has selected (e.g. a
-        // restored/default seat) - later changes flow via refreshScenarioOptionsFromDeck instead.
-        populateScenarioComboBox(deckChooser == null ? null : deckChooser.getDeck());
+        // Seed scenario and cards under test options from whatever deck this chooser already has selected (e.g. a
+        // restored/default seat) - later changes flow via refreshScenarioOptionsFromDeck / refreshCardsUnderTestFromDeck instead.
+        final Deck deck = deckChooser == null ? null : deckChooser.getDeck();
+        populateScenarioComboBox(deck);
+        refreshCardsUnderTestFromDeck(deck);
+        if (deckChooser != null) {
+            deckChooser.setGuaranteeCardsUnderTestTop10(chkCardsUnderTestTop10.isSelected());
+        }
+    }
+
+    public FCheckBox getChkCardsUnderTestTop10() {
+        return chkCardsUnderTestTop10;
+    }
+
+    public boolean isGuaranteeCardsUnderTestTop10() {
+        return chkCardsUnderTestTop10.isSelected();
+    }
+
+    public void setGuaranteeCardsUnderTestTop10(final boolean guarantee) {
+        chkCardsUnderTestTop10.setSelected(guarantee);
+        if (deckChooser != null) {
+            deckChooser.setGuaranteeCardsUnderTestTop10(guarantee);
+        }
     }
 
     public void setAiProfile(String aiProfile) {
