@@ -33,6 +33,14 @@ public class DecklistMulliganEvaluator {
     /** Cache: file path → evaluator instance (avoids re-parsing per mulligan call). */
     private static final Map<String, DecklistMulliganEvaluator> CACHE = new ConcurrentHashMap<>();
 
+    /** Spec §6.1.2 standard per-round thresholds, used to fill in any round a deck's config
+     *  doesn't explicitly list (e.g. a deck that only sets round 0 still gets sane thresholds
+     *  for rounds 1-3 instead of those rounds silently always-keeping). Rounds beyond 3 have no
+     *  spec default and correctly fall through to "always keep" - see getMinValueForRound(). */
+    private static final Map<Integer, Double> STANDARD_DEFAULT_THRESHOLDS = Map.of(
+            0, 3.5, 1, 3.0, 2, 2.5, 3, 2.0
+    );
+
     private final DecklistMulliganConfig config;
     /** Precomputed lookup: card name → override value. */
     private final Map<String, Double> overrideMap;
@@ -244,19 +252,19 @@ public class DecklistMulliganEvaluator {
 
     /**
      * Get the minimum hand value required for a given mulligan round.
-     * If no threshold is configured for the round, returns 0 (always keep).
+     * A round the deck's config doesn't explicitly list falls back to the spec's standard
+     * per-round default (rounds 0-3); beyond that, no default is defined so the hand is
+     * always kept.
      */
     private double getMinValueForRound(int round) {
-        if (config.getThresholds() == null) {
-            return 0.0;
-        }
-        for (DecklistMulliganConfig.Threshold t : config.getThresholds()) {
-            if (t.getRound() == round) {
-                return t.getMinValue();
+        if (config.getThresholds() != null) {
+            for (DecklistMulliganConfig.Threshold t : config.getThresholds()) {
+                if (t.getRound() == round) {
+                    return t.getMinValue();
+                }
             }
         }
-        // No threshold configured for this round — always keep (too many mulligans)
-        return 0.0;
+        return STANDARD_DEFAULT_THRESHOLDS.getOrDefault(round, 0.0);
     }
 
     /**
