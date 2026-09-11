@@ -44,6 +44,7 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
 
     private final StartButton btnStart = new StartButton();
     private final FButton btnView = new FButton();
+    private final FButton btnRefresh = new FButton();
     private final FCheckBox cbShuffleHumanDeck = new FCheckBox("Human with shuffled deck");
 
     /** Days-filter combo: 0=all, 1,2,3,5,7,14,30 */
@@ -64,6 +65,7 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         replayInfo.setOpaque(false);
         replayInfoPane = new FScrollPane(replayInfo, true);
         btnView.setText(localizer.getMessage("lblViewReplay"));
+        btnRefresh.setText(localizer.getMessage("lblScanForNewGames"));
 
         progressBar = new JProgressBar();
         progressBar.setIndeterminate(true);
@@ -132,6 +134,10 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         return btnView;
     }
 
+    public FButton getBtnRefresh() {
+        return btnRefresh;
+    }
+
     public JComboBox<String> getCmbDays() {
         return cmbDays;
     }
@@ -166,6 +172,7 @@ public enum VSubmenuReplay implements IVSubmenu<CSubmenuReplay> {
         titlePanel.add(lblDays, "gapleft 16");
         titlePanel.add(cmbDays, "w 60!, h 24!");
         titlePanel.add(lblCount, "gapleft 20, pushx");
+        titlePanel.add(btnRefresh, "w 160px!, h 26px!");
 
         container.add(titlePanel, "w 96%!, gap 2% 2% 5px 5px");
         container.add(progressBar, "w 96%!, h 6!, gap 2% 2% 0 0");

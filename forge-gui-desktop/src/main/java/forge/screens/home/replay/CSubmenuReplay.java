@@ -92,6 +92,7 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
         view.getBtnStart().addActionListener(e -> startReplayGame());
         view.getBtnView().addActionListener(e -> openGameLearningViewer());
         view.getBtnView().setEnabled(false);
+        view.getBtnRefresh().addActionListener(e -> updateData());
         view.getCbShuffleHumanDeck().addActionListener(e -> updateReplayInfo());
 
         // Sync days-filter combo with stored preference
@@ -112,7 +113,11 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             }
         });
 
-        // Do NOT call updateData() here — lazy-load only when the screen is opened.
+        // Do NOT call updateData() here, and do NOT auto-scan in update() either — scanning the
+        // whole game log directory is only triggered explicitly, via the "Scan for New Games"
+        // button (or by changing the days filter above). This avoids parsing every replay log
+        // on every app startup just because Game Recap happened to be the last-opened tab.
+        view.getLblCount().setText(Localizer.getInstance().getMessage("lblClickScanForGames"));
     }
 
     /**
@@ -858,9 +863,9 @@ public enum CSubmenuReplay implements ICDoc, IMenuProvider {
             view.getCmbDays().setSelectedItem(storedDays);
         } catch (Exception ignored) { }
 
-        // Refresh list each time the screen is shown so that replayed files are excluded
-        updateData();
-        view.getBtnView().setEnabled(false);
+        // Do NOT auto-scan here — the list is only (re)loaded via the "Scan for New Games"
+        // button or the days-filter combo, so opening/restoring this tab (including at app
+        // startup, when it may be the last-selected home screen) never parses replay logs.
 
         // Auto-launch replay if a path was passed on the command line
         if (pendingReplayPath != null) {

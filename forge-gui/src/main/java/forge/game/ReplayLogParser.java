@@ -680,6 +680,16 @@ public class ReplayLogParser {
         return countWithTeam > 0 && (teams.size() < players.size() || "Two-Headed Giant".equalsIgnoreCase(gameType));
     }
 
+    /** Cache for {@link #listScenarioFiles()}, keyed by a cheap directory-listing fingerprint so
+     *  repeat callers within the same JVM session (e.g. one per lobby player-panel, of which
+     *  there can be several, each re-invoking this on every deck change) don't re-parse every
+     *  file on disk each time. Without this, PlayerPanel.populateScenarioComboBox() calling this
+     *  uncached from its constructor and from every deck-change callback meant N player panels
+     *  built at lobby startup multiplied into dozens of full-directory re-parses in a few
+     *  seconds, every launch. */
+    private static volatile String scenarioCacheSignature = null;
+    private static volatile List<ReplayLogParser> scenarioCache = null;
+
     /**
      * Scans {@code ForgeConstants.SCENARIO_DIR} for {@code *.json} files, parses each, and
      * returns only the ones that are scenarios ({@link #isScenario()}), newest first. Demo-play
@@ -689,24 +699,43 @@ public class ReplayLogParser {
      * <p>Shared by {@code CSubmenuScenario} and the {@code Scenario=} .dck-metadata resolution
      * path ({@link #resolveScenarioByIdOrFilename(String)}) — previously this directory scan was
      * duplicated inline in each GUI caller.</p>
+     *
+     * <p>Results are cached against a fingerprint of the directory listing (name + size + mtime
+     * of every {@code .json} file); a call that finds the same fingerprint as last time returns
+     * the cached list instead of re-parsing every file, while a file being added, removed, or
+     * modified is still picked up on the next call.</p>
      */
     public static List<ReplayLogParser> listScenarioFiles() {
-        List<ReplayLogParser> result = new ArrayList<>();
         File logDir = new File(forge.localinstance.properties.ForgeConstants.SCENARIO_DIR);
         if (!logDir.exists() || !logDir.isDirectory()) {
-            return result;
+            return new ArrayList<>();
         }
         File[] jsonFiles = logDir.listFiles((dir, name) -> name.endsWith(".json"));
         if (jsonFiles == null || jsonFiles.length == 0) {
-            return result;
+            return new ArrayList<>();
         }
         Arrays.sort(jsonFiles, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+
+        StringBuilder sig = new StringBuilder();
+        for (File f : jsonFiles) {
+            sig.append(f.getName()).append(':').append(f.lastModified()).append(':').append(f.length()).append('|');
+        }
+        String signature = sig.toString();
+
+        List<ReplayLogParser> cached = scenarioCache;
+        if (cached != null && signature.equals(scenarioCacheSignature)) {
+            return cached;
+        }
+
+        List<ReplayLogParser> result = new ArrayList<>();
         for (File jsonFile : jsonFiles) {
             ReplayLogParser parser = new ReplayLogParser(jsonFile);
             if (parser.parse() && parser.isScenario()) {
                 result.add(parser);
             }
         }
+        scenarioCache = result;
+        scenarioCacheSignature = signature;
         return result;
     }
 
