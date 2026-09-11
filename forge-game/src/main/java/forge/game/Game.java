@@ -68,6 +68,8 @@ public class Game {
     private static int maxId = 0;
     private static int nextId() { return ++maxId; }
 
+    private boolean noGUIUser;
+
     /** The ID. */
     private int id;
     private final GameRules rules;
@@ -98,7 +100,6 @@ public class Game {
 
     private final Zone stackZone = new Zone(ZoneType.Stack, this);
     public int AI_TIMEOUT = 5;
-    public boolean AI_CAN_USE_TIMEOUT = true;
 
     public boolean EXPERIMENTAL_RESTORE_SNAPSHOT = false;
     // While this is false here, its really set by the Match/Preferences
@@ -272,7 +273,7 @@ public class Game {
     }
 
     public Player getPlayer(int id) {
-        for(Player p : allPlayers) {
+        for (Player p : allPlayers) {
             if (p.getId() == id) {
                 return p;
             }
@@ -1418,8 +1419,11 @@ public class Game {
     public int getAITimeout() {
         return AI_TIMEOUT;
     }
-    public boolean canUseTimeout() {
-        return AI_CAN_USE_TIMEOUT;
+    public boolean isNoGUIUser() {
+        return noGUIUser;
+    }
+    public void setNoGUIUser() {
+        noGUIUser = true;
     }
 
     public SimulationMetricsCollector getSimulationMetricsCollector() {

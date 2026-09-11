@@ -257,7 +257,7 @@ public class SimulateMatch {
             sb.append(" seed ").append(seed);
         }
 
-        System.out.println(sb.toString());
+        System.out.println(sb);
 
         Match mc = new Match(rules, pp, "Test");
 
@@ -573,6 +573,7 @@ public class SimulateMatch {
         sw.start();
 
         final Game g1 = mc.createGame();
+        g1.setNoGUIUser();
         // will run match in the same thread
         try {
             TimeLimitedCodeBlock.runWithTimeout(() -> {

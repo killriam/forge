@@ -244,12 +244,13 @@ public class AiDecisionLogger {
             case StopRunawayActivations -> "Preventing infinite loop";
             case TargetingFailed -> "No valid targets";
             case CostNotAcceptable -> "Cost too high";
-            case LifeInDanger -> "Life in danger, being defensive";
+            case IncreasesLifeInDanger -> "Life in danger, being defensive";
             case WouldDestroyLegend -> "Would destroy own legend";
             case WouldBecomeZeroToughnessCreature -> "Would create 0-toughness creature";
             case WouldDestroyWorldEnchantment -> "Would destroy world enchantment";
             case BadEtbEffects -> "Bad enter-the-battlefield effects";
             case CurseEffects -> "Would be cursed/negative effects";
+            case HybridSimRejected -> "Rejected by hybrid simulation safety check";
         };
     }
 
@@ -334,7 +335,7 @@ public class AiDecisionLogger {
         return switch (decision) {
             // These are interesting to understand AI behavior
             case WaitForCombat, WaitForMain2, WaitForEndOfTurn,
-                 LifeInDanger, TargetingFailed, CostNotAcceptable,
+                 IncreasesLifeInDanger, TargetingFailed, CostNotAcceptable,
                  BadEtbEffects, CurseEffects -> true;
             // These are routine/expected and would spam the log
             default -> false;
