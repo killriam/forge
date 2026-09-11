@@ -53,6 +53,18 @@ public class GameLogSaver {
 
         ReplayNotationExporter exporter = new ReplayNotationExporter(game);
         gameLog.enableReplayNotation(exporter);
+
+        // Crash-recovery autosave: overwritten once per turn (see GameLogFormatter), deleted
+        // automatically once the game ends normally. Skipped for simulation/headless games -
+        // those aren't something a user needs to "resume" after a crash.
+        if (game.getRules() == null || !game.getRules().isSimulationMode()) {
+            File autosaveDir = new File(ForgeConstants.AUTOSAVE_DIR);
+            String gameType = game.getRules() != null && game.getRules().getGameType() != null ?
+                    game.getRules().getGameType().toString() : "Game";
+            File autosaveFile = new File(autosaveDir, "autosave_" + gameType + "_" + game.getId() + ".json");
+            exporter.setAutosaveFile(autosaveFile);
+        }
+
         LOG.debug("Replay notation enabled for game {}", game.getId());
     }
 

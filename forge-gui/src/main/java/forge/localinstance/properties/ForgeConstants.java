@@ -253,6 +253,12 @@ public final class ForgeConstants {
      *  Investigate Scenarios never has to scan/exclude real games, and Game Recap never has to
      *  scan/exclude scenario or demo-play files. */
     public static final String SCENARIO_DIR                = USER_GAMES_DIR + "scenarios" + PATH_SEPARATOR;
+    /** Per-turn autosave of the in-progress replay JSON, so a crash mid-game leaves a resumable
+     *  snapshot instead of losing the whole game (which otherwise is only ever written to disk
+     *  once, at normal game end). Cleared automatically when the game it belongs to ends
+     *  normally; kept separate from GAME_LOG_DIR/SCENARIO_DIR so a crash-recovery snapshot never
+     *  shows up in Game Recap or Investigate Scenarios. */
+    public static final String AUTOSAVE_DIR                = USER_GAMES_DIR + "autosave" + PATH_SEPARATOR;
     public static final String ACHIEVEMENTS_DIR           = USER_DIR + "achievements" + PATH_SEPARATOR;
     public static final String USER_CUSTOM_DIR            = USER_DIR + "custom" + PATH_SEPARATOR;
     public static final String USER_CUSTOM_EDITIONS_DIR   = USER_CUSTOM_DIR + "editions" + PATH_SEPARATOR;

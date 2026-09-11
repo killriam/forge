@@ -93,6 +93,8 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         if (replayExporter != null) {
             replayExporter.setOutcomeFromEvent(ev.winningPlayerName(), ev.lastTurnNumber(), ev.outcomeStrings());
             replayExporter.buildGameSummary();
+            // Game ended normally - the crash-recovery autosave (if any) is no longer needed.
+            replayExporter.clearAutosave();
         }
 
         return new GameLogEntry(GameLogEntryType.MATCH_RESULTS, ev.matchSummary());
@@ -371,6 +373,9 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
                                                   event.turnNumber(), generateTimeMarker());
             replayExporter.onTurnBegin(event.turnNumber(), resolvedCurr);
             previousTurnPlayer = turnPlayer;
+            // Crash-recovery: overwrite the autosave with everything through the turn that just
+            // ended (this event fires once the previous turn's data is fully recorded).
+            replayExporter.autosaveIfEnabled();
         }
 
         String message = localizer.getMessage("lblLogTurnNOwnerByPlayer", event.turnNumber(), event.turnOwner());

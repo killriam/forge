@@ -11,6 +11,9 @@ import forge.game.zone.ZoneType;
 
 import com.google.common.collect.Multiset;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
@@ -23,6 +26,8 @@ import java.util.*;
  * Implements the specification from MTG_REPLAY_NOTATION.md.
  */
 public class ReplayNotationExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ReplayNotationExporter.class);
 
     private static final DateTimeFormatter ISO_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
             .withZone(ZoneOffset.UTC);
@@ -77,10 +82,47 @@ public class ReplayNotationExporter {
     private final Map<String, Integer> gameTotalCountersPlaced = new HashMap<>();
     private final Map<String, Integer> gamePeakMana = new HashMap<>();
 
+    // Crash-recovery autosave: set by the GUI layer (which knows the user's data directory) via
+    // setAutosaveFile(); null means autosave is off (e.g. simulation/headless games).
+    private File autosaveFile;
+
     public ReplayNotationExporter(Game game) {
         this.game = game;
         this.replayLog = new ReplayLog();
         initializeReplayLog();
+    }
+
+    /** Enables per-turn crash-recovery autosaving to the given file (overwritten each turn). */
+    public void setAutosaveFile(File file) {
+        this.autosaveFile = file;
+    }
+
+    /**
+     * Overwrites the autosave file (if {@link #setAutosaveFile(File)} was called) with the
+     * replay log as it stands right now. Called once per turn boundary - failures are logged
+     * and swallowed, since a missed autosave must never interrupt the game in progress.
+     */
+    public void autosaveIfEnabled() {
+        if (autosaveFile == null) return;
+        try {
+            File parent = autosaveFile.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                LOG.warn("Failed to create autosave directory: {}", parent);
+                return;
+            }
+            ReplayJsonSerializer.writeToFile(replayLog, autosaveFile);
+        } catch (IOException | RuntimeException e) {
+            LOG.warn("Failed to write crash-recovery autosave: {}", e.getMessage());
+        }
+    }
+
+    /** Deletes the autosave file (if any) once this game has ended normally - the game is now
+     *  either saved through the normal end-of-game path or no longer needs to be recovered. */
+    public void clearAutosave() {
+        if (autosaveFile != null && autosaveFile.exists() && !autosaveFile.delete()) {
+            LOG.warn("Failed to delete autosave file: {}", autosaveFile);
+        }
+        autosaveFile = null;
     }
 
     /**
