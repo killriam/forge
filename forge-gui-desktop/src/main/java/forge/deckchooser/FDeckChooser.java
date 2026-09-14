@@ -66,7 +66,7 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
 
     private final FLabel btnViewDeck = new FLabel.ButtonBuilder().text(localizer.getMessage("lblViewDeck")).fontSize(14).build();
     private final FLabel btnRandom = new FLabel.ButtonBuilder().fontSize(14).build();
-    private final FCheckBox cbCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in top 10");
+    private final FCheckBox cbCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in first 10 drawn cards");
     private JPanel pnlDeckUrl;
     private FTextField txtDeckUrl;
     private FLabel btnReloadUrl;
@@ -434,7 +434,7 @@ public class FDeckChooser extends JPanel implements IDecksComboBoxListener {
         final boolean hasUnderTest = selectedDeck != null && !selectedDeck.getCardsUnderTest().isEmpty();
         cbCardsUnderTestTop10.setVisible(hasUnderTest);
         if (hasUnderTest) {
-            cbCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", selectedDeck.getCardsUnderTest()) + ") in top 10 cards of library");
+            cbCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", selectedDeck.getCardsUnderTest()) + ") in the first 10 drawn cards");
         } else {
             cbCardsUnderTestTop10.setSelected(false);
         }

@@ -96,7 +96,7 @@ public class PlayerPanel extends FPanel {
     private static final String SCENARIO_NONE = "None";
 
     // Cards under test guarantee checkbox
-    private final FCheckBox chkCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in top 10");
+    private final FCheckBox chkCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in first 10 drawn cards");
     private boolean hasCardsUnderTest = false;
 
     private final FComboBoxWrapper<Object> teamComboBox = new FComboBoxWrapper<>();
@@ -632,7 +632,7 @@ public class PlayerPanel extends FPanel {
     public void refreshCardsUnderTestFromDeck(final Deck deck) {
         hasCardsUnderTest = deck != null && !deck.getCardsUnderTest().isEmpty();
         if (hasCardsUnderTest) {
-            chkCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", deck.getCardsUnderTest()) + ") in top 10 cards of library");
+            chkCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", deck.getCardsUnderTest()) + ") in the first 10 drawn cards");
         } else {
             chkCardsUnderTestTop10.setSelected(false);
         }
