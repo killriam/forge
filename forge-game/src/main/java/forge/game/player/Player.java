@@ -442,6 +442,10 @@ public class Player extends GameEntity implements Comparable<Player> {
     }
 
     public final boolean gainLife(int lifeGain, final Card source, final SpellAbility sa) {
+        return gainLife(lifeGain, source, sa, "gain");
+    }
+
+    public final boolean gainLife(int lifeGain, final Card source, final SpellAbility sa, final String cause) {
         if (!canGainLife() || lifeGain <= 0) {
             return false;
         }
@@ -488,7 +492,7 @@ public class Player extends GameEntity implements Comparable<Player> {
         runParams.put(AbilityKey.FirstTime, firstGain);
         game.getTriggerHandler().runTrigger(TriggerType.LifeGained, runParams, false);
 
-        game.fireEvent(new GameEventPlayerLivesChanged(this, oldLife, life));
+        game.fireEvent(new GameEventPlayerLivesChanged(this, oldLife, life, source, cause));
         return true;
     }
 

@@ -836,8 +836,21 @@ public class ReplayNotationExporter {
     /**
      * Log a card being drawn by a player.
      * Drawing is a system action that happens to a player.
+     * @deprecated Use {@link #logDraw(Card, Player, Card, String)} so the draw's cause (if any)
+     * is recorded directly instead of left for a consumer to guess from event adjacency.
      */
+    @Deprecated
     public void logDraw(Card card, Player player, String timeMarker) {
+        logDraw(card, player, null, timeMarker);
+    }
+
+    /**
+     * Log a card being drawn by a player, tagging the ability that caused it when known.
+     * Drawing is a system action that happens to a player.
+     * @param source the host card of the ability whose resolution caused this draw, or null if
+     *               the draw has no identifiable cause (e.g. the mandatory once-per-turn draw)
+     */
+    public void logDraw(Card card, Player player, Card source, String timeMarker) {
         flushPendingPhase();
 
         Map<String, Object> data = new HashMap<>();
@@ -858,9 +871,30 @@ public class ReplayNotationExporter {
             data.put("owner", getPlayerId(card.getOwner()));
         }
 
+        if (source != null) {
+            data.put("source", getCardId(source));
+            data.put("source_name", getActualCardName(source));
+        }
+
         // Draw is a system action, but we record which player drew
         addEvent(timeMarker, "SYS", "DRAW", data);
         trackCardDrawn(player);
+    }
+
+    /**
+     * Returns the host card of the spell/ability currently resolving on the stack, i.e. the
+     * likely cause of a game event (DRAW, LIFE, etc.) firing right now as one of its effects -
+     * mirrors the lookup {@link #logTrigger} / {@link #logResolve} already do for their own
+     * source/card fields. Returns null when nothing is resolving (e.g. a turn-based draw step
+     * draw, which has no ability behind it) - callers should omit the source rather than guess.
+     */
+    public Card getCurrentResolvingSource() {
+        forge.game.zone.MagicStack stack = game.getStack();
+        if (stack == null || !stack.isResolving()) {
+            return null;
+        }
+        forge.game.spellability.SpellAbilityStackInstance top = stack.peek();
+        return top != null ? top.getSpellAbility().getHostCard() : null;
     }
 
     /**
@@ -1231,6 +1265,17 @@ public class ReplayNotationExporter {
         data.put("trigger", sa != null ? sa.getStackDescription() : "unknown trigger");
         data.put("controller", getPlayerId(controller));
 
+        // If this ability was granted to `source` by a different card's static ability (e.g.
+        // Candlekeep Sage granting the commander a draw trigger), record the granting card too
+        // so a consumer can show the full chain instead of a card with no ability of its own.
+        if (sa != null && sa.getGrantorStatic() != null) {
+            Card grantor = sa.getGrantorStatic().getHostCard();
+            if (grantor != null && !grantor.equals(source)) {
+                data.put("granted_by", getCardId(grantor));
+                data.put("granted_by_name", getActualCardName(grantor));
+            }
+        }
+
         addEvent(timeMarker, "SYS", "TRIGGER", data);
     }
 
@@ -1380,8 +1425,20 @@ public class ReplayNotationExporter {
 
     /**
      * Log life total change.
+     * @deprecated Use {@link #logLifeChange(Player, int, int, String, Card, String)} so a
+     * gain's cause (a triggered ability or lifelink) is recorded directly.
      */
+    @Deprecated
     public void logLifeChange(Player player, int delta, int newTotal, String cause, String timeMarker) {
+        logLifeChange(player, delta, newTotal, cause, null, timeMarker);
+    }
+
+    /**
+     * Log life total change, tagging the card that caused it when known (e.g. a lifelink
+     * attacker, or the source of a life-gain triggered ability). Left null for life loss, which
+     * has no single identifiable card source today.
+     */
+    public void logLifeChange(Player player, int delta, int newTotal, String cause, Card source, String timeMarker) {
         flushPendingPhase(); // Something happened! Log the phase.
 
         Map<String, Object> data = new HashMap<>();
@@ -1389,6 +1446,11 @@ public class ReplayNotationExporter {
         data.put("delta", delta);
         data.put("new_total", newTotal);
         data.put("cause", cause);
+
+        if (source != null) {
+            data.put("source", getCardId(source));
+            data.put("source_name", getActualCardName(source));
+        }
 
         addEvent(timeMarker, "SYS", "LIFE", data);
     }

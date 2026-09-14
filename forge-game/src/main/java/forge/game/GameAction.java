@@ -2804,7 +2804,7 @@ public class GameAction {
 
             // CR 702.15e
             if (sum > 0 && sourceLKI.hasKeyword(Keyword.LIFELINK)) {
-                sourceLKI.getController().gainLife(sum, sourceLKI, cause);
+                sourceLKI.getController().gainLife(sum, sourceLKI, cause, "lifelink");
             }
         }
 

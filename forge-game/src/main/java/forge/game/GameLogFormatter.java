@@ -408,8 +408,11 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
         // P2.4: Wire existing logLifeChange() — emit LIFE event to JSON
         if (replayExporter != null) {
             int delta = ev.newLives() - ev.oldLives();
-            String cause = delta < 0 ? "damage_or_loss" : "gain";
-            replayExporter.logLifeChange(replayExporter.resolvePlayer(ev.player()), delta, ev.newLives(), cause, generateTimeMarker());
+            // ev.cause() is set directly at the gainLife() call site ("gain" or "lifelink");
+            // life loss carries no cause today, so fall back to the delta-sign guess for it.
+            String cause = ev.cause() != null ? ev.cause() : (delta < 0 ? "damage_or_loss" : "gain");
+            Card lifeSource = replayExporter.resolveCard(ev.source());
+            replayExporter.logLifeChange(replayExporter.resolvePlayer(ev.player()), delta, ev.newLives(), cause, lifeSource, generateTimeMarker());
         }
         return new GameLogEntry(GameLogEntryType.LIFE, message);
     }
@@ -624,7 +627,8 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
             } else if (underlying != null) {
                 if (fromZone == ZoneType.Library && toZone == ZoneType.Hand) {
                     // Drawing a card
-                    replayExporter.logDraw(underlying, owner, generateTimeMarker());
+                    Card drawSource = replayExporter.getCurrentResolvingSource();
+                    replayExporter.logDraw(underlying, owner, drawSource, generateTimeMarker());
                     recentlyDrawnCards.add(card);
                 } else if (fromZone == ZoneType.Hand && toZone == ZoneType.Graveyard) {
                     // Discarding a card - assume player choice for now
