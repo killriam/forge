@@ -21,11 +21,18 @@ import java.util.Map;
  *                        DECLARE_ATTACKERS, DECLARE_BLOCKERS, COUNTERS events; enriched card_index
  * - 1.7.0 (spec 1.7.0): Added mode field and scenario object; rules_clarification marker category
  * - 1.9.0: Added team field in player metadata for multiplayer team games
+ * - 1.9.2 (spec 1.9.2): Added source/source_name to DRAW and LIFE events (the triggering
+ *                        ability's host card), a "lifelink" LIFE cause distinct from a triggered
+ *                        ability's "gain", and granted_by/granted_by_name on TRIGGER events when
+ *                        the ability was granted by a different card's static ability. Also
+ *                        confirms (does not change) that a triggered ability's effect events fire
+ *                        before its RESOLVE event - required by MagicStack.resolveStack(), not a
+ *                        formatter choice.
  */
 public class ReplayLog {
     private String format = "mtg-replay";
-    private String version = "1.9.0";
-    private String specVersion = "1.9.0";
+    private String version = "1.9.2";
+    private String specVersion = "1.9.2";
     private ReplayMeta meta;
     private long seed;
     private GameStartInfo gameStart;
