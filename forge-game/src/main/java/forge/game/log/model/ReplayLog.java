@@ -28,11 +28,17 @@ import java.util.Map;
  *                        confirms (does not change) that a triggered ability's effect events fire
  *                        before its RESOLVE event - required by MagicStack.resolveStack(), not a
  *                        formatter choice.
+ * - 1.9.3 (spec 1.9.3): No generator change. Spec docs caught up to the fields this class already
+ *                        emits as of 1.9.2 (LIFE's source/source_name/lifelink cause, TRIGGER's
+ *                        granted_by/granted_by_name), and corrected two stale discrepancy notes -
+ *                        DRAW already carries obj/from/to/pos/visibility alongside owner/controller,
+ *                        and RESOLVE's stack field is always "unknown" (logPutOnStack() is never
+ *                        called from any production path) rather than simply absent.
  */
 public class ReplayLog {
     private String format = "mtg-replay";
-    private String version = "1.9.2";
-    private String specVersion = "1.9.2";
+    private String version = "1.9.3";
+    private String specVersion = "1.9.3";
     private ReplayMeta meta;
     private long seed;
     private GameStartInfo gameStart;
