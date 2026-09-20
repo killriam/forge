@@ -2179,8 +2179,8 @@ public class ComputerUtil {
             if (deck != null) {
                 forge.deck.DeckRulesConfig rulesConfig = deck.getDeckRulesConfig();
                 if (rulesConfig != null && rulesConfig.hasMulligan()) {
-                    forge.ai.mulligan.DecklistMulliganEvaluator evaluator =
-                            forge.ai.mulligan.DecklistMulliganEvaluator.fromDeckRules(rulesConfig.getMulligan());
+                    forge.game.mulligan.DecklistMulliganEvaluator evaluator =
+                            forge.game.mulligan.DecklistMulliganEvaluator.fromDeckRules(rulesConfig.getMulligan(), deck);
                     if (evaluator != null) {
                         // mulliganRound = 7 - currentHandSize (approximation)
                         int mulliganRound = 7 - handList.size() + cardsToReturn;

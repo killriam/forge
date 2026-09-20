@@ -15,6 +15,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 import forge.deck.*;
+import forge.deck.mulligan.HandQualityTarget;
 import forge.deckchooser.FDeckChooser;
 import forge.game.GameType;
 import forge.game.card.CardView;
@@ -421,6 +422,8 @@ public class VLobby implements ILobbyView {
                 panel.setAiProfile(slot.getAiProfile());
                 panel.setGuaranteeCardsUnderTestTop10(slot.isGuaranteeCardsUnderTestTop10());
                 panel.refreshCardsUnderTestFromDeck(slotDeck);
+                panel.setStartingHandQualityTarget(HandQualityTarget.fromString(slot.getStartingHandQualityTarget()));
+                panel.refreshHandQualityTargetFromDeck(slotDeck);
                 panel.update();
 
                 final boolean isSlotAI = slot.getType() == LobbySlotType.AI;
@@ -544,6 +547,7 @@ public class VLobby implements ILobbyView {
             // signature for its other caller (forge-gui-mobile's LobbyScreen) - set separately.
             event.setScenarioFileName(getPlayerPanel(index).getScenarioFileName());
             event.setGuaranteeCardsUnderTestTop10(getPlayerPanel(index).isGuaranteeCardsUnderTestTop10());
+            event.setStartingHandQualityTarget(getPlayerPanel(index).getStartingHandQualityTarget().name());
             playerChangeListener.update(index, event);
         }
     }
@@ -559,6 +563,7 @@ public class VLobby implements ILobbyView {
         getPlayerPanel(index).refreshSleeveFromDeck(deck);
         getPlayerPanel(index).refreshScenarioOptionsFromDeck(deck);
         getPlayerPanel(index).refreshCardsUnderTestFromDeck(deck);
+        getPlayerPanel(index).refreshHandQualityTargetFromDeck(deck);
         if (playerChangeListener != null) {
             playerChangeListener.update(index, UpdateLobbyPlayerEvent.deckUpdate(deck));
 
@@ -594,6 +599,12 @@ public class VLobby implements ILobbyView {
     public void fireCardsUnderTestTop10ChangeListener(final int index, final boolean value) {
         if (playerChangeListener != null) {
             playerChangeListener.update(index, UpdateLobbyPlayerEvent.cardsUnderTestTop10Update(value));
+        }
+    }
+
+    public void fireStartingHandQualityTargetChangeListener(final int index, final HandQualityTarget value) {
+        if (playerChangeListener != null) {
+            playerChangeListener.update(index, UpdateLobbyPlayerEvent.startingHandQualityTargetUpdate(value.name()));
         }
     }
 

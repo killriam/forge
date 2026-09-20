@@ -13,6 +13,7 @@ import forge.deck.CardPool;
 import forge.deck.Deck;
 import forge.deck.DeckFormat;
 import forge.deck.DeckSection;
+import forge.deck.mulligan.HandQualityTarget;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.GameView;
@@ -541,6 +542,7 @@ public abstract class GameLobby implements IHasGameType {
             }
 
             rp.setGuaranteeCardsUnderTestTop10(slot.isGuaranteeCardsUnderTestTop10());
+            rp.setStartingHandQualityTarget(HandQualityTarget.fromString(slot.getStartingHandQualityTarget()));
             rp.setTeamNumber(team);
             players.add(rp.setPlayer(lobbyPlayer));
 

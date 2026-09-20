@@ -99,6 +99,15 @@ public class PlayerPanel extends FPanel {
     private final FCheckBox chkCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in first 10 drawn cards");
     private boolean hasCardsUnderTest = false;
 
+    // Mana Base Band (read-only, Commander Decklist Notation spec §6.1.5) + Target Hand Quality
+    // picker (§6.1.6, quartile-based - see forge.game.mulligan.HandQualitySampler). Both hidden
+    // until the selected deck's DeckRulesConfig declares mulligan rules at all.
+    private final FLabel manaBaseBandLabel = new FLabel.Builder().text("Mana Base:").build();
+    private final FLabel manaBaseBandValue = new FLabel.Builder().text("").build();
+    private final FLabel handQualityTargetLabel = new FLabel.Builder().text("Target Hand Quality:").build();
+    private final FComboBoxWrapper<forge.deck.mulligan.HandQualityTarget> handQualityTargetComboBox = new FComboBoxWrapper<>();
+    private boolean hasMulliganConfig = false;
+
     private final FComboBoxWrapper<Object> teamComboBox = new FComboBoxWrapper<>();
     private final FComboBoxWrapper<Object> aeTeamComboBox = new FComboBoxWrapper<>();
 
@@ -232,6 +241,25 @@ public class PlayerPanel extends FPanel {
         this.setGuaranteeCardsUnderTestTop10(slot == null ? false : slot.isGuaranteeCardsUnderTestTop10());
         refreshCardsUnderTestFromDeck(slot == null ? null : slot.getDeck());
 
+        // Mana Base Band display + Target Hand Quality picker: hidden until the selected deck's
+        // DeckRulesConfig has mulligan rules at all - see refreshHandQualityTargetFromDeck.
+        this.add(manaBaseBandLabel, variantBtnConstraints + ", cell 0 9, sx 2, ax right");
+        this.add(manaBaseBandValue, variantBtnConstraints + ", cell 2 9, pushx, growx, wmax 100%-153px, spanx 4, wrap");
+
+        this.add(handQualityTargetLabel, variantBtnConstraints + ", cell 0 10, sx 2, ax right");
+        for (forge.deck.mulligan.HandQualityTarget t : forge.deck.mulligan.HandQualityTarget.values()) {
+            handQualityTargetComboBox.addItem(t);
+        }
+        handQualityTargetComboBox.addTo(this, variantBtnConstraints + ", cell 2 10, pushx, growx, wmax 100%-153px, spanx 4, wrap");
+        handQualityTargetComboBox.addActionListener(handQualityTargetListener);
+        manaBaseBandLabel.setVisible(false);
+        manaBaseBandValue.setVisible(false);
+        handQualityTargetLabel.setVisible(false);
+        handQualityTargetComboBox.setVisible(false);
+        this.setStartingHandQualityTarget(forge.deck.mulligan.HandQualityTarget.fromString(
+                slot == null ? null : slot.getStartingHandQualityTarget()));
+        refreshHandQualityTargetFromDeck(slot == null ? null : slot.getDeck());
+
         addHandlersToVariantsControls();
 
         this.addMouseListener(new FMouseAdapter() {
@@ -292,6 +320,13 @@ public class PlayerPanel extends FPanel {
                 && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
         chkCardsUnderTestTop10.setVisible(enableCardsUnderTest);
         chkCardsUnderTestTop10.setEnabled(enableCardsUnderTest);
+
+        boolean enableHandQuality = hasMulliganConfig && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
+        manaBaseBandLabel.setVisible(enableHandQuality);
+        manaBaseBandValue.setVisible(enableHandQuality);
+        handQualityTargetLabel.setVisible(enableHandQuality && mayEdit);
+        handQualityTargetComboBox.setVisible(enableHandQuality && mayEdit);
+        handQualityTargetComboBox.setEnabled(enableHandQuality && mayEdit);
 
         teamComboBox.setEnabled(mayEdit);
         deckLabel.setVisible(mayEdit);
@@ -652,6 +687,66 @@ public class PlayerPanel extends FPanel {
             lobby.fireCardsUnderTestTop10ChangeListener(index, selected);
         }
     };
+
+    /** Called by {@code VLobby.fireDeckChangeListener} whenever this seat's deck selection
+     *  changes - shows the deck's configured Mana Base Band (§6.1.5) and resets any previously
+     *  chosen Target Hand Quality (§6.1.6) if the new deck has no mulligan rules at all. */
+    public void refreshHandQualityTargetFromDeck(final Deck deck) {
+        final forge.deck.DeckRulesConfig rules = deck == null ? null : deck.getDeckRulesConfig();
+        hasMulliganConfig = rules != null && rules.hasMulligan();
+        if (hasMulliganConfig) {
+            final forge.deck.DeckRulesConfig.MulliganConfig mc = rules.getMulligan();
+            manaBaseBandValue.setText(String.format(java.util.Locale.ROOT, "%.1f - %.1f", mc.getManaBaseMin(), mc.getManaBaseMax()));
+        } else {
+            manaBaseBandValue.setText("");
+            // Suppressed: this can run nested inside VLobby's own deck-change cascade (e.g. a
+            // fresh PlayerPanel's constructor, or mid-populateDeckPanel()) - an unsuppressed
+            // setSelectedItem() fires handQualityTargetListener, which reenters
+            // lobby.changePlayerFocus() before the panel is registered, throwing an
+            // IndexOutOfBoundsException (same failure class as scenarioPickerComboBox's, see
+            // setStartingHandQualityTarget below and setScenarioFileName).
+            handQualityTargetComboBox.suppressActionListeners();
+            try {
+                handQualityTargetComboBox.setSelectedItem(forge.deck.mulligan.HandQualityTarget.NONE);
+            } finally {
+                handQualityTargetComboBox.unsuppressActionListeners();
+            }
+        }
+        final boolean show = hasMulliganConfig && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
+        manaBaseBandLabel.setVisible(show);
+        manaBaseBandValue.setVisible(show);
+        handQualityTargetLabel.setVisible(show && mayEdit);
+        handQualityTargetComboBox.setVisible(show && mayEdit);
+        handQualityTargetComboBox.setEnabled(show && mayEdit);
+    }
+
+    private final ActionListener handQualityTargetListener = new ActionListener() {
+        @Override
+        public void actionPerformed(final ActionEvent e) {
+            final forge.deck.mulligan.HandQualityTarget selected = handQualityTargetComboBox.getSelectedItem();
+            lobby.changePlayerFocus(index);
+            lobby.fireStartingHandQualityTargetChangeListener(index,
+                    selected != null ? selected : forge.deck.mulligan.HandQualityTarget.NONE);
+        }
+    };
+
+    public forge.deck.mulligan.HandQualityTarget getStartingHandQualityTarget() {
+        final forge.deck.mulligan.HandQualityTarget val = handQualityTargetComboBox.getSelectedItem();
+        return val != null ? val : forge.deck.mulligan.HandQualityTarget.NONE;
+    }
+
+    public void setStartingHandQualityTarget(final forge.deck.mulligan.HandQualityTarget target) {
+        // Suppressed - this is the seed call from the constructor (before this panel is added to
+        // VLobby.playerPanels) as well as VLobby.updateImpl()'s per-refresh sync; an unsuppressed
+        // setSelectedItem() fires handQualityTargetListener reentrantly in both cases. See the
+        // identical pattern already used by setScenarioFileName/setGuaranteeCardsUnderTestTop10.
+        handQualityTargetComboBox.suppressActionListeners();
+        try {
+            handQualityTargetComboBox.setSelectedItem(target != null ? target : forge.deck.mulligan.HandQualityTarget.NONE);
+        } finally {
+            handQualityTargetComboBox.unsuppressActionListeners();
+        }
+    }
 
     public String getScenarioFileName() {
         return scenarioFileName;

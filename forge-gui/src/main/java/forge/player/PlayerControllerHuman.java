@@ -1492,7 +1492,7 @@ public class PlayerControllerHuman extends PlayerController implements IGameCont
     @Override
     public boolean mulliganKeepHand(final Player mulliganingPlayer, int cardsToReturn) {
         // TODO we should be passing tuckCards into Confirmation Dialog
-        final InputConfirmMulligan inp = new InputConfirmMulligan(this, player, mulliganingPlayer);
+        final InputConfirmMulligan inp = new InputConfirmMulligan(this, player, mulliganingPlayer, cardsToReturn);
         inp.showAndWait();
         return inp.isKeepHand();
     }

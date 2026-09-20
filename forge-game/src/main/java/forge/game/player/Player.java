@@ -25,7 +25,11 @@ import forge.card.*;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
 import forge.deck.Deck;
+import forge.deck.DeckRulesConfig;
+import forge.deck.mulligan.HandQualityTarget;
 import forge.game.*;
+import forge.game.mulligan.DecklistMulliganEvaluator;
+import forge.game.mulligan.HandQualitySampler;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.AbilityUtils;
@@ -1709,6 +1713,62 @@ public class Player extends GameEntity implements Comparable<Player> {
             }
         }
         libZone.setCards(currentLib);
+    }
+
+    /**
+     * If this seat's {@link RegisteredPlayer} declares a {@link HandQualityTarget} other than
+     * {@code NONE}, reorders the (already-shuffled) library so its top 7 cards - the opening
+     * hand about to be drawn - meet or exceed that target's threshold of the deck's own §6.1.6
+     * Starting Hand Quality distribution (see {@link HandQualitySampler}). Bounded to a fixed
+     * number of reshuffle attempts; keeps the best hand found even if none clears the threshold,
+     * so this always terminates and never leaves the library unshuffled-looking.
+     */
+    public void ensureStartingHandQualityTarget() {
+        final RegisteredPlayer rp = getRegisteredPlayer();
+        if (rp == null || rp.getStartingHandQualityTarget() == HandQualityTarget.NONE) {
+            return;
+        }
+        final Deck deck = rp.getDeck();
+        if (deck == null) {
+            return;
+        }
+        final DeckRulesConfig rules = deck.getDeckRulesConfig();
+        if (rules == null || !rules.hasMulligan()) {
+            return;
+        }
+        final DecklistMulliganEvaluator evaluator = DecklistMulliganEvaluator.fromDeckRules(rules.getMulligan(), deck);
+        if (evaluator == null) {
+            return;
+        }
+
+        final int handSize = getStartingHandSize();
+        final PlayerZone libZone = getZone(ZoneType.Library);
+        if (libZone == null || libZone.size() < handSize) {
+            return;
+        }
+
+        final double threshold = HandQualitySampler.compute(deck, evaluator).forTarget(rp.getStartingHandQualityTarget());
+
+        final List<Card> working = new ArrayList<>(libZone.getCards());
+        List<Card> best = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        final int maxAttempts = 200;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            Collections.shuffle(working, MyRandom.getRandom());
+            List<Card> trialHand = working.subList(0, handSize);
+            double score = evaluator.startingHandQuality(trialHand);
+            if (score > bestScore) {
+                bestScore = score;
+                best = new ArrayList<>(working);
+            }
+            if (score >= threshold) {
+                best = new ArrayList<>(working);
+                break;
+            }
+        }
+        if (best != null) {
+            libZone.setCards(best);
+        }
     }
 
     public final Card playLand(final Card land, SpellAbility cause) {

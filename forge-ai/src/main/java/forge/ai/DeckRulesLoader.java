@@ -197,16 +197,25 @@ public final class DeckRulesLoader {
     private static DeckRulesConfig.MulliganConfig parseMulligan(JsonObject obj) {
         DeckRulesConfig.MulliganConfig mc = new DeckRulesConfig.MulliganConfig();
 
-        // card_values
+        // card_values (§6.1.1 - full per-mana-value curve, v1.3.0+)
         if (obj.has("card_values") && obj.get("card_values").isJsonObject()) {
             JsonObject cv = obj.getAsJsonObject("card_values");
             DeckRulesConfig.MulliganConfig.CardValues vals = new DeckRulesConfig.MulliganConfig.CardValues();
             if (cv.has("land")) vals.setLand(cv.get("land").getAsDouble());
-            if (cv.has("cmc_0_to_2")) vals.setCmc0To2(cv.get("cmc_0_to_2").getAsDouble());
-            if (cv.has("cmc_3")) vals.setCmc3(cv.get("cmc_3").getAsDouble());
-            if (cv.has("other")) vals.setOther(cv.get("other").getAsDouble());
+            if (cv.has("mv0")) vals.setMv0(cv.get("mv0").getAsDouble());
+            if (cv.has("mv1")) vals.setMv1(cv.get("mv1").getAsDouble());
+            if (cv.has("mv2")) vals.setMv2(cv.get("mv2").getAsDouble());
+            if (cv.has("mv3")) vals.setMv3(cv.get("mv3").getAsDouble());
+            if (cv.has("mv4")) vals.setMv4(cv.get("mv4").getAsDouble());
+            if (cv.has("mv5")) vals.setMv5(cv.get("mv5").getAsDouble());
+            if (cv.has("mv6")) vals.setMv6(cv.get("mv6").getAsDouble());
+            if (cv.has("mv7Plus")) vals.setMv7Plus(cv.get("mv7Plus").getAsDouble());
             mc.setCardValues(vals);
         }
+
+        // mana_base_min / mana_base_max (§6.1.5 Mana Base Band)
+        if (obj.has("mana_base_min")) mc.setManaBaseMin(obj.get("mana_base_min").getAsDouble());
+        if (obj.has("mana_base_max")) mc.setManaBaseMax(obj.get("mana_base_max").getAsDouble());
 
         // card_overrides
         if (obj.has("card_overrides") && obj.get("card_overrides").isJsonArray()) {

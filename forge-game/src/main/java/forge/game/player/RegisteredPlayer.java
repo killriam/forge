@@ -6,6 +6,7 @@ import forge.LobbyPlayer;
 import forge.deck.CardPool;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
+import forge.deck.mulligan.HandQualityTarget;
 import forge.game.GameType;
 import forge.item.IPaperCard;
 import forge.item.PaperCard;
@@ -40,6 +41,7 @@ public class RegisteredPlayer {
     private boolean randomFoil = false;
     private boolean enableETBCountersEffect = false;
     private boolean guaranteeCardsUnderTestTop10 = false;
+    private HandQualityTarget startingHandQualityTarget = HandQualityTarget.NONE;
 
     public RegisteredPlayer(Deck deck0) {
         originalDeck = deck0;
@@ -268,6 +270,14 @@ public class RegisteredPlayer {
     }
     public RegisteredPlayer setGuaranteeCardsUnderTestTop10(boolean guaranteeCardsUnderTestTop10) {
         this.guaranteeCardsUnderTestTop10 = guaranteeCardsUnderTestTop10;
+        return this;
+    }
+
+    public HandQualityTarget getStartingHandQualityTarget() {
+        return startingHandQualityTarget;
+    }
+    public RegisteredPlayer setStartingHandQualityTarget(HandQualityTarget startingHandQualityTarget) {
+        this.startingHandQualityTarget = startingHandQualityTarget != null ? startingHandQualityTarget : HandQualityTarget.NONE;
         return this;
     }
 }

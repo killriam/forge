@@ -55,6 +55,9 @@ public class DeckRulesConfig {
         private CardValues cardValues;
         private List<CardOverride> cardOverrides;
         private List<Threshold> thresholds;
+        /** §6.1.5 Mana Base Band - defaults per spec. */
+        private double manaBaseMin = 3.0;
+        private double manaBaseMax = 4.0;
 
         public MulliganConfig() {
             this.cardValues = new CardValues();
@@ -71,24 +74,68 @@ public class DeckRulesConfig {
         public List<Threshold> getThresholds() { return thresholds; }
         public void setThresholds(List<Threshold> v) { this.thresholds = v != null ? v : new ArrayList<>(); }
 
-        /** Default card values per Commander Decklist Notation spec §6.1.1. */
+        public double getManaBaseMin() { return manaBaseMin; }
+        public void setManaBaseMin(double v) { this.manaBaseMin = v; }
+
+        public double getManaBaseMax() { return manaBaseMax; }
+        public void setManaBaseMax(double v) { this.manaBaseMax = v; }
+
+        /**
+         * Default card values per Commander Decklist Notation spec §6.1.1 (v1.4.0: full
+         * per-mana-value curve, {@code mv4}-{@code mv7Plus} lowered to a flat 0.2).
+         */
         public static class CardValues {
             private double land = 1.0;
-            private double cmc0To2 = 0.8;
-            private double cmc3 = 0.5;
-            private double other = 0.3;
+            private double mv0 = 0.85;
+            private double mv1 = 0.8;
+            private double mv2 = 0.75;
+            private double mv3 = 0.6;
+            private double mv4 = 0.2;
+            private double mv5 = 0.2;
+            private double mv6 = 0.2;
+            private double mv7Plus = 0.2;
 
             public double getLand() { return land; }
             public void setLand(double v) { this.land = v; }
 
-            public double getCmc0To2() { return cmc0To2; }
-            public void setCmc0To2(double v) { this.cmc0To2 = v; }
+            public double getMv0() { return mv0; }
+            public void setMv0(double v) { this.mv0 = v; }
 
-            public double getCmc3() { return cmc3; }
-            public void setCmc3(double v) { this.cmc3 = v; }
+            public double getMv1() { return mv1; }
+            public void setMv1(double v) { this.mv1 = v; }
 
-            public double getOther() { return other; }
-            public void setOther(double v) { this.other = v; }
+            public double getMv2() { return mv2; }
+            public void setMv2(double v) { this.mv2 = v; }
+
+            public double getMv3() { return mv3; }
+            public void setMv3(double v) { this.mv3 = v; }
+
+            public double getMv4() { return mv4; }
+            public void setMv4(double v) { this.mv4 = v; }
+
+            public double getMv5() { return mv5; }
+            public void setMv5(double v) { this.mv5 = v; }
+
+            public double getMv6() { return mv6; }
+            public void setMv6(double v) { this.mv6 = v; }
+
+            public double getMv7Plus() { return mv7Plus; }
+            public void setMv7Plus(double v) { this.mv7Plus = v; }
+
+            /** Bucket lookup for a (curve-adjusted, per §6.1.1a) mana value, clamped to [0,7]. */
+            public double forManaValue(int mv) {
+                int clamped = Math.max(0, Math.min(mv, 7));
+                switch (clamped) {
+                    case 0: return mv0;
+                    case 1: return mv1;
+                    case 2: return mv2;
+                    case 3: return mv3;
+                    case 4: return mv4;
+                    case 5: return mv5;
+                    case 6: return mv6;
+                    default: return mv7Plus;
+                }
+            }
         }
 
         /** Per-card value override per spec §6.1.3. */

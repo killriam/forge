@@ -1,4 +1,4 @@
-package forge.ai.mulligan;
+package forge.game.mulligan;
 
 import forge.deck.DeckRulesConfig;
 import forge.game.card.CardCollection;

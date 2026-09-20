@@ -37,9 +37,22 @@ public class DeckRulesConfigTest {
     public void testCardValuesDefaults() {
         DeckRulesConfig.MulliganConfig.CardValues cv = new DeckRulesConfig.MulliganConfig.CardValues();
         assertEquals(cv.getLand(), 1.0);
-        assertEquals(cv.getCmc0To2(), 0.8);
-        assertEquals(cv.getCmc3(), 0.5);
-        assertEquals(cv.getOther(), 0.3);
+        assertEquals(cv.getMv0(), 0.85);
+        assertEquals(cv.getMv1(), 0.8);
+        assertEquals(cv.getMv2(), 0.75);
+        assertEquals(cv.getMv3(), 0.6);
+        assertEquals(cv.getMv4(), 0.2);
+        assertEquals(cv.getMv5(), 0.2);
+        assertEquals(cv.getMv6(), 0.2);
+        assertEquals(cv.getMv7Plus(), 0.2);
+        assertEquals(cv.forManaValue(9), 0.2); // clamps to mv7Plus
+    }
+
+    @Test
+    public void testMulliganConfigManaBaseBandDefaults() {
+        DeckRulesConfig.MulliganConfig mc = new DeckRulesConfig.MulliganConfig();
+        assertEquals(mc.getManaBaseMin(), 3.0);
+        assertEquals(mc.getManaBaseMax(), 4.0);
     }
 
     @Test

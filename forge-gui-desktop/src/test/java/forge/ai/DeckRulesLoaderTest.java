@@ -39,7 +39,8 @@ public class DeckRulesLoaderTest {
         DeckRulesConfig.MulliganConfig mc = config.getMulligan();
         assertNotNull(mc.getCardValues());
         assertEquals(mc.getCardValues().getLand(), 1.0);
-        assertEquals(mc.getCardValues().getCmc0To2(), 0.8);
+        assertEquals(mc.getCardValues().getMv0(), 0.85);
+        assertEquals(mc.getCardValues().getMv1(), 0.8);
         assertFalse(mc.getThresholds().isEmpty(), "Should have thresholds");
         assertFalse(mc.getCardOverrides().isEmpty(), "Should have card overrides");
 

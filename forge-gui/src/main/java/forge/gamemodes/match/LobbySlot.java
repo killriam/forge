@@ -36,6 +36,8 @@ public final class LobbySlot implements Serializable {
      *  null incoming value as "this event doesn't touch this field", so clearing a previous
      *  selection back to "None" must send "" to actually propagate through {@link #setIfChanged}). */
     private String scenarioFileName;
+    /** {@link forge.deck.mulligan.HandQualityTarget} name, or null if never set (treated as NONE). */
+    private String startingHandQualityTarget;
 
     public LobbySlot(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isReady, final Set<AIOption> aiOptions) {
         this.type = type;
@@ -67,6 +69,7 @@ public final class LobbySlot implements Serializable {
         changed |= setIfChanged(data.getPlanarDeckName(),  this.PlanarDeckName, this::setPlanarDeckName);
         changed |= setIfChanged(data.getDeckName(),        this.DeckName,       this::setDeckName);
         changed |= setIfChanged(data.getScenarioFileName(),this.scenarioFileName, this::setScenarioFileName);
+        changed |= setIfChanged(data.getStartingHandQualityTarget(), this.startingHandQualityTarget, this::setStartingHandQualityTarget);
 
         final Deck oldDeck = getDeck();
         if (data.getDeck() != null) {
@@ -188,5 +191,13 @@ public final class LobbySlot implements Serializable {
     }
     public void setIsGuaranteeCardsUnderTestTop10(final boolean value) {
         this.isGuaranteeCardsUnderTestTop10 = value;
+    }
+
+    /** @return {@link forge.deck.mulligan.HandQualityTarget} name, or null if never set. */
+    public String getStartingHandQualityTarget() {
+        return startingHandQualityTarget;
+    }
+    public void setStartingHandQualityTarget(final String value) {
+        this.startingHandQualityTarget = value;
     }
 }

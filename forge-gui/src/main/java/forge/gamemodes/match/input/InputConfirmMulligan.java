@@ -17,11 +17,14 @@
  */
 package forge.gamemodes.match.input;
 
+import forge.deck.Deck;
+import forge.deck.DeckRulesConfig;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CardView;
+import forge.game.mulligan.DecklistMulliganEvaluator;
 import forge.game.player.Player;
 import forge.game.zone.ZoneType;
 import forge.player.PlayerControllerHuman;
@@ -49,11 +52,17 @@ public class InputConfirmMulligan extends InputSyncronizedBase {
     private final CardCollection selected = new CardCollection();
     private final Player player;
     private final Player startingPlayer;
+    private final int cardsToReturn;
 
     public InputConfirmMulligan(final PlayerControllerHuman controller, final Player humanPlayer, final Player startsGame) {
+        this(controller, humanPlayer, startsGame, 0);
+    }
+
+    public InputConfirmMulligan(final PlayerControllerHuman controller, final Player humanPlayer, final Player startsGame, final int cardsToReturn) {
         super(controller);
         player = humanPlayer;
         startingPlayer = startsGame;
+        this.cardsToReturn = cardsToReturn;
     }
 
     /** {@inheritDoc} */
@@ -74,7 +83,46 @@ public class InputConfirmMulligan extends InputSyncronizedBase {
         getController().getGui().updateButtons(getOwner(), localizer.getMessage("lblKeep"), localizer.getMessage("lblMulligan"), true, true, true);
         sb.append(localizer.getMessage("lblDoYouWantToKeepYourHand"));
 
+        appendHandQualityBreakdown(sb);
+
         showMessage(sb.toString());
+    }
+
+    /**
+     * If this player's deck declares mulligan rules (Commander Decklist Notation spec §6.1),
+     * appends a per-card mulligan-value breakdown plus the hand's total Mulligan value (§6.1.1),
+     * Mana Base score (§6.1.5), and Starting Hand Quality (§6.1.6) to the confirmation message.
+     * Purely informational - the human still chooses Keep/Mulligan themselves.
+     */
+    private void appendHandQualityBreakdown(final StringBuilder sb) {
+        final Deck deck = player.getRegisteredPlayer() != null ? player.getRegisteredPlayer().getDeck() : null;
+        if (deck == null) return;
+        final DeckRulesConfig rulesConfig = deck.getDeckRulesConfig();
+        if (rulesConfig == null || !rulesConfig.hasMulligan()) return;
+
+        final DecklistMulliganEvaluator evaluator = DecklistMulliganEvaluator.fromDeckRules(rulesConfig.getMulligan(), deck);
+        if (evaluator == null) return;
+
+        final CardCollectionView hand = player.getCardsIn(ZoneType.Hand);
+        if (hand.isEmpty()) return;
+
+        final double totalValue = evaluator.evaluateHand(hand);
+        final double minValue = evaluator.getMinValueForRound(cardsToReturn);
+        final double manaBase = evaluator.evaluateManaBase(hand);
+        final double quality = evaluator.startingHandQuality(hand);
+
+        sb.append("\n\n--- Hand Quality (Commander Decklist Notation §6.1) ---");
+        for (DecklistMulliganEvaluator.CardScore cs : evaluator.breakdown(hand)) {
+            sb.append(String.format(java.util.Locale.ROOT, "\n  %s: %.2f", cs.name, cs.value));
+        }
+        sb.append(String.format(java.util.Locale.ROOT, "\nMulligan Value: %.2f (need %.2f to keep per spec - %s)",
+                totalValue, minValue, totalValue >= minValue ? "KEEP" : "MULLIGAN"));
+        sb.append(String.format(java.util.Locale.ROOT, "\nMana Base: %.2f (band %.1f-%.1f - Playable: %s, Good AI Hand: %s)",
+                manaBase, evaluator.getManaBaseMin(), evaluator.getManaBaseMax(),
+                evaluator.isPlayable(manaBase) ? "Yes" : "No",
+                evaluator.isGoodAiHand(manaBase) ? "Yes" : "No"));
+        sb.append(String.format(java.util.Locale.ROOT, "\nStarting Hand Quality: %.2f (Mana Curve bonus: %s)",
+                quality, evaluator.manaCurveBonusAchieved(hand) ? "achieved" : "not achieved"));
     }
 
     @Override
