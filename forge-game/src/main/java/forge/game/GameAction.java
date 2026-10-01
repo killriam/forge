@@ -2466,6 +2466,17 @@ public class GameAction {
                 return game.getPlayers().get(0);
             }
 
+            // Replay mode: reproduce the original game's starting player instead of a random
+            // coin toss, so turn order matches the recorded game from the very first turn.
+            if (game.getRules().isReplayMode()) {
+                List<Player> replayPlayers = game.getPlayers();
+                int startIdx = game.getRules().getReplayStartingPlayerIndex();
+                if (startIdx >= 0 && startIdx < replayPlayers.size()) {
+                    return replayPlayers.get(startIdx);
+                }
+                return replayPlayers.get(0);
+            }
+
             // 904.6: in Archenemy games the Archenemy goes first
             if (game.getRules().hasAppliedVariant(GameType.Archenemy)) {
                 for (Player p : game.getPlayers()) {

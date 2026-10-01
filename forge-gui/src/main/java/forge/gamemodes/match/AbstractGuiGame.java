@@ -534,13 +534,13 @@ public abstract class AbstractGuiGame implements IGuiGame, IMayViewCards {
     public final void awaitNextInput() {
         checkAwaitNextInputTimer();
         //delay updating prompt to await next input briefly so buttons don't flicker disabled then enabled
-        awaitNextInputTask = new TimerTask() {
+        final TimerTask task = new TimerTask() {
             @Override
             public void run() {
                 FThreads.invokeInEdtLater(() -> {
                     checkAwaitNextInputTimer();
                     synchronized (awaitNextInputTimer) {
-                        if (awaitNextInputTask != null) {
+                        if (awaitNextInputTask == this) {
                             String waitingForName = updatePromptForAwait(getCurrentPlayer());
                             if (GuiBase.isNetPlay(AbstractGuiGame.this)) {
                                 showWaitingTimer(getCurrentPlayer(), waitingForName);
@@ -551,7 +551,22 @@ public abstract class AbstractGuiGame implements IGuiGame, IMayViewCards {
                 });
             }
         };
-        awaitNextInputTimer.schedule(awaitNextInputTask, 250);
+        // Concurrent callers (e.g. overlapping priority windows in a multiplayer game) could
+        // otherwise race between assigning awaitNextInputTask and scheduling it, leaving a thread
+        // scheduling a TimerTask instance another thread already scheduled - Timer forbids
+        // scheduling the same task twice ("Task already scheduled or cancelled"). Serializing the
+        // whole create-assign-schedule sequence, and cancelling any still-pending task first,
+        // guarantees every schedule() call gets a fresh, never-before-scheduled task.
+        synchronized (awaitNextInputTimer) {
+            if (awaitNextInputTask != null) {
+                try {
+                    awaitNextInputTask.cancel();
+                } catch (final Exception ignored) {
+                }
+            }
+            awaitNextInputTask = task;
+            awaitNextInputTimer.schedule(task, 250);
+        }
     }
 
     private void checkAwaitNextInputTimer() {
