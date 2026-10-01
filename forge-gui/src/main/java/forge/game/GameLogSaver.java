@@ -143,13 +143,23 @@ public class GameLogSaver {
      * @return The file that was created, or null if save failed
      */
     public static File saveGameLog(GameView gameView) {
+        return saveGameLogAndGetFiles(gameView)[0];
+    }
+
+    /**
+     * Saves the game log (text narrative + JSON replay notation) to the game logs directory.
+     *
+     * @param gameView The game view containing the log to save
+     * @return [textFile, jsonFile] — either element may be null if that part of the save failed
+     */
+    public static File[] saveGameLogAndGetFiles(GameView gameView) {
         if (gameView == null) {
-            return null;
+            return new File[] { null, null };
         }
 
         GameLog gameLog = gameView.getGameLog();
         if (gameLog == null) {
-            return null;
+            return new File[] { null, null };
         }
 
         File logDir = new File(ForgeConstants.GAME_LOG_DIR);
@@ -184,10 +194,11 @@ public class GameLogSaver {
 
             writer.flush();
 
+            File jsonFile = null;
             ReplayNotationExporter replayExporter = gameLog.getReplayExporter();
             if (replayExporter != null) {
                 try {
-                    File jsonFile = replayExporter.exportToFile(logDir, timestamp);
+                    jsonFile = replayExporter.exportToFile(logDir, timestamp);
                     if (jsonFile != null) {
                         LOG.info("JSON replay saved: {}", jsonFile.getAbsolutePath());
                     } else {
@@ -200,10 +211,10 @@ public class GameLogSaver {
                 LOG.debug("No replay exporter — JSON not saved");
             }
 
-            return logFile;
+            return new File[] { logFile, jsonFile };
         } catch (IOException e) {
             LOG.error("Failed to save game log: {}", e.getMessage());
-            return null;
+            return new File[] { null, null };
         }
     }
 

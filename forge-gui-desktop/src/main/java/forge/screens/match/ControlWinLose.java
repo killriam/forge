@@ -8,6 +8,7 @@ import forge.gamemodes.match.NextGameDecision;
 import forge.gui.SOverlayUtils;
 import forge.gui.framework.FScreen;
 import forge.interfaces.IGameController;
+import forge.screens.home.replay.CSubmenuReplay;
 
 /** 
  * Default controller for a ViewWinLose object. This class can
@@ -35,6 +36,8 @@ public class ControlWinLose {
 
         view.getBtnRestart().addActionListener(e -> actionOnRestart());
 
+        view.getBtnReplay().addActionListener(e -> actionOnReplay());
+
         view.getBtnQuit().addActionListener(e -> {
             actionOnQuit();
             ((JButton) e.getSource()).setEnabled(false);
@@ -55,6 +58,18 @@ public class ControlWinLose {
     public void actionOnQuit() {
         nextGameAction(NextGameDecision.QUIT);
         Singletons.getControl().setCurrentScreen(FScreen.HOME_SCREEN);
+    }
+
+    /** Action performed when "replay" button is pressed in default win/lose UI. */
+    public void actionOnReplay() {
+        final String replayPath = view.getReplayablePath();
+        if (replayPath == null) {
+            return;
+        }
+        nextGameAction(NextGameDecision.QUIT);
+        Singletons.getControl().setCurrentScreen(FScreen.HOME_SCREEN);
+        // Deterministic replay: reproduce the exact game that was just played.
+        CSubmenuReplay.SINGLETON_INSTANCE.startReplayFromPath(replayPath, false);
     }
 
     private void nextGameAction(final NextGameDecision decision) {

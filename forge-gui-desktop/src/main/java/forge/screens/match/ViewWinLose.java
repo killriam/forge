@@ -45,8 +45,11 @@ public class ViewWinLose implements IWinLoseView<FButton> {
     private final ControlWinLose control;
 
     private final FScrollPane scrLog;
-    private final FButton btnContinue, btnRestart, btnQuit;
+    private final FButton btnContinue, btnRestart, btnReplay, btnQuit;
     private final SkinnedPanel pnlCustom;
+
+    /** Path to the JSON replay file auto-saved for this game, if any (set in {@link #show()}). */
+    private String replayJsonPath = null;
 
     private final SkinnedLabel lblTitle = new SkinnedLabel("WinLoseFrame > lblTitle needs updating.");
     private final SkinnedLabel lblStats = new SkinnedLabel("WinLoseFrame > lblStats needs updating.");
@@ -76,6 +79,7 @@ public class ViewWinLose implements IWinLoseView<FButton> {
 
         btnContinue = new FButton();
         btnRestart = new FButton();
+        btnReplay = new FButton();
         btnQuit = new FButton();
 
         // Control of the win/lose is handled differently for various game
@@ -126,9 +130,12 @@ public class ViewWinLose implements IWinLoseView<FButton> {
         btnContinue.setFont(FSkin.getRelativeFont(22));
         btnRestart.setText(localizer.getMessage("btnStartNewMatch"));
         btnRestart.setFont(FSkin.getRelativeFont(22));
+        btnReplay.setText(localizer.getMessage("btnReplayMatch"));
+        btnReplay.setFont(FSkin.getRelativeFont(22));
         btnQuit.setText(localizer.getMessage("btnQuitMatch"));
         btnQuit.setFont(FSkin.getRelativeFont(22));
         btnContinue.setEnabled(!game0.isMatchOver());
+        btnReplay.setEnabled(false); // enabled in show() once the replay path is known
 
         // Assemble game log scroller.
         final FTextArea txtLog = new FTextArea();
@@ -172,6 +179,7 @@ public class ViewWinLose implements IWinLoseView<FButton> {
         final String constraints = "w 300px!, h 50px!, gap 0 0 20px 0";
         pnlButtons.add(btnContinue, constraints);
         pnlButtons.add(btnRestart, constraints);
+        pnlButtons.add(btnReplay, constraints);
         pnlButtons.add(btnQuit, constraints);
         pnlLeft.add(pnlButtons, "w 100%!");
 
@@ -194,8 +202,12 @@ public class ViewWinLose implements IWinLoseView<FButton> {
         // Auto-save game log to file (skip for scenario mode and replay mode)
         if (!game.getGame().getRules().isScenarioMode()
                 && game.getGame().getRules().isAutoSaveReplay()) {
-            GameLogSaver.saveGameLogAndGetPath(game);
+            File[] savedFiles = GameLogSaver.saveGameLogAndGetFiles(game);
+            if (savedFiles[1] != null) {
+                replayJsonPath = savedFiles[1].getAbsolutePath();
+            }
         }
+        btnReplay.setEnabled(getReplayablePath() != null);
 
         SwingUtilities.invokeLater(() -> {
             scrLog.getViewport().setViewPosition(new Point(0, 0));
@@ -255,6 +267,28 @@ public class ViewWinLose implements IWinLoseView<FButton> {
     @Override
     public FButton getBtnQuit() {
         return this.btnQuit;
+    }
+
+    /**
+     * @return {@link forge.toolbox.FButton}
+     */
+    public FButton getBtnReplay() {
+        return this.btnReplay;
+    }
+
+    /**
+     * Path to a replay JSON file for this game, suitable for passing to
+     * {@code CSubmenuReplay.startReplayFromPath}. Prefers the file auto-saved for this game
+     * (see {@link #show()}); falls back to the original replay file if this game was itself
+     * started from a replay (e.g. scenario mode, where auto-save is skipped).
+     *
+     * @return the replay file path, or null if this game has no associated replay file
+     */
+    public String getReplayablePath() {
+        if (replayJsonPath != null) {
+            return replayJsonPath;
+        }
+        return game.getGame().getRules().getReplayLogPath();
     }
 
     /**
