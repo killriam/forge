@@ -97,6 +97,36 @@ public class ReplayDrawTracker {
         ReplayLibraryReorderer.reorderLibrary(player, remaining);
     }
 
+    /**
+     * Called every time a player draws a card from their library, so the tracker knows how far
+     * into the recorded draw sequence the replayed game has progressed.
+     */
+    public void onCardDrawn(Player player) {
+        consumedCounts.merge(getPlayerId(player), 1, Integer::sum);
+    }
+
+    /**
+     * Called after any shuffle in replay mode (mulligan, library search, ...). The original
+     * game's library was randomly shuffled at that point too, so the only thing the log tells us
+     * is the sequence of cards drawn afterwards. Put the not-yet-drawn part of that sequence back
+     * on top of the library.
+     *
+     * @return true if the library was reordered
+     */
+    public boolean onShuffle(Player player) {
+        String playerId = getPlayerId(player);
+        List<String> fullOrder = drawOrder.get(playerId);
+        if (fullOrder == null || fullOrder.isEmpty()) {
+            return false;
+        }
+        int next = consumedCounts.getOrDefault(playerId, 0);
+        if (next >= fullOrder.size()) {
+            return false;
+        }
+        ReplayLibraryReorderer.reorderLibrary(player, fullOrder.subList(next, fullOrder.size()));
+        return true;
+    }
+
     // -------------------------------------------------------------------------
 
     private static String getPlayerId(Player player) {

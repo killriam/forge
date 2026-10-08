@@ -166,6 +166,10 @@ public class HostedMatch {
 
     public void restartMatch() {
         endCurrentGame();
+        // A rematch after a replay game is a fresh game, not another replay
+        if (match.getRules().isReplayMode()) {
+            match.getRules().clearReplayState();
+        }
         startMatch(match.getRules(), null, match.getPlayers(), this.guis, this.matchPlaylist);
     }
 

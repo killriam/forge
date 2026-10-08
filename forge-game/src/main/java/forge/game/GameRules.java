@@ -283,6 +283,23 @@ public class GameRules {
     public int getReplayStartingPlayerIndex() { return replayStartingPlayerIndex; }
     public void setReplayStartingPlayerIndex(final int idx) { this.replayStartingPlayerIndex = idx; }
 
+    /**
+     * Turns this rules object back into a normal (non-replay) game, e.g. for a rematch after
+     * a replay game: random coin toss, normal shuffles, and the new game is auto-saved again.
+     */
+    public void clearReplayState() {
+        replayMode = false;
+        shuffleReplay = false;
+        forcedLibraryOrder = null;
+        shuffleRestore = "always";
+        replayLogPath = null;
+        originalReplayFile = null;
+        replayBranchTurn = 1;
+        originalGameSummary = null;
+        replayStartingPlayerIndex = 0;
+        autoSaveReplay = true;
+    }
+
     // -------------------------------------------------------------------------
     // Scenario: defined starting hand + first draws
     // -------------------------------------------------------------------------

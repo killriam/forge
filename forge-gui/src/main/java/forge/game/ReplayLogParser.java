@@ -150,6 +150,11 @@ public class ReplayLogParser {
                 }
             }
 
+            // starting_player lives in the top-level game_start block per the spec (not in meta)
+            if (startingPlayer == null && root.has("game_start") && root.get("game_start").isJsonObject()) {
+                startingPlayer = getStringField(root.getAsJsonObject("game_start"), "starting_player");
+            }
+
             // v1.7.0: read mode field (defaults to "full_game" when absent)
             String parsedMode = getStringField(root, "mode");
             if (parsedMode != null) {

@@ -1221,6 +1221,9 @@ public class Player extends GameEntity implements Comparable<Player> {
 
             c = game.getAction().moveTo(hand, c, cause, params);
             drawn.add(c);
+            if (game.getReplayDrawTracker() != null) {
+                game.getReplayDrawTracker().onCardDrawn(this);
+            }
 
             // CR 121.6c additional actions can't be performed when draw gets replaced
             // but "drawn this way" effects should still count them
@@ -1638,7 +1641,13 @@ public class Player extends GameEntity implements Comparable<Player> {
                     ensureCardsUnderTestInTop10();
                 } else {
                     java.util.List<String> forced = game.getRules().getForcedLibraryOrder().get("P" + (idx + 1));
-                    if (forced != null) {
+                    // Prefer the recorded draw sequence from the current draw position: restoring
+                    // the *initial* library order would re-draw already-drawn cards' positions
+                    // (mulligans) and ignore cards removed by library searches.
+                    forge.game.log.ReplayDrawTracker tracker = game.getReplayDrawTracker();
+                    if (tracker != null) {
+                        tracker.onShuffle(this);
+                    } else if (forced != null) {
                         forge.game.log.ReplayLibraryReorderer.reorderLibrary(this, forced);
                     }
                 }
