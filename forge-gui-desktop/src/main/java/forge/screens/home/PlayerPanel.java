@@ -98,6 +98,8 @@ public class PlayerPanel extends FPanel {
     // Cards under test guarantee checkbox
     private final FCheckBox chkCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in first 10 drawn cards");
     private boolean hasCardsUnderTest = false;
+    /** Name of the system property {@code Main} sets for the {@code --guarantee-cards-under-test} launch option. */
+    private static final String LAUNCH_GUARANTEE_PROP = "forge.guaranteeCardsUnderTestP1";
 
     // Mana Base Band (read-only, Commander Decklist Notation spec §6.1.5) + Target Hand Quality
     // picker (§6.1.6, quartile-based - see forge.game.mulligan.HandQualitySampler). Both hidden
@@ -668,6 +670,15 @@ public class PlayerPanel extends FPanel {
         hasCardsUnderTest = deck != null && !deck.getCardsUnderTest().isEmpty();
         if (hasCardsUnderTest) {
             chkCardsUnderTestTop10.setToolTipText("Guarantee cards under test (" + String.join(", ", deck.getCardsUnderTest()) + ") in the first 10 drawn cards");
+            // One-shot CLI default (--guarantee-cards-under-test): tick once for seat 1, then leave the user in control.
+            if (index == 0 && System.getProperty(LAUNCH_GUARANTEE_PROP) != null) {
+                System.clearProperty(LAUNCH_GUARANTEE_PROP);
+                chkCardsUnderTestTop10.setSelected(true);
+                if (deckChooser != null) {
+                    deckChooser.setGuaranteeCardsUnderTestTop10(true);
+                }
+                javax.swing.SwingUtilities.invokeLater(() -> lobby.fireCardsUnderTestTop10ChangeListener(index, true));
+            }
         } else {
             chkCardsUnderTestTop10.setSelected(false);
         }

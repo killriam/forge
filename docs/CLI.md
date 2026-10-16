@@ -175,6 +175,7 @@ java -jar forge-gui-desktop-*-jar-with-dependencies.jar --deck "Mein Deck"
 | `--deck` / `--deck1` | `<Deckname>` | Setzt Lobby-Deck für Spieler 1 | - |
 | `--deck2` | `<Deckname>` | Setzt Lobby-Deck für Spieler 2 | - |
 | `--format` | `commander\|oathbreaker\|tinyleaders\|brawl\|constructed` | Wählt Deck-State/Variante für die Vorauswahl | `commander` |
+| `--guarantee-cards-under-test` | - | Hakt für Spieler 1 „Guarantee Cards Under Test in first 10 drawn cards" vor (nur wenn das Deck `CardsUnderTest=` enthält; einmalig, danach frei änderbar) | aus |
 
 ### Beispiele
 

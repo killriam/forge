@@ -46,6 +46,7 @@ public final class Main {
         private GuiDeckFormat format = GuiDeckFormat.COMMANDER;
         private String pendingReplayPath;
         private boolean pendingReplayShuffle = false;
+        private boolean guaranteeCardsUnderTest = false;
     }
 
     /**
@@ -250,6 +251,9 @@ public final class Main {
                 case "--deck2":
                     options.playerTwoDeck = requireOptionValue(args, ++i, arg);
                     break;
+                case "--guarantee-cards-under-test":
+                    options.guaranteeCardsUnderTest = true;
+                    break;
                 case "--format":
                     final String formatValue = requireOptionValue(args, ++i, arg);
                     final GuiDeckFormat format = GuiDeckFormat.fromCliValue(formatValue);
@@ -279,6 +283,10 @@ public final class Main {
     }
 
     private static void applyGuiLaunchOptions(final GuiLaunchOptions options) {
+        // Plain system property (not a PlayerPanel call): PlayerPanel's static init needs the skin, which isn't loaded yet.
+        if (options.guaranteeCardsUnderTest) {
+            System.setProperty("forge.guaranteeCardsUnderTestP1", "true");
+        }
         if (options.playerOneDeck == null && options.playerTwoDeck == null) {
             return;
         }
@@ -314,7 +322,7 @@ public final class Main {
 
     private static void printGuiUsage() {
         System.out.println("GUI mode usage:");
-        System.out.println("  java -jar <jar> gui [--format commander|oathbreaker|tinyleaders|brawl|constructed] [--deck <name>] [--deck2 <name>]");
+        System.out.println("  java -jar <jar> gui [--format commander|oathbreaker|tinyleaders|brawl|constructed] [--deck <name>] [--deck2 <name>] [--guarantee-cards-under-test]");
         System.out.println("  java -jar <jar> --deck <name> [--deck2 <name>] [--format <format>]");
     }
 
