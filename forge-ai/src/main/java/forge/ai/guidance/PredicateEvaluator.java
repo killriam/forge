@@ -145,7 +145,8 @@ public final class PredicateEvaluator {
                 boolean expectedIndestructible = val == null || val.getAsBoolean();
                 boolean actualIndestructible = targetCard != null
                         && (targetCard.hasKeyword("Indestructible") || targetCard.hasKeyword("Hexproof"));
-                return actualIndestructible == expectedIndestructible;
+                return "!=".equals(op) ? actualIndestructible != expectedIndestructible
+                        : actualIndestructible == expectedIndestructible;
             case "target.is_commander":
                 // Card.isCommander(): true for a commander in any zone (incl. melded/merged), own or opposing.
                 // A non-Card target (counterspell candidates) cannot be evaluated, so neither == nor != matches.
@@ -169,11 +170,17 @@ public final class PredicateEvaluator {
                 boolean controllerMatches = controllerMatches(aiPlayer, targetCard, val.getAsString());
                 return "!=".equals(op) ? !controllerMatches : controllerMatches;
             case "target.canonical_threat_tier":
-                return targetCard != null && val != null
-                        && val.getAsString().equals(profile.canonicalThreatTierOf(targetCard.getName()));
+                if (targetCard == null || val == null) {
+                    return false;
+                }
+                boolean tierMatches = val.getAsString().equals(profile.canonicalThreatTierOf(targetCard.getName()));
+                return "!=".equals(op) ? !tierMatches : tierMatches;
             case "target.role":
-                return targetCard != null && val != null
-                        && val.getAsString().equals(profile.roleOf(targetCard.getName()));
+                if (targetCard == null || val == null) {
+                    return false;
+                }
+                boolean roleMatches = val.getAsString().equals(profile.roleOf(targetCard.getName()));
+                return "!=".equals(op) ? !roleMatches : roleMatches;
             case "target_spell.canonical_threat_tier":
                 return targetSpell != null && targetSpell.getHostCard() != null && val != null
                         && val.getAsString().equals(profile.canonicalThreatTierOf(targetSpell.getHostCard().getName()));
@@ -236,6 +243,11 @@ public final class PredicateEvaluator {
     /** Values accepted by {@code target.controller}. */
     static final Set<String> CONTROLLER_VALUES = Set.of("own", "opponent", "leading_opponent");
 
+    /** Fields that implement only {@code ==} and {@code !=}; any other operator makes a veto invalid. */
+    static final Set<String> EQUALITY_ONLY_FIELDS = Set.of(
+            "target.is_commander", "target.controller", "target.name",
+            "target.has_indestructible", "target.canonical_threat_tier", "target.role");
+
     /**
      * Every leaf field {@link #evaluateLeaf} has a case for. Keep in sync with its switch: a field
      * missing here is reported by {@link #validate} and makes a veto fail closed.
@@ -278,14 +290,16 @@ public final class PredicateEvaluator {
         String field = ast.get("field").getAsString();
         if (!KNOWN_FIELDS.contains(field)) {
             problems.add("unknown field '" + field + "'");
-        } else if ("target.controller".equals(field)) {
-            JsonElement v = ast.get("value");
+        } else {
             String op = ast.has("op") ? ast.get("op").getAsString() : null;
-            if (v == null || !v.isJsonPrimitive() || !CONTROLLER_VALUES.contains(v.getAsString())) {
-                problems.add("target.controller value must be one of " + CONTROLLER_VALUES);
+            if (EQUALITY_ONLY_FIELDS.contains(field) && !"==".equals(op) && !"!=".equals(op)) {
+                problems.add(field + " supports only '==' and '!=' (got '" + op + "')");
             }
-            if (!"==".equals(op) && !"!=".equals(op)) {
-                problems.add("target.controller supports only '==' and '!=' (got '" + op + "')");
+            if ("target.controller".equals(field)) {
+                JsonElement v = ast.get("value");
+                if (v == null || !v.isJsonPrimitive() || !CONTROLLER_VALUES.contains(v.getAsString())) {
+                    problems.add("target.controller value must be one of " + CONTROLLER_VALUES);
+                }
             }
         }
     }

@@ -235,6 +235,122 @@ public class AiGuidanceVetoTest extends AITest {
         AssertJUnit.assertNull(ComputerUtilCard.getBestRemovalTargetAI(ai, list(bear), swords(ai)));
     }
 
+    private static File rawSpec(String aiGuidanceJson) {
+        try {
+            File f = File.createTempFile("raw_spec", ".json");
+            f.deleteOnExit();
+            Files.write(f.toPath(), ("{\"deck_rules\":{\"ai_guidance\":" + aiGuidanceJson + "}}")
+                    .getBytes(StandardCharsets.UTF_8));
+            return f;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** The exact shape the Playbook compiler emits: source_card + vetoes only, plus the threat catalog. */
+    private static final String PLAYBOOK_CONTRACT = "{"
+            + "\"canonical_threat_catalog\":{\"tier_1_combo\":[\"Thassa's Oracle\"]},"
+            + "\"target_rankings\":[{\"source_card\":\"Swords to Plowshares\",\"vetoes\":["
+            + "{\"condition\":{\"field\":\"target.is_commander\",\"op\":\"==\",\"value\":true}},"
+            + "{\"condition\":{\"all_of\":["
+            + "{\"field\":\"target.controller\",\"op\":\"==\",\"value\":\"opponent\"},"
+            + "{\"field\":\"target.canonical_threat_tier\",\"op\":\"==\",\"value\":\"tier_1_combo\"}]}}]}]}";
+
+    @Test
+    public void playbookContractLoadsAndBehaves() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        attach(ai, rawSpec(PLAYBOOK_CONTRACT));
+
+        AssertJUnit.assertTrue(((forge.ai.PlayerControllerAi) ai.getController()).getAi().getGuidanceProfile()
+                .hasTargetRankingRule(SWORDS));
+
+        Card commander = addCard("Ghalta, Primal Hunger", opponent);
+        commander.setCommander(true);
+        Card oracle = addCard("Thassa's Oracle", opponent);   // opponent + tier_1_combo -> vetoed
+        Card bear = addCard("Runeclaw Bear", opponent);
+        AssertJUnit.assertEquals("commander and opposing tier-1 combo piece are vetoed",
+                bear, ComputerUtilCard.getBestRemovalTargetAI(ai, list(commander, oracle, bear), swords(ai)));
+
+        Card ownOracle = addCard("Thassa's Oracle", ai);       // own copy: the all_of does not match
+        AssertJUnit.assertEquals("the tier-1 veto is scoped to opponents; an own copy survives",
+                ownOracle, ComputerUtilCard.getBestRemovalTargetAI(ai, list(oracle, ownOracle), swords(ai)));
+
+        AssertJUnit.assertNull("veto-all is a hold",
+                ComputerUtilCard.getBestRemovalTargetAI(ai, list(commander, oracle), swords(ai)));
+    }
+
+    @Test
+    public void notEqualsIsSupportedByEverySupportedField() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        String catalogAndRole = "{\"canonical_threat_catalog\":{\"tier_2_engine\":[\"Korvold, Fae-Cursed King\"]},"
+                + "\"role_bindings\":{\"cards\":{\"Ashnod's Altar\":{\"primary_role\":\"engine_core\"}}},"
+                + "\"target_rankings\":[{\"source_card\":\"Swords to Plowshares\",\"vetoes\":[%s]}]}";
+
+        Card colossus = addCard("Frenzied Goblin", opponent); // plain, not indestructible/commander/tagged
+        Card plain = addCard("Runeclaw Bear", opponent);
+
+        // each case: veto "field != value" keeps ONLY cards where field == value is true
+        Card indestructible = addCard("Darksteel Colossus", opponent);
+        attach(ai, rawSpec(String.format(catalogAndRole, veto("target.has_indestructible", "!=", "true"))));
+        AssertJUnit.assertEquals(indestructible,
+                ComputerUtilCard.getBestRemovalTargetAI(ai, list(plain, indestructible), swords(ai)));
+
+        Card korvold = addCard("Korvold, Fae-Cursed King", opponent);
+        attach(ai, rawSpec(String.format(catalogAndRole, veto("target.canonical_threat_tier", "!=", "\"tier_2_engine\""))));
+        AssertJUnit.assertEquals(korvold,
+                ComputerUtilCard.getBestRemovalTargetAI(ai, list(plain, korvold), swords(ai)));
+
+        Card altar = addCard("Ashnod's Altar", opponent);
+        attach(ai, rawSpec(String.format(catalogAndRole, veto("target.role", "!=", "\"engine_core\""))));
+        AssertJUnit.assertEquals(altar,
+                ComputerUtilCard.getBestRemovalTargetAI(ai, list(plain, altar), swords(ai)));
+
+        Card commander = addCard("Ghalta, Primal Hunger", opponent);
+        commander.setCommander(true);
+        attach(ai, rawSpec(String.format(catalogAndRole, veto("target.is_commander", "!=", "true"))));
+        AssertJUnit.assertEquals(commander,
+                ComputerUtilCard.getBestRemovalTargetAI(ai, list(plain, commander), swords(ai)));
+
+        Card ownBear = addCard("Runeclaw Bear", ai);
+        attach(ai, rawSpec(String.format(catalogAndRole, veto("target.controller", "!=", "\"own\""))));
+        AssertJUnit.assertEquals(ownBear,
+                ComputerUtilCard.getBestRemovalTargetAI(ai, list(plain, ownBear), swords(ai)));
+        AssertJUnit.assertNotNull(colossus);
+    }
+
+    @Test
+    public void unsupportedOperatorInAVetoFailsClosed() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        attach(ai, spec(veto("target.role", ">=", "\"engine_core\""), ""));
+
+        Card bear = addCard("Runeclaw Bear", opponent);
+
+        AssertJUnit.assertNull(ComputerUtilCard.getBestRemovalTargetAI(ai, list(bear), swords(ai)));
+    }
+
+    @Test
+    public void storedRulesArrayShapeIsIgnoredNotUsed() {
+        Game game = initAndCreateGame();
+        Player ai = game.getPlayers().get(1);
+        Player opponent = game.getPlayers().get(0);
+        attach(ai, rawSpec("{\"version\":1,\"deckId\":\"x\",\"rules\":[{\"source_card\":\"Swords to Plowshares\","
+                + "\"vetoes\":[{\"condition\":{\"field\":\"target.is_commander\",\"op\":\"==\",\"value\":true}}]}]}"));
+
+        AssertJUnit.assertFalse(((forge.ai.PlayerControllerAi) ai.getController()).getAi().getGuidanceProfile()
+                .hasTargetRankingRule(SWORDS));
+
+        Card commander = addCard("Ghalta, Primal Hunger", opponent);
+        commander.setCommander(true);
+        AssertJUnit.assertEquals("no rule loaded, so the commander is NOT protected",
+                commander, ComputerUtilCard.getBestRemovalTargetAI(ai, list(commander), swords(ai)));
+    }
+
     @Test
     public void validateReportsOnlyRealProblems() {
         com.google.gson.JsonObject ok = com.google.gson.JsonParser.parseString(
