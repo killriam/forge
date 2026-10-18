@@ -93,9 +93,9 @@ public class AiGuidanceTargetRankingTest extends AITest {
         // "decorate evaluateCreature()/evaluatePermanent()" hook (which would need it) with what
         // this slice actually built: chooseGuidedRemovalTarget()'s veto/ladder logic is plain
         // Card-generic (PredicateEvaluator's target.* fields don't check card type), and its
-        // vanilla-evaluation fallback is ComputerUtilCard.getWorstAI() -> getWorstPermanentAI(),
-        // which already handles any mix of creatures/artifacts/enchantments/lands. This test
-        // proves it rather than continuing to assume the caveat was accurate.
+        // no-match fallback is ComputerUtilCard.getVanillaBestRemovalTargetAI(), which scores any
+        // mix of creatures/artifacts/enchantments/lands. This test proves the ladder path rather
+        // than continuing to assume the caveat was accurate.
         Game game = initAndCreateGame();
         Player ai = game.getPlayers().get(1);
         Player opponent = game.getPlayers().get(0);

@@ -607,6 +607,14 @@ public class ComputerUtilCard {
                 return profile.chooseGuidedRemovalTarget(sa, ai, ai.getGame(), list);
             }
         }
+        return getVanillaBestRemovalTargetAI(ai, list);
+    }
+
+    /** The unguided removal pick: highest {@link #evaluateRemovalTargetPriority}. {@code null} for an empty list. */
+    public static Card getVanillaBestRemovalTargetAI(final Player ai, final Iterable<Card> list) {
+        if (Iterables.isEmpty(list)) {
+            return null;
+        }
         return Aggregates.itemWithMax(list, c -> evaluateRemovalTargetPriority(ai, c));
     }
 

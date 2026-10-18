@@ -11,6 +11,9 @@ import forge.game.event.GameEventAiGuidanceDecision;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -46,6 +49,8 @@ import java.util.Set;
  * removal spell. See forge-integration-guide.md §12.7.</p>
  */
 public final class AiGuidanceProfile {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AiGuidanceProfile.class);
 
     /** {@code condition} + the policy author's own {@code reason} text, surfaced in L2 decision logging (§12.8). */
     private record DeploymentConstraint(JsonObject condition, String reason) { }
@@ -174,6 +179,11 @@ public final class AiGuidanceProfile {
                         continue;
                     }
                     String reason = vObj.has("reason") ? vObj.get("reason").getAsString() : null;
+                    List<String> problems = PredicateEvaluator.validate(vObj.getAsJsonObject("condition"));
+                    if (!problems.isEmpty()) {
+                        LOG.error("ai_guidance veto for '{}' is invalid ({}); it fails closed and vetoes EVERY target, "
+                                + "so this spell will be held. Fix the veto condition.", sourceCard, problems);
+                    }
                     vetoes.add(new TargetRankingRule.Veto(vObj.getAsJsonObject("condition"), reason));
                 }
             }
@@ -361,6 +371,32 @@ public final class AiGuidanceProfile {
         return (int) Math.round(step.score() * (1.0 + stageWeightFor(game, step.dimension())));
     }
 
+    /**
+     * Whether {@code veto} disqualifies {@code target}. A veto whose condition references an unknown
+     * field, or an unsupported {@code target.controller} value/operator, <b>fails closed</b>: it
+     * applies to every candidate. Why this direction: a veto is a protection ("never target X"), so
+     * the safe failure is to keep protecting - the spell is held and the
+     * {@code target_all_vetoed} decision event says the veto is invalid. The alternative (veto
+     * silently stops firing) would let the AI aim at exactly what the author forbade, with nothing
+     * visible in play. {@link #parseTargetRankings} logs an ERROR once at load. Ladder steps are
+     * unaffected: they keep {@link PredicateEvaluator}'s fail-open default.
+     */
+    private boolean vetoApplies(TargetRankingRule.Veto veto, Player aiPlayer, Game game, Object target) {
+        if (!PredicateEvaluator.validate(veto.condition()).isEmpty()) {
+            return true;
+        }
+        return PredicateEvaluator.evaluate(veto.condition(), this, aiPlayer, game, target);
+    }
+
+    private static boolean hasInvalidVeto(TargetRankingRule rule) {
+        for (TargetRankingRule.Veto veto : rule.getVetoes()) {
+            if (!PredicateEvaluator.validate(veto.condition()).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean hasTargetRankingRule(String sourceCardName) {
         return sourceCardName != null && targetRankingsBySourceCard.containsKey(sourceCardName);
     }
@@ -369,7 +405,7 @@ public final class AiGuidanceProfile {
      * Applies this profile's {@code target_rankings} rule for {@code sa}'s host card (if any) to
      * {@code candidates}: filters out anything matching a veto condition, then picks the
      * candidate whose first-matching {@code evaluation_ladder} step scores highest. Falls back to
-     * {@link ComputerUtilCard#getWorstAI} (vanilla evaluation) among the post-veto survivors if no
+     * {@link ComputerUtilCard#getVanillaBestRemovalTargetAI} (the unguided, highest-priority pick) among the post-veto survivors if no
      * ladder step matches any of them — vetoes always apply even when the ladder has no opinion.
      *
      * <p>Only call this after confirming {@link #hasTargetRankingRule} — the two null cases this
@@ -387,7 +423,7 @@ public final class AiGuidanceProfile {
         for (Card c : candidates) {
             TargetRankingRule.Veto matchedVeto = null;
             for (TargetRankingRule.Veto veto : rule.getVetoes()) {
-                if (PredicateEvaluator.evaluate(veto.condition(), this, aiPlayer, game, c)) {
+                if (vetoApplies(veto, aiPlayer, game, c)) {
                     matchedVeto = veto;
                     break;
                 }
@@ -399,7 +435,8 @@ public final class AiGuidanceProfile {
         if (survivors.isEmpty()) {
             game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), sourceCardName,
                     "target_all_vetoed", null, null,
-                    "every candidate target matched a veto condition"));
+                    hasInvalidVeto(rule) ? "every candidate target was vetoed; a veto condition is invalid and fails closed (see ERROR log)"
+                            : "every candidate target matched a veto condition"));
             return null;
         }
 
@@ -425,10 +462,12 @@ public final class AiGuidanceProfile {
             return best;
         }
 
-        Card fallback = ComputerUtilCard.getWorstAI(survivors);
+        // Same pick the unguided path makes (highest removal priority) among the non-vetoed survivors.
+        // Reached for a veto-only rule (empty ladder) and for a ladder that matches no survivor.
+        Card fallback = ComputerUtilCard.getVanillaBestRemovalTargetAI(aiPlayer, survivors);
         game.fireEvent(new GameEventAiGuidanceDecision(aiPlayer.getName(), fallback.getName(),
                 "target_fallback", null, null,
-                "no evaluation_ladder step matched any non-vetoed candidate; chose by vanilla evaluation"));
+                "no evaluation_ladder step matched any non-vetoed candidate; chose the highest vanilla removal priority"));
         return fallback;
     }
 
@@ -461,7 +500,7 @@ public final class AiGuidanceProfile {
         for (SpellAbility candidate : candidates) {
             boolean vetoed = false;
             for (TargetRankingRule.Veto veto : rule.getVetoes()) {
-                if (PredicateEvaluator.evaluate(veto.condition(), this, aiPlayer, game, candidate)) {
+                if (vetoApplies(veto, aiPlayer, game, candidate)) {
                     vetoed = true;
                     break;
                 }

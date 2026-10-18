@@ -13,7 +13,9 @@ import forge.game.zone.ZoneType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -144,6 +146,28 @@ public final class PredicateEvaluator {
                 boolean actualIndestructible = targetCard != null
                         && (targetCard.hasKeyword("Indestructible") || targetCard.hasKeyword("Hexproof"));
                 return actualIndestructible == expectedIndestructible;
+            case "target.is_commander":
+                // Card.isCommander(): true for a commander in any zone (incl. melded/merged), own or opposing.
+                // A non-Card target (counterspell candidates) cannot be evaluated, so neither == nor != matches.
+                if (targetCard == null) {
+                    return false;
+                }
+                boolean wantCommander = val == null || val.getAsBoolean();
+                return "!=".equals(op) ? targetCard.isCommander() != wantCommander
+                        : targetCard.isCommander() == wantCommander;
+            case "target.name":
+                // Exact card name (the same key role_bindings and the threat catalog use).
+                if (targetCard == null || val == null || !val.isJsonPrimitive()) {
+                    return false;
+                }
+                boolean nameMatches = val.getAsString().equals(targetCard.getName());
+                return "!=".equals(op) ? !nameMatches : nameMatches;
+            case "target.controller":
+                if (targetCard == null || val == null || !val.isJsonPrimitive()) {
+                    return false;
+                }
+                boolean controllerMatches = controllerMatches(aiPlayer, targetCard, val.getAsString());
+                return "!=".equals(op) ? !controllerMatches : controllerMatches;
             case "target.canonical_threat_tier":
                 return targetCard != null && val != null
                         && val.getAsString().equals(profile.canonicalThreatTierOf(targetCard.getName()));
@@ -207,6 +231,97 @@ public final class PredicateEvaluator {
                         "satisfied; see forge-integration-guide.md §12.6/§12.10 for the supported field list", field);
                 return true;
         }
+    }
+
+    /** Values accepted by {@code target.controller}. */
+    static final Set<String> CONTROLLER_VALUES = Set.of("own", "opponent", "leading_opponent");
+
+    /**
+     * Every leaf field {@link #evaluateLeaf} has a case for. Keep in sync with its switch: a field
+     * missing here is reported by {@link #validate} and makes a veto fail closed.
+     */
+    static final Set<String> KNOWN_FIELDS = Set.of(
+            "active_engine_core_count", "battlefield.creatures.count", "battlefield.roles",
+            "hand.roles", "hand.has_roles_all", "opponent_open_mana", "resources.available_mana",
+            "state.self_board_presence_ahead", "state.game_stage",
+            "target.has_indestructible", "target.is_commander", "target.controller", "target.name",
+            "target.canonical_threat_tier", "target.role",
+            "target_spell.canonical_threat_tier", "target_spell.cmc", "target_spell.types",
+            "target_spell.targets_our_role", "target_spell.effect_types");
+
+    /**
+     * Problems that would make {@code ast} unevaluable: unknown fields and values {@code
+     * target.controller} does not accept. Empty when the condition is fully understood. Used to
+     * fail vetoes closed, see {@link AiGuidanceProfile#vetoApplies}.
+     */
+    public static List<String> validate(JsonObject ast) {
+        List<String> problems = new ArrayList<>();
+        collectProblems(ast, problems);
+        return problems;
+    }
+
+    private static void collectProblems(JsonElement node, List<String> problems) {
+        if (node == null || !node.isJsonObject()) {
+            return;
+        }
+        JsonObject ast = node.getAsJsonObject();
+        for (String combinator : new String[] {"all_of", "any_of", "none_of"}) {
+            if (ast.has(combinator) && ast.get(combinator).isJsonArray()) {
+                for (JsonElement child : ast.getAsJsonArray(combinator)) {
+                    collectProblems(child, problems);
+                }
+            }
+        }
+        if (!ast.has("field")) {
+            return;
+        }
+        String field = ast.get("field").getAsString();
+        if (!KNOWN_FIELDS.contains(field)) {
+            problems.add("unknown field '" + field + "'");
+        } else if ("target.controller".equals(field)) {
+            JsonElement v = ast.get("value");
+            String op = ast.has("op") ? ast.get("op").getAsString() : null;
+            if (v == null || !v.isJsonPrimitive() || !CONTROLLER_VALUES.contains(v.getAsString())) {
+                problems.add("target.controller value must be one of " + CONTROLLER_VALUES);
+            }
+            if (!"==".equals(op) && !"!=".equals(op)) {
+                problems.add("target.controller supports only '==' and '!=' (got '" + op + "')");
+            }
+        }
+    }
+
+    private static boolean controllerMatches(Player aiPlayer, Card target, String which) {
+        Player controller = target.getController();
+        switch (which) {
+            case "own":
+                return controller.equals(aiPlayer);
+            case "opponent":
+                return aiPlayer.isOpponentOf(controller);
+            case "leading_opponent":
+                return controller.equals(leadingOpponent(aiPlayer));
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * The "leading" opponent: the one with the highest total creature value
+     * ({@link ComputerUtilCard#evaluateCreatureList}, the same measure {@code
+     * state.self_board_presence_ahead} uses), ties broken by higher life, then turn order. Not
+     * {@code Player.getStrongestOpponent()}, which is highest life only and ignores the board.
+     * {@code null} if there are no opponents.
+     */
+    static Player leadingOpponent(Player aiPlayer) {
+        Player leader = null;
+        int leaderValue = Integer.MIN_VALUE;
+        for (Player opp : aiPlayer.getOpponents()) {
+            int value = ComputerUtilCard.evaluateCreatureList(opp.getCreaturesInPlay());
+            if (leader == null || value > leaderValue || (value == leaderValue && opp.getLife() > leader.getLife())) {
+                leader = opp;
+                leaderValue = value;
+            }
+        }
+        return leader;
     }
 
     private static int countByRole(AiGuidanceProfile profile, Player aiPlayer, String role) {

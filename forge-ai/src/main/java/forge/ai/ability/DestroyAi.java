@@ -379,6 +379,11 @@ public class DestroyAi extends SpellAbilityAi {
                     }
                 } else {
                     Card c = ComputerUtilCard.getBestRemovalTargetAI(ai, preferred, sa);
+                    if (c == null) {
+                        // ai_guidance vetoed every remaining candidate; without this the loop never shrinks "preferred"
+                        preferred.clear();
+                        continue;
+                    }
 
                     if (sa.canTarget(c)) {
                         sa.getTargets().add(c);
