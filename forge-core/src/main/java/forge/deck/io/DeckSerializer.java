@@ -17,6 +17,9 @@ import java.util.Map.Entry;
 
 public class DeckSerializer {
 
+    /** Name of the optional section holding the deck's ai_guidance JSON (matched case-insensitively on read). */
+    public static final String AI_GUIDANCE_SECTION = "AiGuidance";
+
     public static void writeDeck(final Deck d, final File f) {
         FileUtil.writeFile(f, serializeDeck(d));
     }
@@ -96,6 +99,11 @@ public class DeckSerializer {
             out.add(TextUtil.enclosedBracket(s.getKey().toString()));
             out.add(s.getValue().toCardList(System.lineSeparator()));
         }
+        // Last, one line, unchanged: the raw JSON is owned by whoever wrote it (MaMo), not rebuilt here.
+        if (d.getAiGuidanceJson() != null && !d.getAiGuidanceJson().trim().isEmpty()) {
+            out.add(TextUtil.enclosedBracket(AI_GUIDANCE_SECTION));
+            out.add(d.getAiGuidanceJson());
+        }
         return out;
     }
 
@@ -146,6 +154,14 @@ public class DeckSerializer {
         if (dh.getScenario() != null)      d.setScenarioIds(dh.getScenario());
         d.setSleeveArtKey(dh.getSleeveArtKey());
         d.setSleeveArtOffset(dh.getSleeveArtOffset());
+        for (Map.Entry<String, List<String>> section : sections.entrySet()) {
+            if (AI_GUIDANCE_SECTION.equalsIgnoreCase(section.getKey())) {
+                // Non-empty lines only (the section parser already drops blank ones). More than one line is kept
+                // joined by a newline so the consumer can reject it loudly; it is never silently truncated.
+                d.setAiGuidanceJson(StringUtils.join(section.getValue(), "\n"));
+                break;
+            }
+        }
         d.setDeferredSections(sections);
         return d;
     }

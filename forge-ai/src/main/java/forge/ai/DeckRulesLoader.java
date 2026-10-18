@@ -101,6 +101,12 @@ public final class DeckRulesLoader {
     public static AiGuidanceProfile loadAiGuidanceIfNeeded(Deck deck, File baseDir) {
         if (deck == null) return null;
 
+        // An [AiGuidance] section in the .dck wins over DecklistSpec$. If it is present but unusable,
+        // guidance stays off (loudly) rather than silently falling back to the other route.
+        if (deck.getAiGuidanceJson() != null) {
+            return loadAiGuidanceFromSection(deck.getAiGuidanceJson(), deck.getName());
+        }
+
         String specPath = deck.getDecklistSpecPath();
         if (specPath == null || specPath.isEmpty()) return null;
 
@@ -118,6 +124,47 @@ public final class DeckRulesLoader {
     /** Convenience overload — uses no base directory (absolute path only). */
     public static AiGuidanceProfile loadAiGuidanceIfNeeded(Deck deck) {
         return loadAiGuidanceIfNeeded(deck, null);
+    }
+
+    /**
+     * Builds the profile from a deck's {@code [AiGuidance]} section body. Returns {@code null} and logs an
+     * ERROR naming the deck if the body is empty, spans more than one line, is not a JSON object, fails to
+     * parse, or has no {@code deck_rules.ai_guidance} object. Content problems inside valid JSON (for
+     * example an invalid veto) are handled by {@link AiGuidanceProfile} itself.
+     */
+    static AiGuidanceProfile loadAiGuidanceFromSection(String body, String deckName) {
+        if (body == null || body.trim().isEmpty()) {
+            LOG.error("Deck '{}': [AiGuidance] section is empty; ai_guidance is off for this deck.", deckName);
+            return null;
+        }
+        if (body.indexOf('\n') >= 0) {
+            LOG.error("Deck '{}': [AiGuidance] section must be exactly one line of JSON but has several; "
+                    + "ai_guidance is off for this deck.", deckName);
+            return null;
+        }
+        try {
+            JsonElement root = JsonParser.parseString(body.trim());
+            if (!root.isJsonObject()) {
+                LOG.error("Deck '{}': [AiGuidance] is not a JSON object; ai_guidance is off for this deck.", deckName);
+                return null;
+            }
+            JsonObject rootObj = root.getAsJsonObject();
+            JsonObject deckRules = rootObj.has("deck_rules") && rootObj.get("deck_rules").isJsonObject()
+                    ? rootObj.getAsJsonObject("deck_rules") : null;
+            if (deckRules == null || !deckRules.has("ai_guidance") || !deckRules.get("ai_guidance").isJsonObject()) {
+                LOG.error("Deck '{}': [AiGuidance] has no deck_rules.ai_guidance object; ai_guidance is off for this deck.",
+                        deckName);
+                return null;
+            }
+            AiGuidanceProfile profile = AiGuidanceProfile.parse(deckRules.getAsJsonObject("ai_guidance"));
+            LOG.info("Deck '{}': loaded ai_guidance from [AiGuidance] section - {} target ranking rule(s)",
+                    deckName, profile.targetRankingRuleCount());
+            return profile;
+        } catch (RuntimeException e) { // JsonParseException and malformed-structure errors
+            LOG.error("Deck '{}': [AiGuidance] is not valid JSON ({}); ai_guidance is off for this deck.",
+                    deckName, e.getMessage());
+            return null;
+        }
     }
 
     static AiGuidanceProfile loadAiGuidanceFromFile(File file) throws IOException {

@@ -73,6 +73,13 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
 
     /** Path to an external Commander Decklist Notation JSON file (set via AiHints DecklistSpec$ key). */
     private String decklistSpecPath = null;
+    /**
+     * Raw body of the deck file's {@code [AiGuidance]} section (compact JSON in the same
+     * {@code {"deck_rules":{"ai_guidance":...}}} shape as a DecklistSpec file), or {@code null} if the
+     * deck has none. Kept as an unparsed string (forge-core stays Gson-free) and written back unchanged;
+     * validation happens where it is consumed. An empty section is kept as {@code ""}.
+     */
+    private String aiGuidanceJson = null;
     /** Deck-level behavioral rules parsed from the decklist spec or inline AiHints. Lazy-loaded. */
     private transient DeckRulesConfig deckRulesConfig = null;
     private transient boolean deckRulesResolved = false;
@@ -282,6 +289,7 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
         result.setAiHints(StringUtils.join(aiHints, " | "));
         result.setDraftNotes(draftNotes);
         result.decklistSpecPath = this.decklistSpecPath;
+        result.aiGuidanceJson = this.aiGuidanceJson;
         result.deckRulesConfig = this.deckRulesConfig;
         result.deckRulesResolved = this.deckRulesResolved;
         result.deckUrl = this.deckUrl;
@@ -792,6 +800,15 @@ public class Deck extends DeckBase implements Iterable<Entry<DeckSection, CardPo
     /** @return Comma-separated opening_hand_test scenario ids/filenames, or null. */
     public String getScenarioIds() { return scenarioIds; }
     public void setScenarioIds(String scenarioIds) { this.scenarioIds = scenarioIds; }
+
+    /** @return Raw {@code [AiGuidance]} section body (see the field), or null if the deck has none. */
+    public String getAiGuidanceJson() {
+        return aiGuidanceJson;
+    }
+
+    public void setAiGuidanceJson(String json) {
+        this.aiGuidanceJson = json;
+    }
 
     public void setDecklistSpecPath(String path) {
         this.decklistSpecPath = path;
