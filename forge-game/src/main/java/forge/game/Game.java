@@ -47,6 +47,7 @@ import forge.game.staticability.StaticAbilityCantChangeDayTime;
 import forge.game.trigger.TriggerHandler;
 import forge.game.trigger.TriggerType;
 import forge.game.simulation.SimulationMetricsCollector;
+import forge.game.undo.UndoManager;
 import forge.game.zone.*;
 import forge.trackable.Tracker;
 import forge.util.*;
@@ -144,6 +145,7 @@ public class Game {
     private final Game maingame;
     private final GameView view;
     private final Tracker tracker = new Tracker();
+    private final UndoManager undoManager = new UndoManager();
 
     // Simulation metrics collector (optional, only for AI simulations)
     private SimulationMetricsCollector simulationMetricsCollector;
@@ -204,6 +206,10 @@ public class Game {
     }
     public CardCollectionView getLastStateGraveyard() {
         return lastStateGraveyard;
+    }
+
+    public UndoManager getUndoManager() {
+        return undoManager;
     }
 
     public void stashGameState() {
@@ -422,7 +428,11 @@ public class Game {
     }
 
     public final PlayerCollection getPlayersInTurnOrder(Player p) {
-        final PlayerCollection players = new PlayerCollection(getPlayersInTurnOrder());
+        // with at most two players left, either direction gives the same list once rotated to start
+        // at p, so the turn order check, which scans every card for a reversal effect, cannot matter
+        final boolean directionIrrelevant = ingamePlayers.size() <= 2 && ingamePlayers.contains(p);
+        final PlayerCollection players = new PlayerCollection(
+                directionIrrelevant ? ingamePlayers : getPlayersInTurnOrder());
 
         int i = players.indexOf(p);
         Collections.rotate(players, -i);
@@ -611,7 +621,7 @@ public class Game {
         return card == null ? null : card.getLastKnownZone();
     }
 
-    public synchronized CardCollectionView getCardsIn(final ZoneType zone) {
+    public CardCollectionView getCardsIn(final ZoneType zone) {
         if (zone == ZoneType.Stack) {
             return getStackZone().getCards();
         }
@@ -633,7 +643,14 @@ public class Game {
     public CardCollectionView getCardsIn(final Iterable<ZoneType> zones) {
         CardCollection cards = new CardCollection();
         for (final ZoneType z : zones) {
-            cards.addAll(getCardsIn(z));
+            if (z == ZoneType.Stack) {
+                cards.addAll(getStackZone().getCards());
+                continue;
+            }
+            // adding each player's zone to the result directly avoids building a collection per zone
+            for (final Player p : getPlayers()) {
+                cards.addAll(p.getCardsIn(z));
+            }
         }
         return cards;
     }

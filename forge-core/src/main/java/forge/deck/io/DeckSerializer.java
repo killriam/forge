@@ -86,6 +86,9 @@ public class DeckSerializer {
         if (!d.getNewCardsSinceLastRevision().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.NEW_CARDS_SINCE_LAST_REVISION, "=", StringUtils.join(d.getNewCardsSinceLastRevision(), "; ")));
         }
+        if (!d.getAltCommanders().isEmpty()) {
+            out.add(TextUtil.concatNoSpace(DeckFileHeader.ALT_COMMANDERS, "=", StringUtils.join(d.getAltCommanders(), ";")));
+        }
         if (!d.getSleeveArtKey().isEmpty()) {
             out.add(TextUtil.concatNoSpace(DeckFileHeader.SLEEVE_ART, "=", d.getSleeveArtKey()));
             if (d.getSleeveArtOffset() != Deck.DEFAULT_SLEEVE_OFFSET) {
@@ -152,6 +155,9 @@ public class DeckSerializer {
         if (dh.getDeckUrl() != null)       d.setDeckUrl(dh.getDeckUrl());
         if (dh.getEvalScenario() != null)  d.setEvalScenarioIds(dh.getEvalScenario());
         if (dh.getScenario() != null)      d.setScenarioIds(dh.getScenario());
+        for (String altCommander : dh.getAltCommanders()) {
+            d.addAltCommander(altCommander);
+        }
         d.setSleeveArtKey(dh.getSleeveArtKey());
         d.setSleeveArtOffset(dh.getSleeveArtOffset());
         for (Map.Entry<String, List<String>> section : sections.entrySet()) {
