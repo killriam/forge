@@ -42,6 +42,7 @@ public class RegisteredPlayer {
     private boolean randomFoil = false;
     private boolean enableETBCountersEffect = false;
     private boolean guaranteeCardsUnderTestTop10 = false;
+    private boolean guaranteedLandDrop = false;
     private HandQualityTarget startingHandQualityTarget = HandQualityTarget.NONE;
 
     public RegisteredPlayer(Deck deck0) {
@@ -281,6 +282,14 @@ public class RegisteredPlayer {
     }
     public RegisteredPlayer setGuaranteeCardsUnderTestTop10(boolean guaranteeCardsUnderTestTop10) {
         this.guaranteeCardsUnderTestTop10 = guaranteeCardsUnderTestTop10;
+        return this;
+    }
+
+    public boolean isGuaranteedLandDrop() {
+        return guaranteedLandDrop;
+    }
+    public RegisteredPlayer setGuaranteedLandDrop(boolean guaranteedLandDrop) {
+        this.guaranteedLandDrop = guaranteedLandDrop;
         return this;
     }
 

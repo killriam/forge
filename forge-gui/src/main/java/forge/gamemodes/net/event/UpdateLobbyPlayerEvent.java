@@ -34,6 +34,7 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
     private String aiProfile = null;
     private String scenarioFileName = null;
     private Boolean guaranteeCardsUnderTestTop10 = null;
+    private Boolean guaranteedLandDrop = null;
     private String startingHandQualityTarget = null;
 
     public static UpdateLobbyPlayerEvent create(final LobbySlotType type, final String name, final int avatarIndex, final int sleeveIndex, final int team, final boolean isArchenemy, final boolean isDevMode, final Set<AIOption> aiOptions, final String aiProfile) {
@@ -45,6 +46,11 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
     public static UpdateLobbyPlayerEvent cardsUnderTestTop10Update(final boolean guaranteeCardsUnderTestTop10) {
         final UpdateLobbyPlayerEvent event = new UpdateLobbyPlayerEvent();
         event.guaranteeCardsUnderTestTop10 = guaranteeCardsUnderTestTop10;
+        return event;
+    }
+    public static UpdateLobbyPlayerEvent guaranteedLandDropUpdate(final boolean guaranteedLandDrop) {
+        final UpdateLobbyPlayerEvent event = new UpdateLobbyPlayerEvent();
+        event.guaranteedLandDrop = guaranteedLandDrop;
         return event;
     }
     public static UpdateLobbyPlayerEvent startingHandQualityTargetUpdate(final String startingHandQualityTarget) {
@@ -241,6 +247,13 @@ public final class UpdateLobbyPlayerEvent implements NetEvent {
     }
     public void setGuaranteeCardsUnderTestTop10(final Boolean guaranteeCardsUnderTestTop10) {
         this.guaranteeCardsUnderTestTop10 = guaranteeCardsUnderTestTop10;
+    }
+
+    public Boolean getGuaranteedLandDrop() {
+        return guaranteedLandDrop;
+    }
+    public void setGuaranteedLandDrop(final Boolean guaranteedLandDrop) {
+        this.guaranteedLandDrop = guaranteedLandDrop;
     }
 
     public String getStartingHandQualityTarget() {

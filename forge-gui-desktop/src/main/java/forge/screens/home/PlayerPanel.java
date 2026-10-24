@@ -97,6 +97,7 @@ public class PlayerPanel extends FPanel {
 
     // Cards under test guarantee checkbox
     private final FCheckBox chkCardsUnderTestTop10 = new FCheckBox("Guarantee Cards Under Test in first 10 drawn cards");
+    private final FCheckBox chkGuaranteedLandDrop = new FCheckBox("Guaranteed Land Drop (turns 2-5: no land in hand -> draw a random mana land)");
     private boolean hasCardsUnderTest = false;
     /** Name of the system property {@code Main} sets for the {@code --guarantee-cards-under-test} launch option. */
     private static final String LAUNCH_GUARANTEE_PROP = "forge.guaranteeCardsUnderTestP1";
@@ -254,6 +255,12 @@ public class PlayerPanel extends FPanel {
         this.setGuaranteeCardsUnderTestTop10(slot == null ? false : slot.isGuaranteeCardsUnderTestTop10());
         refreshCardsUnderTestFromDeck(slot == null ? null : slot.getDeck());
 
+        // Guaranteed Land Drop: AI seats only (see update()); plain checkbox, no deck dependency.
+        this.add(chkGuaranteedLandDrop, variantBtnConstraints + ", cell 2 11, pushx, growx, wmax 100%-153px, spanx 4, wrap");
+        chkGuaranteedLandDrop.addActionListener(guaranteedLandDropListener);
+        chkGuaranteedLandDrop.setVisible(false);
+        this.setGuaranteedLandDrop(slot != null && slot.isGuaranteedLandDrop());
+
         // Mana Base Band display + Target Hand Quality picker: hidden until the selected deck's
         // DeckRulesConfig has mulligan rules at all - see refreshHandQualityTargetFromDeck.
         this.add(manaBaseBandLabel, variantBtnConstraints + ", cell 0 9, sx 2, ax right");
@@ -333,6 +340,10 @@ public class PlayerPanel extends FPanel {
                 && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
         chkCardsUnderTestTop10.setVisible(enableCardsUnderTest);
         chkCardsUnderTestTop10.setEnabled(enableCardsUnderTest);
+
+        final boolean enableLandDrop = mayEdit && type == LobbySlotType.AI;
+        chkGuaranteedLandDrop.setVisible(enableLandDrop);
+        chkGuaranteedLandDrop.setEnabled(enableLandDrop);
 
         boolean enableHandQuality = hasMulliganConfig && (type == LobbySlotType.LOCAL || type == LobbySlotType.AI);
         manaBaseBandLabel.setVisible(enableHandQuality);
@@ -1324,6 +1335,22 @@ public class PlayerPanel extends FPanel {
         if (deckChooser != null) {
             deckChooser.setGuaranteeCardsUnderTestTop10(chkCardsUnderTestTop10.isSelected());
         }
+    }
+
+    private final ActionListener guaranteedLandDropListener = new ActionListener() {
+        @Override
+        public void actionPerformed(final ActionEvent e) {
+            lobby.changePlayerFocus(index);
+            lobby.fireGuaranteedLandDropChangeListener(index, chkGuaranteedLandDrop.isSelected());
+        }
+    };
+
+    public boolean isGuaranteedLandDrop() {
+        return chkGuaranteedLandDrop.isSelected();
+    }
+
+    public void setGuaranteedLandDrop(final boolean value) {
+        chkGuaranteedLandDrop.setSelected(value); // setSelected does not fire the action listener
     }
 
     public FCheckBox getChkCardsUnderTestTop10() {

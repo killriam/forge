@@ -452,6 +452,7 @@ public class VLobby implements ILobbyView {
                 panel.setMayRemove(lobby.mayRemove(i));
                 panel.setAiProfile(slot.getAiProfile());
                 panel.setGuaranteeCardsUnderTestTop10(slot.isGuaranteeCardsUnderTestTop10());
+                panel.setGuaranteedLandDrop(slot.isGuaranteedLandDrop());
                 panel.refreshCardsUnderTestFromDeck(slotDeck);
                 panel.setStartingHandQualityTarget(HandQualityTarget.fromString(slot.getStartingHandQualityTarget()));
                 panel.refreshHandQualityTargetFromDeck(slotDeck);
@@ -574,6 +575,7 @@ public class VLobby implements ILobbyView {
             // signature for its other caller (forge-gui-mobile's LobbyScreen) - set separately.
             event.setScenarioFileName(getPlayerPanel(index).getScenarioFileName());
             event.setGuaranteeCardsUnderTestTop10(getPlayerPanel(index).isGuaranteeCardsUnderTestTop10());
+            event.setGuaranteedLandDrop(getPlayerPanel(index).isGuaranteedLandDrop());
             event.setStartingHandQualityTarget(getPlayerPanel(index).getStartingHandQualityTarget().name());
             playerChangeListener.update(index, event);
         }
@@ -626,6 +628,12 @@ public class VLobby implements ILobbyView {
     public void fireCardsUnderTestTop10ChangeListener(final int index, final boolean value) {
         if (playerChangeListener != null) {
             playerChangeListener.update(index, UpdateLobbyPlayerEvent.cardsUnderTestTop10Update(value));
+        }
+    }
+
+    public void fireGuaranteedLandDropChangeListener(final int index, final boolean value) {
+        if (playerChangeListener != null) {
+            playerChangeListener.update(index, UpdateLobbyPlayerEvent.guaranteedLandDropUpdate(value));
         }
     }
 

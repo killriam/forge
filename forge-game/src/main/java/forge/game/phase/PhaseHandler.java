@@ -272,6 +272,7 @@ public class PhaseHandler implements java.io.Serializable, IHasForgeLog {
                     for (Player p : game.getPlayers()) {
                         p.resetNumDrawnThisDrawStep();
                     }
+                    playerTurn.ensureGuaranteedLandDrop();
                     playerTurn.drawCard();
                     break;
 

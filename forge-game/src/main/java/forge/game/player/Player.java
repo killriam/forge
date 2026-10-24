@@ -1691,6 +1691,56 @@ public class Player extends GameEntity implements Comparable<Player> {
         }
     }
 
+    /** Guaranteed Land Drop is only ever honoured for AI-controlled seats. */
+    public boolean isGuaranteedLandDrop() {
+        try {
+            final RegisteredPlayer rp = getRegisteredPlayer();
+            return rp != null && rp.isGuaranteedLandDrop() && getController().isAI();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * "Guaranteed Land Drop" (AI seats only): on this player's own turns 2-5, if the hand holds no land at
+     * all, the card about to be drawn for the turn is replaced by a random land that has a mana ability, taken
+     * from elsewhere in the library (swapped to the top). Does nothing when the library has no such land.
+     * Call just before the draw step's normal draw.
+     */
+    public boolean ensureGuaranteedLandDrop() {
+        if (!isGuaranteedLandDrop()) {
+            return false;
+        }
+        final int turn = getTurn();
+        if (turn < 2 || turn > 5) {
+            return false;
+        }
+        if (getZone(ZoneType.Hand).contains(CardPredicates.LANDS)) {
+            return false;
+        }
+        final PlayerZone libZone = getZone(ZoneType.Library);
+        if (libZone == null || libZone.isEmpty()) {
+            return false;
+        }
+        final List<Card> lib = new ArrayList<>(libZone.getCards());
+        if (lib.get(0).isLand() && !lib.get(0).getManaAbilities().isEmpty()) {
+            return false; // the normal draw already is such a land
+        }
+        final List<Integer> candidates = new ArrayList<>();
+        for (int i = 1; i < lib.size(); i++) {
+            final Card c = lib.get(i);
+            if (c.isLand() && !c.getManaAbilities().isEmpty()) {
+                candidates.add(i);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return false;
+        }
+        Collections.swap(lib, 0, candidates.get(MyRandom.getRandom().nextInt(candidates.size())));
+        libZone.setCards(lib);
+        return true;
+    }
+
     public void ensureCardsUnderTestInTop10() {
         if (!isGuaranteeCardsUnderTestTop10()) {
             return;

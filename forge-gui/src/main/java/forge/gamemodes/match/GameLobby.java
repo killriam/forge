@@ -560,6 +560,7 @@ public abstract class GameLobby implements IHasGameType {
             }
 
             rp.setGuaranteeCardsUnderTestTop10(slot.isGuaranteeCardsUnderTestTop10());
+            rp.setGuaranteedLandDrop(slot.isGuaranteedLandDrop() && slot.getType() == LobbySlotType.AI);
             rp.setStartingHandQualityTarget(HandQualityTarget.fromString(slot.getStartingHandQualityTarget()));
             rp.setTeamNumber(team);
             players.add(rp.setPlayer(lobbyPlayer));

@@ -30,6 +30,7 @@ public final class LobbySlot implements Serializable {
     private String DeckName;
     private String aiProfile;
     private boolean isGuaranteeCardsUnderTestTop10;
+    private boolean isGuaranteedLandDrop;
     /** id/filename of the scenario file attached to this seat, resolved via
      *  {@code forge.game.ReplayLogParser#resolveScenarioByIdOrFilename(String)}. Empty string
      *  means "None" explicitly chosen (not the same as null/absent - {@link #apply} treats a
@@ -63,6 +64,7 @@ public final class LobbySlot implements Serializable {
         changed |= setIfChanged(data.getReady(),           this.isReady,        this::setIsReady);
         changed |= setIfChanged(data.getDevMode(),         this.isDevMode,      this::setIsDevMode);
         changed |= setIfChanged(data.getGuaranteeCardsUnderTestTop10(), this.isGuaranteeCardsUnderTestTop10, this::setIsGuaranteeCardsUnderTestTop10);
+        changed |= setIfChanged(data.getGuaranteedLandDrop(), this.isGuaranteedLandDrop, this::setIsGuaranteedLandDrop);
         changed |= setIfChanged(data.getAiOptions(),       this.aiOptions,      this::setAiOptions);
         changed |= setIfChanged(data.getSchemeDeckName(),  this.SchemeDeckName, this::setSchemeDeckName);
         changed |= setIfChanged(data.getAvatarVanguard(),  this.AvatarVanguard, this::setAvatarVanguard);
@@ -191,6 +193,13 @@ public final class LobbySlot implements Serializable {
     }
     public void setIsGuaranteeCardsUnderTestTop10(final boolean value) {
         this.isGuaranteeCardsUnderTestTop10 = value;
+    }
+
+    public boolean isGuaranteedLandDrop() {
+        return isGuaranteedLandDrop;
+    }
+    public void setIsGuaranteedLandDrop(final boolean value) {
+        this.isGuaranteedLandDrop = value;
     }
 
     /** @return {@link forge.deck.mulligan.HandQualityTarget} name, or null if never set. */
