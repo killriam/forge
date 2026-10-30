@@ -80,10 +80,6 @@ public class BuildInfo {
         return DateUtil.getElapsedHours(getTimestamp(), updateTimestamp) > 23;
     }
 
-    public static String getUserAgent() {
-        return "Forge/" + getVersionString();
-    }
-
     /**
      * Get the git short commit hash from the JAR manifest.
      * Returns "unknown" if not available (e.g. running from IDE without build).

@@ -17,6 +17,7 @@ import org.apache.commons.lang3.time.StopWatch;
 
 import forge.LobbyPlayer;
 import forge.ai.AiProfileUtil;
+import forge.ai.simulation.FlatMonteCarloStats;
 import forge.deck.Deck;
 import forge.deck.DeckGroup;
 import forge.deck.DeckImportController;
@@ -47,6 +48,10 @@ import forge.util.storage.IStorage;
 import static forge.localinstance.properties.ForgeConstants.DECK_COMMANDER_DIR;
 
 public class SimulateMatch {
+    /** Set by -mc: null leaves the game default (off, as the GUI's preference is only applied by HostedMatch). */
+    private static Boolean flatMonteCarlo = null;
+    private static Boolean flatMonteCarloMax = null;
+
     public static void simulate(String[] args) {
         try {
             FModel.initialize(null, null);
@@ -115,6 +120,27 @@ public class SimulateMatch {
         }
 
         boolean outputGamelog = !params.containsKey("q");
+
+        // Flat Monte Carlo is a match preference that only the GUI applies (HostedMatch); without this switch a
+        // simulation always runs the plain heuristic AI, whatever the preference says.
+        flatMonteCarlo = null;
+        flatMonteCarloMax = null;
+        if (params.containsKey("mc")) {
+            final List<String> mcValues = params.get("mc");
+            final String mcValue = mcValues.isEmpty() ? "on" : mcValues.get(0);
+            if ("on".equalsIgnoreCase(mcValue) || "true".equalsIgnoreCase(mcValue)) {
+                flatMonteCarlo = Boolean.TRUE;
+            } else if ("max".equalsIgnoreCase(mcValue)) {
+                flatMonteCarlo = Boolean.TRUE;
+                flatMonteCarloMax = Boolean.TRUE; // the strength a desktop match gets automatically
+            } else if ("off".equalsIgnoreCase(mcValue) || "false".equalsIgnoreCase(mcValue)) {
+                flatMonteCarlo = Boolean.FALSE;
+            } else {
+                System.out.println("Unknown value for -mc (use on, max or off): " + mcValue);
+                return;
+            }
+        }
+        FlatMonteCarloStats.reset();
 
         Long seed = null;
         if (params.containsKey("s")) {
@@ -287,11 +313,14 @@ public class SimulateMatch {
             }
         }
 
+        if (Boolean.TRUE.equals(flatMonteCarlo)) {
+            System.out.println(FlatMonteCarloStats.summary());
+        }
         System.out.flush();
     }
 
     private static void argumentHelp() {
-        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -q -r [R] -s [S] -scenario [SC] -l [L1] [L2] -a [A]");
+        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -q -r [R] -s [S] -scenario [SC] -l [L1] [L2] -a [A] -mc [on|off]");
         System.out.println("\tsim - stands for simulation mode");
         System.out.println("\tdeck1 (or deck2,...,X) - constructed deck name or filename (has to be quoted when contains multiple words)");
         System.out.println("\tdeck is treated as file if it ends with a dot followed by three numbers or letters");
@@ -304,6 +333,7 @@ public class SimulateMatch {
         System.out.println("\tS - RNG seed for simulation");
         System.out.println("\tA - AI profile per player, in the same order as the decks (e.g. -a Default Experimental)");
         System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
+        System.out.println("\tmc - Flat Monte Carlo AI refinement for this run, on, max or off (default off in simulations; max = desktop strength). Prints timing statistics at the end when on.");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
         System.out.println("\tr - Replay mode. Path to a replay JSON log; reorders libraries to match recorded draw order.");
         System.out.println("\tscenario - Scenario mode. Path to a scenario JSON (mtg-replay format, mode=scenario).");
@@ -579,6 +609,10 @@ public class SimulateMatch {
 
         final Game g1 = mc.createGame();
         g1.setNoGUIUser();
+        if (flatMonteCarlo != null) {
+            g1.AI_FLAT_MONTE_CARLO = flatMonteCarlo;
+            g1.AI_FLAT_MONTE_CARLO_MAX = Boolean.TRUE.equals(flatMonteCarloMax);
+        }
         // will run match in the same thread
         try {
             TimeLimitedCodeBlock.runWithTimeout(() -> {

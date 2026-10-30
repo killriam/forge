@@ -84,6 +84,11 @@ public class GuiDesktop implements IGuiBase {
     }
 
     @Override
+    public String getUserAgent() {
+        return "Forge/" + getCurrentVersion() + " (gui-desktop)";
+    }
+
+    @Override
     public String getAssetsDir() {
         final String version = BuildInfo.getVersionString();
         final boolean isDevBuild = StringUtils.containsIgnoreCase(version, "git")
