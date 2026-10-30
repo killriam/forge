@@ -1,0 +1,9 @@
+Name:The Promise of Kahless
+ManaCost:4 B
+Types:Sorcery
+A:SP$ Sacrifice | SacValid$ Klingon,Warrior | Optional$ True | RememberSacrificed$ True | SubAbility$ DBReturn | SpellDescription$ You may sacrifice a Klingon or Warrior. If you do, return all other Klingon and Warrior creature cards from your graveyard to the battlefield.
+SVar:DBReturn:DB$ ChangeZoneAll | ChangeType$ Creature.Klingon+YouOwn+!IsRemembered,Creature.Warrior+YouOwn+!IsRemembered | Origin$ Graveyard | Destination$ Battlefield | ConditionDefined$ Remembered | ConditionPresent$ Card | ConditionCompare$ GE1 | SubAbility$ DBCleanup
+SVar:DBCleanup:DB$ Cleanup | ClearRemembered$ True
+DeckHas:Ability$Graveyard|Sacrifice
+DeckHints:Type$Klingon|Warrior
+Oracle:You may sacrifice a Klingon or Warrior. If you do, return all other Klingon and Warrior creature cards from your graveyard to the battlefield.

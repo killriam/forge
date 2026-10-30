@@ -1,0 +1,12 @@
+Name:Grilka, Widowed Warrior
+ManaCost:5 R
+Types:Legendary Creature Klingon Warrior
+PT:5/5
+T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigSteal | TriggerDescription$ When NICKNAME enters, gain control of target creature an opponent controls until end of turn. Untap it. Until end of turn, it gains trample, haste, and "Whenever this creature deals combat damage to a player, create that many tapped Treasure tokens."
+SVar:TrigSteal:DB$ GainControl | ValidTgts$ Creature.OppCtrl | TgtPrompt$ Select target creature an opponent controls | LoseControl$ EOT | Untap$ True | AddKWs$ Trample & Haste | SubAbility$ DBAnimate
+SVar:DBAnimate:DB$ Animate | Defined$ Targeted | Triggers$ TrigDmg | Duration$ UntilEndOfTurn
+SVar:TrigDmg:Mode$ DamageDone | ValidSource$ Card.Self | ValidTarget$ Player | CombatDamage$ True | Execute$ TrigTreasure | TriggerDescription$ Whenever this creature deals combat damage to a player, create that many tapped Treasure tokens.
+SVar:TrigTreasure:DB$ Token | TokenAmount$ Y | TokenScript$ c_a_treasure_sac | TokenTapped$ True | TokenOwner$ You
+SVar:Y:TriggerCount$DamageAmount
+DeckHas:Ability$Token & Type$Treasure|Artifact
+Oracle:When Grilka enters, gain control of target creature an opponent controls until end of turn. Untap it. Until end of turn, it gains trample, haste, and "Whenever this creature deals combat damage to a player, create that many tapped Treasure tokens."

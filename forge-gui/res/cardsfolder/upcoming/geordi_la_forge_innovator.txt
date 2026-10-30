@@ -1,0 +1,9 @@
+Name:Geordi La Forge, Innovator
+ManaCost:2 U
+Types:Legendary Creature Human Artificer
+PT:2/3
+S:Mode$ Continuous | Affected$ Card.Self | AddKeyword$ HIDDEN Unblockable | IsPresent$ Spacecraft.YouCtrl | Description$ CARDNAME can't be blocked if you control a Spacecraft.
+T:Mode$ DamageDone | ValidSource$ Card.Self | ValidTarget$ Player | CombatDamage$ True | Execute$ TrigDraw | TriggerDescription$ Whenever CARDNAME deals combat damage to a player, draw a card.
+SVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1
+DeckHints:Type$Spacecraft
+Oracle:Geordi La Forge can't be blocked if you control a Spacecraft.\nWhenever Geordi La Forge deals combat damage to a player, draw a card.
