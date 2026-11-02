@@ -392,6 +392,11 @@ public class ReplayGameStateBuilder {
             // Skip system/virtual cards that aren't real MTG cards
             if (isSystemCard(tc.cardName)) continue;
 
+            // Hand/library/graveyard/command always belong to the card's owner; a log written with a wrong or
+            // unknown player prefix (e.g. "P0:graveyard") must not make the card vanish from the rebuilt state.
+            if (!"battlefield".equals(zoneType) && !"exile".equals(zoneType) || playerIds.indexOf(zonePid) < 0) {
+                zonePid = tc.owner;
+            }
             int playerIdx = playerIds.indexOf(zonePid);
             if (playerIdx < 0) continue;
 

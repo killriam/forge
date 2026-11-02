@@ -303,6 +303,14 @@ public class ReplayNotationExporter {
         if (cached != null) return cached;
         // Fallback: assign by current position (should not normally happen)
         int index = game.getPlayers().indexOf(player);
+        if (index < 0 && player != null) {
+            // Different Player instance for the same player (e.g. a copy / LKI object): match by id
+            for (Map.Entry<Player, String> e : playerIdCache.entrySet()) {
+                if (e.getKey().getId() == player.getId()) {
+                    return e.getValue();
+                }
+            }
+        }
         return "P" + (index + 1);
     }
 

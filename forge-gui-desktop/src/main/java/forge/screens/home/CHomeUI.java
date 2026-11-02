@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import javax.swing.JMenu;
+import javax.swing.SwingUtilities;
 
 import forge.Singletons;
 import forge.game.ReplayLogParser;
@@ -99,7 +100,9 @@ public enum CHomeUI implements ICDoc, IMenuProvider {
         Singletons.getControl().getForgeMenu().setProvider(this);
 
         selectPrevious();
-        checkForCrashRecovery();
+        // Deferred: FControl.setCurrentScreen() populates this screen's view AFTER initialize() returns, so a screen
+        // switch from inside initialize() would be overpainted by the Home layout (Home panels leaking into the viewer).
+        SwingUtilities.invokeLater(this::checkForCrashRecovery);
     }
 
     /* (non-Javadoc)
