@@ -161,6 +161,16 @@ public final class FlatMonteCarloPicker {
         return rt.totalMemory() - rt.freeMemory() > rt.maxMemory() * 0.85;
     }
 
+    /** When a rollout last ran out of memory (nanoTime), or 0. Sampling backs off for a while afterwards. */
+    private static volatile long lastOutOfMemoryNanos;
+    private static final long OOM_BACKOFF_NANOS = TimeUnit.SECONDS.toNanos(60);
+
+    /** True shortly after a rollout ran out of memory: the heap is nearly full, so more game copies would only make it worse. */
+    static boolean recentOutOfMemory() {
+        final long t = lastOutOfMemoryNanos;
+        return t != 0 && System.nanoTime() - t < OOM_BACKOFF_NANOS;
+    }
+
     /** Tunable parameters, normally read from the AI profile with {@link #fromProfile}. */
     public static final class Config implements Cloneable {
         /** How many of the heuristic-approved plays are compared (the hold option comes on top). */
@@ -495,6 +505,9 @@ public final class FlatMonteCarloPicker {
                                 final Config cfg, final Predicate<SpellAbility> revalidate, final Mode mode) {
         final long start = System.nanoTime();
         final SpellAbility heuristicChoice = approved.isEmpty() ? null : approved.get(0);
+        if (recentOutOfMemory()) {
+            return new Result(heuristicChoice, heuristicChoice == null, false, 0, 0, System.nanoTime() - start, "memory");
+        }
         try {
             final Result result = chooseImpl(player, approved, extras, cfg, revalidate, start, mode);
             if (DEBUG) {
@@ -1322,6 +1335,7 @@ public final class FlatMonteCarloPicker {
             return null;
         } catch (final StackOverflowError | OutOfMemoryError e) {
             // A runaway copy must not kill the real game either (Android has small heaps).
+            lastOutOfMemoryNanos = System.nanoTime();
             reportFailure(new RuntimeException(e));
             lastRolloutProblem = "error";
             return null;

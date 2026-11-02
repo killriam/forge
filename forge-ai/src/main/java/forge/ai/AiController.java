@@ -1750,12 +1750,19 @@ public class AiController {
      * no use for the mana, the colour the hand needs. The heuristic land stays the default and needs a clear margin to
      * be replaced.
      */
+    private static final int FLAT_MC_LAND_CHOICE_MAX_PERMANENTS = 40;
+
     private List<SpellAbility> refineLandChoice(final CardCollection playable, final List<SpellAbility> heuristicAbilities) {
         if (!usesFlatMonteCarlo(false) || playable.size() < 2) {
             return heuristicAbilities;
         }
         final FlatMonteCarloPicker.Config cfg = flatMonteCarloConfig();
         if (cfg == null || !cfg.landChoice) {
+            return heuristicAbilities;
+        }
+        // Every rollout copies the whole game. On a crowded late-game board the land choice hardly matters but the
+        // copies are huge (this ran a 4 GB heap out of memory), so keep the heuristic land there.
+        if (game.getCardsIn(ZoneType.Battlefield).size() > FLAT_MC_LAND_CHOICE_MAX_PERMANENTS) {
             return heuristicAbilities;
         }
         final Set<String> names = new HashSet<>();
