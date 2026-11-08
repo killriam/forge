@@ -317,7 +317,7 @@ public final class Main {
         }
         // Set variant in memory only — lobby reads in-memory prefs; no save() here
         // to avoid accidentally overwriting user preferences mid-session.
-        prefs.setGameType(FPref.UI_APPLIED_VARIANTS, variants);
+        prefs.setPref(FPref.UI_LOBBY_SETUP, forge.gamemodes.match.GameLobby.variantsSetup(variants));
     }
 
     private static void printGuiUsage() {

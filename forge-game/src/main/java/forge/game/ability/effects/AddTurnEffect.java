@@ -42,10 +42,7 @@ public class AddTurnEffect extends SpellAbilityEffect {
                 + " activatingPlayer=" + sa.getActivatingPlayer()
                 + " hostCard=" + sa.getHostCard());
 
-        java.util.List<Player> targets = getTargetPlayers(sa);
-        System.out.println("[AddTurnEffect] getTargetPlayers() returned: " + targets);
-
-        for (final Player p : targets) {
+        for (final Player p : getTargetPlayersOnePerTeam(sa)) {
             if (!p.isInGame()) {
                 System.out.println("[AddTurnEffect] Skipping " + p + " — not in game");
                 continue;

@@ -18,7 +18,6 @@ import forge.Singletons;
 import forge.card.DraftOptions;
 import forge.deck.Deck;
 import forge.deck.DeckProxy;
-import forge.game.GameType;
 import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.LimitedPoolType;
 import forge.gamemodes.match.GameLobby;
@@ -635,11 +634,7 @@ public class CLobby implements IDraftEventHandler {
         view.getCbSingletons().setSelected(prefs.getPrefBoolean(FPref.DECKGEN_SINGLETONS));
         view.getCbArtifacts().setSelected(prefs.getPrefBoolean(FPref.DECKGEN_ARTIFACTS));
 
-        // Apply variant (e.g. Commander) requested via CLI launch options (see Main.applyGuiLaunchOptions).
-        // Only applies when explicitly set - no fallback default, since defaulting to Commander here
-        // previously broke plain `gui` launches with no --format flag.
-        for (final GameType variant : prefs.getGameType(FPref.UI_APPLIED_VARIANTS)) {
-            view.applyVariant(variant);
-        }
+        // A variant (e.g. Commander) requested via CLI launch options (see Main.applyGuiLaunchOptions) is stored in
+        // the lobby-setup preference and applied by GameLobby.restoreSetup() when the Constructed screen is built.
     }
 }

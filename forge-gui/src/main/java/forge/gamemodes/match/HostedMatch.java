@@ -142,7 +142,9 @@ public class HostedMatch {
             gameRules.setAppliedVariants(appliedVariants);
         }
 
-        final List<RegisteredPlayer> sortedPlayers = sortPlayersHumanFirst(players);
+        // teammates must keep their adjacent seats (CR 805.1)
+        final List<RegisteredPlayer> sortedPlayers = gameRules.hasSharedTeamTurns()
+                ? Lists.newArrayList(players) : sortPlayersHumanFirst(players);
 
         if (sortedPlayers.size() == 2) {
             title = TextUtil.concatNoSpace(sortedPlayers.get(0).getPlayer().getName(), " vs ", sortedPlayers.get(1).getPlayer().getName());

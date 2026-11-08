@@ -352,7 +352,7 @@ public class PlayerPanel extends FPanel {
         handQualityTargetComboBox.setVisible(enableHandQuality && mayEdit);
         handQualityTargetComboBox.setEnabled(enableHandQuality && mayEdit);
 
-        teamComboBox.setEnabled(mayEdit);
+        teamComboBox.setEnabled(mayEdit && !lobby.hasVariant(GameType.TwoHeadedGiant));
         deckLabel.setVisible(mayEdit);
         deckBtn.setVisible(mayEdit);
         chkReady.setVisible(type == LobbySlotType.LOCAL || type == LobbySlotType.REMOTE);
