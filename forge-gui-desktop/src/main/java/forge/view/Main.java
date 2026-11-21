@@ -40,9 +40,18 @@ import java.util.Set;
  * Main class for Forge's swing application view.
  */
 public final class Main {
+    /** Seats --deck1 .. --deck8 can fill; matches the lobby's MAX_PLAYERS and the per-seat deck prefs. */
+    private static final int MAX_CLI_SEATS = 8;
+
+    /**
+     * System property holding how many lobby seats the CLI asked for (the highest --deckN given), read by the
+     * Constructed lobby when it is built. A plain property, like guaranteeCardsUnderTestP1, so it is never saved.
+     */
+    public static final String CLI_PLAYER_COUNT_PROPERTY = "forge.cliPlayerCount";
+
     private static final class GuiLaunchOptions {
-        private String playerOneDeck;
-        private String playerTwoDeck;
+        /** Deck name per lobby seat from --deck/--deck1 .. --deck8; null where none was given. */
+        private final String[] seatDecks = new String[MAX_CLI_SEATS];
         private GuiDeckFormat format = GuiDeckFormat.COMMANDER;
         private String pendingReplayPath;
         private boolean pendingReplayShuffle = false;
@@ -243,14 +252,12 @@ public final class Main {
 
         for (int i = 0; i < args.length; i++) {
             final String arg = args[i];
+            final int seat = cliSeatIndex(arg);
+            if (seat >= 0) {
+                options.seatDecks[seat] = requireOptionValue(args, ++i, arg);
+                continue;
+            }
             switch (arg) {
-                case "--deck":
-                case "--deck1":
-                    options.playerOneDeck = requireOptionValue(args, ++i, arg);
-                    break;
-                case "--deck2":
-                    options.playerTwoDeck = requireOptionValue(args, ++i, arg);
-                    break;
                 case "--guarantee-cards-under-test":
                     options.guaranteeCardsUnderTest = true;
                     break;
@@ -275,6 +282,18 @@ public final class Main {
         return options;
     }
 
+    /** Lobby seat (0-based) a deck option fills: --deck and --deck1 are seat 0, --deck2 .. --deck8 seats 1-7; -1 otherwise. */
+    public static int cliSeatIndex(final String option) {
+        if ("--deck".equals(option)) {
+            return 0;
+        }
+        if (option == null || option.length() != "--deckN".length() || !option.startsWith("--deck")) {
+            return -1;
+        }
+        final int seat = option.charAt(option.length() - 1) - '1';
+        return seat >= 0 && seat < MAX_CLI_SEATS ? seat : -1;
+    }
+
     private static String requireOptionValue(final String[] args, final int valueIndex, final String option) {
         if (valueIndex >= args.length) {
             throw new IllegalArgumentException("Missing value for option: " + option);
@@ -287,22 +306,30 @@ public final class Main {
         if (options.guaranteeCardsUnderTest) {
             System.setProperty("forge.guaranteeCardsUnderTestP1", "true");
         }
-        if (options.playerOneDeck == null && options.playerTwoDeck == null) {
+        int highestSeat = -1;
+        for (int seat = 0; seat < MAX_CLI_SEATS; seat++) {
+            if (options.seatDecks[seat] != null) {
+                highestSeat = seat;
+            }
+        }
+        if (highestSeat < 0) {
             return;
+        }
+        // Seats 3+ only exist once the lobby adds them; two seats is the lobby's own default.
+        if (highestSeat >= 2) {
+            System.setProperty(CLI_PLAYER_COUNT_PROPERTY, Integer.toString(highestSeat + 1));
         }
 
         final ForgePreferences prefs = FModel.getPreferences();
         final String deckPrefix = options.format.deckTypeName + ";";
 
-        if (options.playerOneDeck != null) {
-            final String prefValue = deckPrefix + options.playerOneDeck;
-            System.err.println("[DECK-PRESELECT] Writing P1 pref to " + options.format.prefKeys[0] + ": " + prefValue);
-            prefs.setPref(options.format.prefKeys[0], prefValue);
-        }
-        if (options.playerTwoDeck != null) {
-            final String prefValue = deckPrefix + options.playerTwoDeck;
-            System.err.println("[DECK-PRESELECT] Writing P2 pref to " + options.format.prefKeys[1] + ": " + prefValue);
-            prefs.setPref(options.format.prefKeys[1], prefValue);
+        for (int seat = 0; seat <= highestSeat; seat++) {
+            if (options.seatDecks[seat] == null || seat >= options.format.prefKeys.length) {
+                continue;
+            }
+            final String prefValue = deckPrefix + options.seatDecks[seat];
+            System.err.println("[DECK-PRESELECT] Writing P" + (seat + 1) + " pref to " + options.format.prefKeys[seat] + ": " + prefValue);
+            prefs.setPref(options.format.prefKeys[seat], prefValue);
         }
 
         // Resolve GameType by name now that Localizer is ready
@@ -322,7 +349,7 @@ public final class Main {
 
     private static void printGuiUsage() {
         System.out.println("GUI mode usage:");
-        System.out.println("  java -jar <jar> gui [--format commander|oathbreaker|tinyleaders|brawl|constructed] [--deck <name>] [--deck2 <name>] [--guarantee-cards-under-test]");
+        System.out.println("  java -jar <jar> gui [--format commander|oathbreaker|tinyleaders|brawl|constructed] [--deck <name>] [--deck2 <name>] [--deck3..--deck8 <name>] [--guarantee-cards-under-test]");
         System.out.println("  java -jar <jar> --deck <name> [--deck2 <name>] [--format <format>]");
     }
 

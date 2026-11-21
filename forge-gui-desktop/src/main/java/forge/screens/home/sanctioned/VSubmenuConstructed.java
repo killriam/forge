@@ -34,6 +34,13 @@ public enum VSubmenuConstructed implements IVSubmenu<CSubmenuConstructed> {
         lobby.restoreSetup();
         lobby.setListener(vLobby);
 
+        // A launch with --deck3..--deck8 (e.g. MaMo's playtest against a whole Legacy Game table) opens with
+        // that many seats; each new AI seat picks up the deck the CLI wrote to its per-seat deck pref.
+        final int cliPlayerCount = Integer.getInteger(forge.view.Main.CLI_PLAYER_COUNT_PROPERTY, 0);
+        while (lobby.getNumberOfSlots() < Math.min(cliPlayerCount, lobby.getSlotLimit())) {
+            lobby.addSlot();
+        }
+
         vLobby.setPlayerChangeListener(lobby::applyToSlot);
 
         vLobby.update(false);

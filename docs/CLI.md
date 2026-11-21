@@ -174,6 +174,7 @@ java -jar forge-gui-desktop-*-jar-with-dependencies.jar --deck "Mein Deck"
 |--------|-----------|--------------|----------|
 | `--deck` / `--deck1` | `<Deckname>` | Setzt Lobby-Deck für Spieler 1 | - |
 | `--deck2` | `<Deckname>` | Setzt Lobby-Deck für Spieler 2 | - |
+| `--deck3` … `--deck8` | `<Deckname>` | Sets the lobby deck for players 3–8. The lobby opens with as many seats as the highest `--deckN` given; the extra seats are AI players (e.g. MaMo's playtest against a whole Legacy Game table) | - |
 | `--format` | `commander\|oathbreaker\|tinyleaders\|brawl\|constructed` | Wählt Deck-State/Variante für die Vorauswahl | `commander` |
 | `--guarantee-cards-under-test` | - | Hakt für Spieler 1 „Guarantee Cards Under Test in first 10 drawn cards" vor (nur wenn das Deck `CardsUnderTest=` enthält; einmalig, danach frei änderbar) | aus |
 
@@ -181,6 +182,7 @@ java -jar forge-gui-desktop-*-jar-with-dependencies.jar --deck "Mein Deck"
 
 ```powershell
 java -jar forge-gui-desktop-*.jar gui --format commander --deck "Atraxa Poison" --deck2 "Mono Red"
+java -jar forge-gui-desktop-*.jar gui --format commander --deck "Atraxa Poison" --deck2 "Mono Red" --deck3 "Elves" --deck4 "Spellslinger"
 java -jar forge-gui-desktop-*.jar --deck "My Control Deck"
 ```
 
